@@ -65,7 +65,6 @@ public:
     }
 };
 
-
 /**
  * Class NETLIST_EXPORTER
  * is a abstract class used for the netlist exporters that eeschema supports.
@@ -85,6 +84,8 @@ protected:
     /// Used for "multi parts per package" components,
     /// avoids processing a lib component more than once.
     UNIQUE_STRINGS      m_ReferencesAlreadyFound;
+
+    std::vector<SCH_COMPONENT*> m_ComponentPartList;
 
     // share a code generated std::set<void*> to reduce code volume
 

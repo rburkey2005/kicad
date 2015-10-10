@@ -161,6 +161,7 @@ SCH_COMPONENT* NETLIST_EXPORTER::findNextComponentAndCreatePinList( EDA_ITEM*   
     wxString    ref;
 
     m_SortedComponentPinList.clear();
+    m_ComponentPartList.clear();
 
     // continue searching from the middle of a linked list (the draw list)
     for(  ; aItem;  aItem = aItem->Next() )
@@ -342,6 +343,8 @@ void NETLIST_EXPORTER::findAllInstancesOfComponent( SCH_COMPONENT*  aComponent,
             ref2 = comp2->GetRef( sheet );
             if( ref2.CmpNoCase( ref ) != 0 )
                 continue;
+
+            m_ComponentPartList.push_back(comp2);
 
             int unit2 = comp2->GetUnitSelection( sheet );  // slow
 
