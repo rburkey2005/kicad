@@ -219,6 +219,8 @@ SCH_COMPONENT* NETLIST_EXPORTER::findNextComponentAndCreatePinList( EDA_ITEM*   
             }
         }
 
+        m_ComponentPartList.push_back(comp);
+
         // Sort pins in m_SortedComponentPinList by pin number
         sort( m_SortedComponentPinList.begin(),
               m_SortedComponentPinList.end(), sortPinsByNum );
