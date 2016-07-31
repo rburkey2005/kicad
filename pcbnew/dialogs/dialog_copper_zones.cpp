@@ -157,8 +157,8 @@ DIALOG_COPPER_ZONE::DIALOG_COPPER_ZONE( PCB_BASE_FRAME* aParent, ZONE_SETTINGS* 
     initDialog();
 
     m_sdbSizerOK->SetDefault();
-    GetSizer()->SetSizeHints( this );
-    Center();
+
+    FinishDialogSettings();
 }
 
 
@@ -199,19 +199,6 @@ void DIALOG_COPPER_ZONE::initDialog()
     case PAD_ZONE_CONN_FULL:        // pads are covered by copper
         m_PadInZoneOpt->SetSelection( 0 );
         break;
-    }
-
-    // Antipad and spokes are significant only for thermals
-    if( m_settings.GetPadConnection() != PAD_ZONE_CONN_THERMAL &&
-        m_settings.GetPadConnection() != PAD_ZONE_CONN_THT_THERMAL )
-    {
-        m_AntipadSizeValue->Enable( false );
-        m_CopperWidthValue->Enable( false );
-    }
-    else
-    {
-        m_AntipadSizeValue->Enable( true );
-        m_CopperWidthValue->Enable( true );
     }
 
     m_PriorityLevelCtrl->SetValue( m_settings.m_ZonePriority );
@@ -452,7 +439,9 @@ bool DIALOG_COPPER_ZONE::AcceptOptions( bool aPromptForErrors, bool aUseExportab
             (double) m_settings.m_ThermalReliefCopperBridge / IU_PER_MILS );
     }
 
-    if( m_settings.m_ThermalReliefCopperBridge <= m_settings.m_ZoneMinThickness )
+    if( (   m_settings.GetPadConnection() == PAD_ZONE_CONN_THT_THERMAL
+         || m_settings.GetPadConnection() == PAD_ZONE_CONN_THERMAL )
+        && m_settings.m_ThermalReliefCopperBridge <= m_settings.m_ZoneMinThickness )
     {
         DisplayError( this,
                       _( "Thermal relief spoke must be greater than the minimum width." ) );
@@ -576,19 +565,11 @@ void DIALOG_COPPER_ZONE::ExportSetupToOtherCopperZones( wxCommandEvent& event )
 
 void DIALOG_COPPER_ZONE::OnPadsInZoneClick( wxCommandEvent& event )
 {
-    switch( m_PadInZoneOpt->GetSelection() )
-    {
-    default:
-        m_AntipadSizeValue->Enable( false );
-        m_CopperWidthValue->Enable( false );
-        break;
-
-    case 2:
-    case 1:
-        m_AntipadSizeValue->Enable( true );
-        m_CopperWidthValue->Enable( true );
-        break;
-    }
+    // Antipad and spokes are significant only for thermals
+    // However, even if thermals are disabled, these parameters must be set
+    // for pads which have local settings with thermal enabled
+    // Previously, wxTextCtrl widgets related to thermal settings were disabled,
+    // but this is not a good idea. We leave them always enabled.
 }
 
 
@@ -708,13 +689,7 @@ wxBitmap DIALOG_COPPER_ZONE::makeLayerBitmap( EDA_COLOR_T aColor )
 
     iconDC.SelectObject( bitmap );
     brush.SetColour( MakeColour( aColor ) );
-
-#if wxCHECK_VERSION( 3, 0, 0 )
     brush.SetStyle( wxBRUSHSTYLE_SOLID );
-#else
-    brush.SetStyle( wxSOLID );
-#endif
-
     iconDC.SetBrush( brush );
     iconDC.DrawRectangle( 0, 0, LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
 

@@ -30,14 +30,14 @@
  *  Classes to handle info on nets
  */
 
-#ifndef __CLASSES_NETINFO__
-#define __CLASSES_NETINFO__
+#ifndef CLASS_NETINFO_
+#define CLASS_NETINFO_
 
-
+#include <macros.h>
 #include <gr_basic.h>
 #include <class_netclass.h>
-#include <boost/unordered_map.hpp>
-#include <hashtables.h>
+#include <class_board_item.h>
+
 
 
 class wxDC;
@@ -45,7 +45,6 @@ class wxPoint;
 class LINE_READER;
 class EDA_DRAW_PANEL;
 class EDA_DRAW_FRAME;
-class NETINFO_ITEM;
 class D_PAD;
 class BOARD;
 class BOARD_ITEM;
@@ -75,7 +74,7 @@ public:
     int    m_Status;    // State: see previous defines (CH_ ...)
     D_PAD* m_PadStart;  // pointer to the starting pad
     D_PAD* m_PadEnd;    // pointer to ending pad
-    int    m_Lenght;    // length of the line (used in some calculations)
+    int    m_Length;    // length of the line (used in some calculations)
 
     RATSNEST_ITEM();
 
@@ -115,6 +114,247 @@ public:
                const wxPoint& offset );
 };
 
+
+DECL_VEC_FOR_SWIG( D_PADS, D_PAD* )
+
+/**
+ * Class NETINFO_ITEM
+ * handles the data for a net
+ */
+class NETINFO_ITEM : public BOARD_ITEM
+{
+    friend class NETINFO_LIST;
+
+private:
+    int m_NetCode;              ///< A number equivalent to the net name.
+                                ///< Used for fast comparisons in ratsnest and DRC computations.
+
+    wxString m_Netname;         ///< Full net name like /mysheet/mysubsheet/vout used by Eeschema
+
+    wxString m_ShortNetname;    ///< short net name, like vout from /mysheet/mysubsheet/vout
+
+    wxString  m_NetClassName;   // Net Class name. if void this is equivalent
+                                // to "default" (the first
+                                // item of the net classes list
+    NETCLASSPTR m_NetClass;
+
+    BOARD*  m_parent;           ///< The parent board the net belongs to.
+
+public:
+
+    D_PADS& Pads()              { return m_PadInNetList; }
+
+    /**
+     * Function GetNodesCount
+     * @return int - number of pad nodes in the net
+     */
+    int GetNodesCount() const   { return m_PadInNetList.size(); }
+
+
+    D_PADS  m_PadInNetList;     ///< List of pads connected to this net
+
+    unsigned m_RatsnestStartIdx;       /* Starting point of ratsnests of this
+                                        * net (included) in a general buffer of
+                                        * ratsnest (a vector<RATSNEST_ITEM*>
+                                        * buffer) */
+
+    unsigned m_RatsnestEndIdx;         // Ending point of ratsnests of this net
+                                       // (excluded) in this buffer
+
+    NETINFO_ITEM( BOARD* aParent, const wxString& aNetName = wxEmptyString, int aNetCode = -1 );
+    ~NETINFO_ITEM();
+
+    static inline bool ClassOf( const EDA_ITEM* aItem )
+    {
+        return aItem && PCB_T == aItem->Type();
+    }
+
+    wxString GetClass() const
+    {
+        return wxT( "NETINFO_ITEM" );
+    }
+
+    void Show( int nestLevel, std::ostream& os ) const
+    {
+    }
+
+    const wxPoint& GetPosition() const
+    {
+        static wxPoint dummy(0, 0);
+        return dummy;
+    }
+
+    void SetPosition( const wxPoint& aPos )
+    {
+    }
+
+    /**
+     * Function SetClass
+     * sets \a aNetclass into this NET
+     */
+    void SetClass( NETCLASSPTR aNetClass )
+    {
+        m_NetClass = aNetClass;
+
+        if( aNetClass )
+            m_NetClassName = aNetClass->GetName();
+        else
+            m_NetClassName = NETCLASS::Default;
+    }
+
+    NETCLASSPTR GetNetClass()
+    {
+        return m_NetClass;
+    }
+
+    /**
+     * Function GetClassName
+     * returns the class name
+     */
+    const wxString& GetClassName() const
+    {
+        return m_NetClassName;
+    }
+
+#if 1
+
+    /**
+     * Function GetTrackWidth
+     * returns the width of tracks used to route this net.
+     */
+    int GetTrackWidth()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetTrackWidth();
+    }
+
+    /**
+     * Function GetViaSize
+     * returns the size of vias used to route this net
+     */
+    int GetViaSize()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetViaDiameter();
+    }
+
+    /**
+     * Function GetMicroViaSize
+     * returns the size of vias used to route this net
+     */
+    int GetMicroViaSize()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetuViaDiameter();
+    }
+
+    /**
+     * Function GetViaDrillSize
+     * returns the size of via drills used to route this net
+     */
+    int GetViaDrillSize()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetViaDrill();
+    }
+
+    /**
+     * Function GetViaDrillSize
+     * returns the size of via drills used to route this net
+     */
+    int GetMicroViaDrillSize()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetuViaDrill();
+    }
+
+
+#if 0
+
+    /**
+     * Function GetViaMinSize
+     * returns the Minimum value for via sizes (used in DRC)
+     */
+    int GetViaMinSize()
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetViaMinSize();
+    }
+
+#endif
+
+    /**
+     * Function GetClearance
+     * returns the clearance when routing near aBoardItem
+     */
+    int GetClearance( BOARD_ITEM* aBoardItem )
+    {
+        wxASSERT( m_NetClass );
+        return m_NetClass->GetClearance();
+    }
+
+#endif
+
+    /**
+     * Function Draw
+     * @todo we actually could show a NET, simply show all the tracks and
+     *       a pads or net name on pad and vias
+     */
+    void Draw( EDA_DRAW_PANEL* panel, wxDC* DC, GR_DRAWMODE aDrawMode,
+               const wxPoint& offset );
+
+    /**
+     * Function GetNet
+     * @return int - the netcode
+     */
+    int GetNet() const { return m_NetCode; }
+
+    void SetNetCode( int aNetCode ) { m_NetCode = aNetCode; }
+
+    /**
+     * Function GetNetname
+     * @return const wxString&, a reference to the full netname
+     */
+    const wxString& GetNetname() const { return m_Netname; }
+
+    /**
+     * Function GetShortNetname
+     * @return const wxString &, a reference to the short netname
+     */
+    const wxString& GetShortNetname() const { return m_ShortNetname; }
+
+    /**
+     * Function GetMsgPanelInfo
+     * returns the information about the #NETINFO_ITEM in \a aList to display in the
+     * message panel.
+     *
+     * @param aList is the list in which to place the  status information.
+     */
+    void GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList );
+
+    /**
+     * Function Clear
+     * sets all fields to their defaults values.
+     */
+    void Clear()
+    {
+        m_PadInNetList.clear();
+
+        m_RatsnestStartIdx  = 0;     // Starting point of ratsnests of this net in a
+                                     // general buffer of ratsnest
+        m_RatsnestEndIdx    = 0;     // Ending point of ratsnests of this net
+
+        SetClass( NETCLASSPTR() );
+    }
+
+    BOARD* GetParent() const
+    {
+        return m_parent;
+    }
+};
+
+
+#ifndef SWIG
 
 class NETINFO_MAPPING
 {
@@ -238,6 +478,21 @@ private:
     std::map<int, int> m_netMapping;
 };
 
+#endif  // SWIG
+
+
+#if 0
+// waiting for swig to support std::unordered_map, see
+// http://www.swig.org/Doc3.0/CPlusPlus11.html
+// section 7.3.3
+#include <hashtables.h>
+DECL_HASH_FOR_SWIG( NETNAMES_MAP, wxString,  NETINFO_ITEM* )
+DECL_HASH_FOR_SWIG( NETCODES_MAP, int,       NETINFO_ITEM* )
+#else
+// use std::map for now
+DECL_MAP_FOR_SWIG( NETNAMES_MAP, wxString,  NETINFO_ITEM* )
+DECL_MAP_FOR_SWIG( NETCODES_MAP, int,       NETINFO_ITEM* )
+#endif
 
 /**
  * Class NETINFO_LIST
@@ -257,30 +512,14 @@ public:
      * @param aNetCode = netcode to identify a given NETINFO_ITEM
      * @return NETINFO_ITEM* - by \a aNetCode, or NULL if not found
      */
-    NETINFO_ITEM* GetNetItem( int aNetCode ) const
-    {
-        NETCODES_MAP::const_iterator result = m_netCodes.find( aNetCode );
-
-        if( result != m_netCodes.end() )
-            return (*result).second;
-
-        return NULL;
-    }
+    NETINFO_ITEM* GetNetItem( int aNetCode ) const;
 
     /**
      * Function GetItem
      * @param aNetName = net name to identify a given NETINFO_ITEM
      * @return NETINFO_ITEM* - by \a aNetName, or NULL if not found
      */
-    NETINFO_ITEM* GetNetItem( const wxString& aNetName ) const
-    {
-        NETNAMES_MAP::const_iterator result = m_netNames.find( aNetName );
-
-        if( result != m_netNames.end() )
-            return (*result).second;
-
-        return NULL;
-    }
+    NETINFO_ITEM* GetNetItem( const wxString& aNetName ) const;
 
     /**
      * Function GetNetCount
@@ -290,56 +529,44 @@ public:
     unsigned GetNetCount() const { return m_netNames.size(); }
 
     /**
-     * Function Append
-     * adds \a aNewElement to the end of the list. Negative net code means it is going to be
+     * Function AppendNet
+     * adds \a aNewElement to the end of the net list. Negative net code means it is going to be
      * auto-assigned.
      */
     void AppendNet( NETINFO_ITEM* aNewElement );
 
     /**
+     * Function RemoveNet
+     * Removes a new from the net list.
+     */
+    void RemoveNet( NETINFO_ITEM* aNet );
+    /**
      * Function GetPadCount
      * @return the number of pads in board
      */
-    unsigned GetPadCount() const  { return m_PadsFullList.size(); }
+    unsigned GetPadCount() const                { return m_PadsFullList.size(); }
 
     /**
      * Function GetPads
      * returns a list of all the pads (so long as buildPadsFullList() has
      * been recently called).  Returned list contains non-owning pointers.
-     * @return std::vector<D_PAD*>& - a full list of pads
-    std::vector<D_PAD*>& GetPads()
-    {
-        return m_PadsFullList;
-    }
+     * @return D_PADS& - a full list of pads
      */
+    const D_PADS& GetPads() const  { return m_PadsFullList; }
+
+    /// Return the name map, at least for python.
+    const NETNAMES_MAP& NetsByName() const      { return  m_netNames; }
+
+    /// Return the netcode map, at least for python.
+    const NETCODES_MAP& NetsByNetcode() const   { return m_netCodes; }
 
     /**
      * Function GetPad
-     * @return the pad idx from m_PadsFullList
+     * @return D_PAD* - the pad from m_PadsFullList or nullptr if bad @a aIdx
      */
-    D_PAD* GetPad( unsigned aIdx ) const
-    {
-        if( aIdx < m_PadsFullList.size() )
-            return m_PadsFullList[aIdx];
-        else
-            return NULL;
-    }
+    D_PAD* GetPad( unsigned aIdx ) const;
 
-    bool DeletePad( D_PAD* aPad )
-    {
-        std::vector<D_PAD*>::iterator it  = m_PadsFullList.begin();
-        std::vector<D_PAD*>::iterator end = m_PadsFullList.end();
-
-        for( ; it != end;  ++it )
-        {
-            if( *it == aPad )
-            {
-                m_PadsFullList.erase( it );
-                return true;
-            }
-        }
-        return false;
-    }
+    bool DeletePad( D_PAD* aPad );
 
     ///> Constant that holds the "unconnected net" number (typically 0)
     ///> all items "connected" to this net are actually not connected items
@@ -347,18 +574,15 @@ public:
 
     ///> Constant that forces initialization of a netinfo item to the NETINFO_ITEM ORPHANED
     ///> (typically -1) when calling SetNetCode od board connected items
-    static const int FORCE_ORPHANED;
+    static const int ORPHANED;
 
     ///> NETINFO_ITEM meaning that there was no net assigned for an item, as there was no
     ///> board storing net list available.
-    static NETINFO_ITEM ORPHANED;
+    static NETINFO_ITEM ORPHANED_ITEM;
 
 #if defined(DEBUG)
     void Show() const;
 #endif
-
-    typedef boost::unordered_map<const wxString, NETINFO_ITEM*, WXSTRING_HASH> NETNAMES_MAP;
-    typedef boost::unordered_map<const int, NETINFO_ITEM*> NETCODES_MAP;
 
 #ifndef SWIG
     ///> Wrapper class, so you can iterate through NETINFO_ITEM*s, not
@@ -374,7 +598,6 @@ public:
         const iterator& operator++()
         {
             ++m_iterator;
-
             return *this;
         }
 
@@ -383,7 +606,6 @@ public:
         {
             iterator ret = *this;
             ++m_iterator;
-
             return ret;
         }
 
@@ -422,6 +644,11 @@ public:
     }
 #endif
 
+    BOARD* GetParent() const
+    {
+        return m_Parent;
+    }
+
 private:
     /**
      * Function clear
@@ -454,215 +681,13 @@ private:
 
     BOARD* m_Parent;
 
-    NETNAMES_MAP m_netNames;                    ///< map for a fast look up by net names
-    NETCODES_MAP m_netCodes;                    ///< map for a fast look up by net codes
+    NETNAMES_MAP m_netNames;        ///< map of <wxString, NETINFO_ITEM*>, is NETINFO_ITEM owner
+    NETCODES_MAP m_netCodes;        ///< map of <int, NETINFO_ITEM*> is NOT owner
 
-    std::vector<D_PAD*> m_PadsFullList;         ///< contains all pads, sorted by pad's netname.
-                                                ///< can be used in ratsnest calculations.
+    D_PADS  m_PadsFullList;         ///< contains all pads, sorted by pad's netname.
+                                    ///< can be used in ratsnest calculations.
 
-    int m_newNetCode;                           ///< possible value for new net code assignment
-};
-
-
-/**
- * Class NETINFO_ITEM
- * handles the data for a net
- */
-class NETINFO_ITEM
-{
-    friend class NETINFO_LIST;
-
-private:
-    int m_NetCode;              ///< A number equivalent to the net name.
-                                ///< Used for fast comparisons in ratsnest and DRC computations.
-
-    wxString m_Netname;         ///< Full net name like /mysheet/mysubsheet/vout used by Eeschema
-
-    wxString m_ShortNetname;    ///< short net name, like vout from /mysheet/mysubsheet/vout
-
-    wxString  m_NetClassName;   // Net Class name. if void this is equivalent
-                                // to "default" (the first
-                                // item of the net classes list
-    NETCLASSPTR m_NetClass;
-
-    BOARD_ITEM* m_parent;       ///< The parent board item object the net belongs to.
-
-public:
-    std::vector<D_PAD*> m_PadInNetList;    ///< List of pads connected to this net
-
-    unsigned m_RatsnestStartIdx;       /* Starting point of ratsnests of this
-                                        * net (included) in a general buffer of
-                                        * ratsnest (a vector<RATSNEST_ITEM*>
-                                        * buffer) */
-
-    unsigned m_RatsnestEndIdx;         // Ending point of ratsnests of this net
-                                       // (excluded) in this buffer
-
-    NETINFO_ITEM( BOARD_ITEM* aParent, const wxString& aNetName = wxEmptyString, int aNetCode = -1 );
-    ~NETINFO_ITEM();
-
-    /**
-     * Function SetClass
-     * sets \a aNetclass into this NET
-     */
-    void SetClass( NETCLASSPTR aNetClass )
-    {
-        m_NetClass = aNetClass;
-
-        if( aNetClass )
-            m_NetClassName = aNetClass->GetName();
-        else
-            m_NetClassName = NETCLASS::Default;
-    }
-
-    NETCLASSPTR GetNetClass()
-    {
-        return m_NetClass;
-    }
-
-    /**
-     * Function GetClassName
-     * returns the class name
-     */
-    const wxString& GetClassName() const
-    {
-        return m_NetClassName;
-    }
-
-#if 1
-
-    /**
-     * Function GetTrackWidth
-     * returns the width of tracks used to route this net.
-     */
-    int GetTrackWidth()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetTrackWidth();
-    }
-
-    /**
-     * Function GetViaSize
-     * returns the size of vias used to route this net
-     */
-    int GetViaSize()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetViaDiameter();
-    }
-
-    /**
-     * Function GetMicroViaSize
-     * returns the size of vias used to route this net
-     */
-    int GetMicroViaSize()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetuViaDiameter();
-    }
-
-    /**
-     * Function GetViaDrillSize
-     * returns the size of via drills used to route this net
-     */
-    int GetViaDrillSize()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetViaDrill();
-    }
-
-    /**
-     * Function GetViaDrillSize
-     * returns the size of via drills used to route this net
-     */
-    int GetMicroViaDrillSize()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetuViaDrill();
-    }
-
-
-#if 0
-
-    /**
-     * Function GetViaMinSize
-     * returns the Minimum value for via sizes (used in DRC)
-     */
-    int GetViaMinSize()
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetViaMinSize();
-    }
-
-#endif
-
-    /**
-     * Function GetClearance
-     * returns the clearance when routing near aBoardItem
-     */
-    int GetClearance( BOARD_ITEM* aBoardItem )
-    {
-        wxASSERT( m_NetClass );
-        return m_NetClass->GetClearance();
-    }
-
-#endif
-
-    /**
-     * Function Draw
-     * @todo we actually could show a NET, simply show all the tracks and
-     *       a pads or net name on pad and vias
-     */
-    void Draw( EDA_DRAW_PANEL* panel, wxDC* DC, GR_DRAWMODE aDrawMode,
-               const wxPoint& offset );
-
-    /**
-     * Function GetNet
-     * @return int - the netcode
-     */
-    int GetNet() const { return m_NetCode; }
-
-    /**
-     * Function GetNodesCount
-     * @return int - number of nodes in the net
-     */
-    int GetNodesCount() const { return m_PadInNetList.size(); }
-
-    /**
-     * Function GetNetname
-     * @return const wxString&, a reference to the full netname
-     */
-    const wxString& GetNetname() const { return m_Netname; }
-
-    /**
-     * Function GetShortNetname
-     * @return const wxString &, a reference to the short netname
-     */
-    const wxString& GetShortNetname() const { return m_ShortNetname; }
-
-    /**
-     * Function GetMsgPanelInfo
-     * returns the information about the #NETINFO_ITEM in \a aList to display in the
-     * message panel.
-     *
-     * @param aList is the list in which to place the  status information.
-     */
-    void GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList );
-
-    /**
-     * Function Clear
-     * sets all fields to their defaults values.
-     */
-    void Clear()
-    {
-        m_PadInNetList.clear();
-
-        m_RatsnestStartIdx  = 0;     // Starting point of ratsnests of this net in a
-                                     // general buffer of ratsnest
-        m_RatsnestEndIdx    = 0;     // Ending point of ratsnests of this net
-
-        SetClass( NETCLASSPTR() );
-    }
+    int m_newNetCode;               ///< possible value for new net code assignment
 };
 
 
@@ -688,4 +713,4 @@ enum StatusPcbFlags {
 };
 
 
-#endif  // __CLASSES_NETINFO__
+#endif  // CLASS_NETINFO_

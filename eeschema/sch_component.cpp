@@ -36,7 +36,6 @@
 #include <schframe.h>
 #include <plot_common.h>
 #include <msgpanel.h>
-#include <boost/foreach.hpp>
 
 #include <general.h>
 #include <class_library.h>
@@ -62,7 +61,7 @@
  * convert a wxString to UTF8 and replace any control characters with a ~,
  * where a control character is one of the first ASCII values up to ' ' 32d.
  */
-static std::string toUTFTildaText( const wxString& txt )
+std::string toUTFTildaText( const wxString& txt )
 {
     std::string ret = TO_UTF8( txt );
 
@@ -119,6 +118,7 @@ SCH_COMPONENT::SCH_COMPONENT( const wxPoint& aPos, SCH_ITEM* aParent ) :
 {
     Init( aPos );
     m_currentSheetPath = NULL;
+    m_fieldsAutoplaced = AUTOPLACED_NO;
 }
 
 
@@ -133,6 +133,7 @@ SCH_COMPONENT::SCH_COMPONENT( LIB_PART& aPart, SCH_SHEET_PATH* sheet, int unit,
     m_part_name = aPart.GetName();
     m_part      = aPart.SharedPtr();
     m_currentSheetPath = NULL;
+    m_fieldsAutoplaced = AUTOPLACED_NO;
 
     SetTimeStamp( GetNewTimeStamp() );
 
@@ -217,6 +218,7 @@ SCH_COMPONENT::SCH_COMPONENT( const SCH_COMPONENT& aComponent ) :
     }
 
     m_isDangling = aComponent.m_isDangling;
+    m_fieldsAutoplaced = aComponent.m_fieldsAutoplaced;
 }
 
 
@@ -526,7 +528,8 @@ void SCH_COMPONENT::SetRef( const SCH_SHEET_PATH* sheet, const wxString& ref )
             h_ref += wxT( " " );
             tokenizer.GetNextToken();               // Skip old reference
             h_ref += tokenizer.GetNextToken();      // Add part selection
-            // Ann the part selection
+
+            // Add the part selection
             m_PathsAndReferences[ii] = h_ref;
             notInArray = false;
         }
@@ -660,6 +663,16 @@ SCH_FIELD* SCH_COMPONENT::GetField( int aFieldNdx ) const
 }
 
 
+void SCH_COMPONENT::GetFields( std::vector<SCH_FIELD*>& aVector, bool aVisibleOnly )
+{
+    for( SCH_FIELD& each_field : m_Fields )
+    {
+        if( !aVisibleOnly || ( each_field.IsVisible() && !each_field.IsVoid() ) )
+            aVector.push_back( &each_field );
+    }
+}
+
+
 SCH_FIELD* SCH_COMPONENT::AddField( const SCH_FIELD& aField )
 {
     int newNdx = m_Fields.size();
@@ -688,6 +701,17 @@ LIB_PIN* SCH_COMPONENT::GetPin( const wxString& number )
         return part->GetPin( number, m_unit, m_convert );
     }
     return NULL;
+}
+
+
+void SCH_COMPONENT::GetPins( std::vector<LIB_PIN*>& aPinsList )
+{
+    if( PART_SPTR part = m_part.lock() )
+    {
+        part->GetPins( aPinsList, m_unit, m_convert );
+    }
+    else
+        wxFAIL_MSG( "Could not obtain PART_SPTR lock" );
 }
 
 
@@ -1049,7 +1073,7 @@ bool SCH_COMPONENT::Save( FILE* f ) const
         return false;
 
     // Generate unit number, convert and time stamp
-    if( fprintf( f, "U %d %d %8.8lX\n", m_unit, m_convert, m_TimeStamp ) == EOF )
+    if( fprintf( f, "U %d %d %8.8lX\n", m_unit, m_convert, (unsigned long)m_TimeStamp ) == EOF )
         return false;
 
     // Save the position
@@ -1133,13 +1157,12 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
     // Remark: avoid using sscanf to read texts entered by user
     // which are UTF8 encoded, because sscanf does not work well on Windows
     // with some UTF8 values.
-    int         ii;
-    char        name1[256],
-                char1[256], char2[256], char3[256];
-    int         newfmt = 0;
-    char*       ptcar;
-    wxString    fieldName;
-    char*       line = aLine.Line();
+    char          name1[256], char1[256], char2[256], char3[256];
+    int           newfmt = 0;
+    char*         ptcar;
+    wxString      fieldName;
+    char*         line = aLine.Line();
+    unsigned long timeStamp;
 
     m_convert = 1;
 
@@ -1240,7 +1263,8 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
 
         if( line[0] == 'U' )
         {
-            sscanf( line + 1, "%d %d %lX", &m_unit, &m_convert, &m_TimeStamp );
+            sscanf( line + 1, "%d %d %lX", &m_unit, &m_convert, &timeStamp );
+            m_TimeStamp = (time_t)timeStamp;
         }
         else if( line[0] == 'P' )
         {
@@ -1352,7 +1376,7 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
 
             GetField( fieldNdx )->SetText( fieldText );
             memset( char3, 0, sizeof(char3) );
-            int x, y, w, attr;
+            int ii, x, y, w, attr;
 
             if( ( ii = sscanf( ptcar, "%255s %d %d %d %X %255s %255s", char1, &x, &y, &w, &attr,
                                char2, char3 ) ) < 4 )
@@ -1646,7 +1670,7 @@ bool SCH_COMPONENT::IsPinDanglingStateChanged( std::vector<DANGLING_END_ITEM> &a
 
     wxPoint pin_position = GetPinPhysicalPosition( aLibPins[aPin] );
 
-    BOOST_FOREACH( DANGLING_END_ITEM& each_item, aItemList )
+    for( DANGLING_END_ITEM& each_item : aItemList )
     {
         // Some people like to stack pins on top of each other in a symbol to indicate
         // internal connection. While technically connected, it is not particularly useful
@@ -1702,7 +1726,7 @@ bool SCH_COMPONENT::IsDanglingStateChanged( std::vector<DANGLING_END_ITEM>& aIte
 
 bool SCH_COMPONENT::IsDangling() const
 {
-    BOOST_FOREACH( bool each, m_isDangling )
+    for( bool each : m_isDangling )
     {
         if( each )
             return true;
@@ -1788,7 +1812,7 @@ wxString SCH_COMPONENT::GetSelectMenuText() const
 }
 
 
-SEARCH_RESULT SCH_COMPONENT::Visit( INSPECTOR* aInspector, const void* aTestData,
+SEARCH_RESULT SCH_COMPONENT::Visit( INSPECTOR aInspector, void* aTestData,
                                     const KICAD_T aFilterTypes[] )
 {
     KICAD_T     stype;
@@ -1798,7 +1822,7 @@ SEARCH_RESULT SCH_COMPONENT::Visit( INSPECTOR* aInspector, const void* aTestData
         // If caller wants to inspect component type or and component children types.
         if( stype == Type() )
         {
-            if( SEARCH_QUIT == aInspector->Inspect( this, aTestData ) )
+            if( SEARCH_QUIT == aInspector( this, aTestData ) )
                 return SEARCH_QUIT;
         }
 
@@ -1808,23 +1832,23 @@ SEARCH_RESULT SCH_COMPONENT::Visit( INSPECTOR* aInspector, const void* aTestData
             // Test the bounding boxes of fields if they are visible and not empty.
             for( int ii = 0; ii < GetFieldCount(); ii++ )
             {
-                if( SEARCH_QUIT == aInspector->Inspect( GetField( ii ), (void*) this ) )
+                if( SEARCH_QUIT == aInspector( GetField( ii ), (void*) this ) )
                     return SEARCH_QUIT;
             }
             break;
 
         case SCH_FIELD_LOCATE_REFERENCE_T:
-            if( SEARCH_QUIT == aInspector->Inspect( GetField( REFERENCE ), (void*) this ) )
+            if( SEARCH_QUIT == aInspector( GetField( REFERENCE ), (void*) this ) )
                 return SEARCH_QUIT;
             break;
 
         case SCH_FIELD_LOCATE_VALUE_T:
-            if( SEARCH_QUIT == aInspector->Inspect( GetField( VALUE ), (void*) this ) )
+            if( SEARCH_QUIT == aInspector( GetField( VALUE ), (void*) this ) )
                 return SEARCH_QUIT;
             break;
 
         case SCH_FIELD_LOCATE_FOOTPRINT_T:
-            if( SEARCH_QUIT == aInspector->Inspect( GetField( FOOTPRINT ), (void*) this ) )
+            if( SEARCH_QUIT == aInspector( GetField( FOOTPRINT ), (void*) this ) )
                 return SEARCH_QUIT;
             break;
 
@@ -1838,7 +1862,7 @@ SEARCH_RESULT SCH_COMPONENT::Visit( INSPECTOR* aInspector, const void* aTestData
 
                 for( size_t i = 0;  i < pins.size();  i++ )
                 {
-                    if( SEARCH_QUIT == aInspector->Inspect( pins[ i ], (void*) this ) )
+                    if( SEARCH_QUIT == aInspector( pins[ i ], (void*) this ) )
                         return SEARCH_QUIT;
                 }
             }
@@ -1876,7 +1900,7 @@ void SCH_COMPONENT::GetNetListItem( NETLIST_OBJECT_LIST& aNetListItems,
             item->m_SheetPath = *aSheetPath;
             item->m_Type = NET_PIN;
             item->m_Link = (SCH_ITEM*) this;
-            item->m_ElectricalType = pin->GetType();
+            item->m_ElectricalPinType = pin->GetType();
             item->m_PinNum = pin->GetNumber();
             item->m_Label = pin->GetName();
             item->m_Start = item->m_End = pos;

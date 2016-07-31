@@ -1,18 +1,10 @@
-# the map generation creates on Windows/gcc a lot of useless warnings
-# so disable it on windows
-if( WIN32 AND NOT CMAKE_CROSSCOMPILING )
-    set( MAKE_LINK_MAPS false )
-else()
-    set( MAKE_LINK_MAPS true )
-endif()
-
 add_definitions( -DEESCHEMA )
-
 
 include_directories( BEFORE ${INC_BEFORE} )
 include_directories(
     ./dialogs
     ./netlist_exporters
+    ./widgets
     ../common
     ../common/dialogs
     ${INC_AFTER}
@@ -25,8 +17,6 @@ set( EESCHEMA_DLGS
     dialogs/dialog_bom.cpp
     dialogs/dialog_bom_base.cpp
     dialogs/dialog_bom_cfg_keywords.cpp
-    dialogs/dialog_color_config.cpp
-    dialogs/dialog_color_config_base.cpp
     dialogs/dialog_choose_component.cpp
     dialogs/dialog_choose_component_base.cpp
     dialogs/dialog_lib_edit_text.cpp
@@ -72,7 +62,15 @@ set( EESCHEMA_DLGS
     dialogs/dialog_schematic_find_base.cpp
     )
 
+set( EESCHEMA_WIDGETS
+    widgets/widget_eeschema_color_config.cpp
+    widgets/pin_shape_combobox.cpp
+    widgets/pin_type_combobox.cpp
+    )
+
+
 set( EESCHEMA_SRCS
+    autoplace_fields.cpp
     annotate.cpp
     backanno.cpp
     block.cpp
@@ -89,6 +87,7 @@ set( EESCHEMA_SRCS
     controle.cpp
     cross-probing.cpp
     ${EESCHEMA_DLGS}
+    ${EESCHEMA_WIDGETS}
     edit_component_in_schematic.cpp
     edit_bitmap.cpp
     edit_label.cpp
@@ -131,6 +130,9 @@ set( EESCHEMA_SRCS
     onrightclick.cpp
     operations_on_items_lists.cpp
     pinedit.cpp
+    pin_number.cpp
+    pin_shape.cpp
+    pin_type.cpp
     plot_schematic_DXF.cpp
     plot_schematic_HPGL.cpp
     plot_schematic_PS.cpp
@@ -143,16 +145,20 @@ set( EESCHEMA_SRCS
     sch_collectors.cpp
     sch_component.cpp
     sch_field.cpp
+    sch_io_mgr.cpp
     sch_item_struct.cpp
     sch_junction.cpp
+    sch_legacy_plugin.cpp
     sch_line.cpp
     sch_marker.cpp
     sch_no_connect.cpp
+    sch_plugin.cpp
     sch_screen.cpp
     sch_sheet.cpp
     sch_sheet_path.cpp
     sch_sheet_pin.cpp
     sch_text.cpp
+    sch_validators.cpp
     schedit.cpp
     schematic_undo_redo.cpp
     schframe.cpp
@@ -191,6 +197,8 @@ set( EESCHEMA_COMMON_SRCS
 if( MINGW )
     # EESCHEMA_RESOURCES variable is set by the macro.
     mingw_resource_compiler( eeschema )
+else()
+    set( EESCHEMA_RESOURCES eeschema.rc )
 endif()
 
 # Create a C++ compilable string initializer containing html text into a *.h file:
@@ -220,7 +228,7 @@ if( APPLE )
         MACOSX_PACKAGE_LOCATION Resources
         )
     set( MACOSX_BUNDLE_ICON_FILE eeschema.icns )
-    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-eda.kicad )
+    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-pcb.kicad )
     set( MACOSX_BUNDLE_NAME eeschema )
 endif()
 
@@ -250,6 +258,7 @@ target_link_libraries( eeschema_kiface
     common
     bitmaps
     polygon
+    gal
     ${wxWidgets_LIBRARIES}
     ${GDI_PLUS_LIBRARIES}
     )
@@ -295,6 +304,7 @@ if( APPLE )
         DESTINATION ${KICAD_BIN}
         COMPONENT binary
         )
+
     install( CODE "
             # override default embedded path settings
             ${OSX_BUNDLE_OVERRIDE_PATHS}

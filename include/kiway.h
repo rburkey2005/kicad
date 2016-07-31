@@ -1,10 +1,8 @@
-#ifndef KIWAY_H_
-#define KIWAY_H_
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2014 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2014 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 2016 KiCad Developers, see CHANGELOG.TXT for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -24,6 +22,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
+#ifndef KIWAY_H_
+#define KIWAY_H_
 
 /*
 
@@ -118,8 +118,10 @@ as such!  As such, it is OK to use UTF8 characters:
  #define LIB_ENV_VAR    wxT( "LD_LIBRARY_PATH" )
 #elif defined(__WXMAC__)
  #define LIB_ENV_VAR    wxT( "DYLD_LIBRARY_PATH" )
-#elif defined(__MINGW32__)
+#elif defined(_WIN32)
  #define LIB_ENV_VAR    wxT( "PATH" )
+#else
+ #error Platform support missing
 #endif
 
 
@@ -296,11 +298,13 @@ public:
      * @param aFrameType is from enum #FRAME_T.
      * @param doCreate when true asks that the player be created if it is not
      *   already created, false means do not create and maybe return NULL.
+     * @param aParent is a parent for modal KIWAY_PLAYER frames, otherwise NULL
+     *  used only when doCreate = true
      *
      * @return KIWAY_PLAYER* - a valid opened KIWAY_PLAYER or NULL if there
      *  is something wrong or doCreate was false and the player has yet to be created.
      */
-    VTBL_ENTRY KIWAY_PLAYER* Player( FRAME_T aFrameType, bool doCreate = true );
+    VTBL_ENTRY KIWAY_PLAYER* Player( FRAME_T aFrameType, bool doCreate = true, KIWAY_PLAYER* aParent = NULL );
 
     /**
      * Function PlayerClose
@@ -367,8 +371,10 @@ private:
     /// Get the full path & name of the DSO holding the requested FACE_T.
     static const wxString dso_full_path( FACE_T aFaceId );
 
+#if 0
     /// hooked into m_top in SetTop(), marks child frame as closed.
     void player_destroy_handler( wxWindowDestroyEvent& event );
+#endif
 
     bool set_kiface( FACE_T aFaceType, KIFACE* aKiface )
     {
@@ -380,14 +386,28 @@ private:
         return false;
     }
 
+    /**
+     * @return the reference of the KIWAY_PLAYER having the type aFrameType
+     * if exists, or NULL if this KIWAY_PLAYER was not yet created, or was closed
+     */
+    KIWAY_PLAYER* GetPlayerFrame( FRAME_T aFrameType );
+
     static KIFACE*  m_kiface[KIWAY_FACE_COUNT];
     static int      m_kiface_version[KIWAY_FACE_COUNT];
 
     PGM_BASE*       m_program;
     int             m_ctl;
-    wxFrame*        m_top;
 
-    KIWAY_PLAYER*   m_player[KIWAY_PLAYER_COUNT];     // from frame_type.h
+    wxFrame*        m_top;      // Usually m_top is the Project manager
+
+
+    // a string array ( size KIWAY_PLAYER_COUNT ) to Store the frame name
+    // of PLAYER frames which were run.
+    // A non empty name means only a PLAYER was run at least one time.
+    // It can be closed. Call :
+    // wxWindow::FindWindowByName( m_playerFrameName[aFrameType] )
+    // to know if still exists (or GetPlayerFrame( FRAME_T aFrameType )
+    wxArrayString  m_playerFrameName;
 
     PROJECT         m_project;      // do not assume this is here, use Prj().
 };
@@ -425,7 +445,15 @@ extern KIWAY Kiway;     // provided by single_top.cpp and kicad.cpp
 typedef     KIFACE*  KIFACE_GETTER_FUNC( int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram );
 
 /// No name mangling.  Each KIFACE (DSO/DLL) will implement this once.
-extern "C" KIFACE* KIFACE_GETTER(  int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram );
+extern "C" {
+
+#if defined(BUILD_KIWAY_DLL)
+MY_API( KIFACE* ) KIFACE_GETTER(  int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram );
+#else
+KIFACE* KIFACE_GETTER(  int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram );
+#endif
+
+}
 
 
 #endif  // KIWAY_H_

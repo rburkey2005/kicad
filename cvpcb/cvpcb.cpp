@@ -34,7 +34,6 @@
 #include <pgm_base.h>
 #include <wxstruct.h>
 #include <confirm.h>
-#include <3d_viewer.h>
 #include <pcbcommon.h>
 
 #include <cvpcb.h>
@@ -55,7 +54,6 @@ const wxString EquFileExtension( wxT( "equ" ) );
 
 // Wildcard for schematic retroannotation (import footprint names in schematic):
 const wxString EquFilesWildcard( _( "Component/footprint equ files (*.equ)|*.equ" ) );
-
 
 namespace CV {
 

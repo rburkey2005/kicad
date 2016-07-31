@@ -161,6 +161,9 @@ void DIMENSION::Rotate( const wxPoint& aRotCentre, double aAngle )
 void DIMENSION::Flip( const wxPoint& aCentre )
 {
     Mirror( aCentre );
+
+    // DIMENSION items are not usually on copper layers, so
+    // copper layers count is not taken in accoun in Flip transform
     SetLayer( FlipLayer( GetLayer() ) );
 }
 
@@ -228,7 +231,7 @@ void DIMENSION::UpdateHeight()
 
 void DIMENSION::AdjustDimensionDetails( bool aDoNotChangeText )
 {
-    const int   arrowz = DMils2iu( 500 );           // size of arrows
+    const int   arrowz = Mils2iu( 50 );             // size of arrows
     int         ii;
     int         measure, deltax, deltay;            // value of the measure on X and Y axes
     int         arrow_up_X  = 0, arrow_up_Y = 0;    // coordinates of arrow line /
@@ -249,7 +252,7 @@ void DIMENSION::AdjustDimensionDetails( bool aDoNotChangeText )
     // Calculate dimension value
     measure = KiROUND( hypot( deltax, deltay ) );
 
-    angle = atan2( deltay, deltax );
+    angle = atan2( (double)deltay, (double)deltax );
 
     // Calculation of parameters X and Y dimensions of the arrows and lines.
     hx = hy = ii;

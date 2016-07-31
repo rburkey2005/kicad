@@ -43,7 +43,6 @@
 #include <pcbstruct.h>
 #include <class_draw_panel_gal.h>
 
-
 /* Forward declarations of classes. */
 class BOARD;
 class BOARD_CONNECTED_ITEM;
@@ -51,7 +50,7 @@ class MODULE;
 class TRACK;
 class D_PAD;
 class TEXTE_MODULE;
-class EDA_3D_FRAME;
+class EDA_3D_VIEWER;
 class GENERAL_COLLECTOR;
 class GENERAL_COLLECTORS_GUIDE;
 class BOARD_DESIGN_SETTINGS;
@@ -59,8 +58,6 @@ class ZONE_SETTINGS;
 class PCB_PLOT_PARAMS;
 class FP_LIB_TABLE;
 class FPID;
-class TOOL_MANAGER;
-class TOOL_DISPATCHER;
 
 /**
  * class PCB_BASE_FRAME
@@ -75,9 +72,6 @@ public:
 
     int m_FastGrid1;                // 1st fast grid setting (index in EDA_DRAW_FRAME::m_gridSelectBox)
     int m_FastGrid2;                // 2nd fast grid setting (index in EDA_DRAW_FRAME::m_gridSelectBox)
-
-    EDA_3D_FRAME* m_Draw3DFrame;
-
 
 protected:
     BOARD*              m_Pcb;
@@ -110,6 +104,11 @@ public:
             long aStyle, const wxString& aFrameName );
 
     ~PCB_BASE_FRAME();
+
+    /**
+     * @return a reference to the 3D viewer frame, when exists, or NULL
+     */
+    EDA_3D_VIEWER* Get3DViewerFrame();
 
     /**
      * Function LoadFootprint
@@ -283,12 +282,17 @@ public:
      * puts up a dialog and allows the user to pick a library, for unspecified use.
      *
      * @param aNicknameExisting is the current choice to highlight
-     *
      * @return wxString - the library or wxEmptyString on abort.
      */
     wxString SelectLibrary( const wxString& aNicknameExisting );
 
-    MODULE* GetModuleByName();
+    /**
+     * Function GetFootprintFromBoardByReference
+     * @return a reference to the footprint found by its refence
+     * on the curent board. the reference is entered by the user from
+     * a dialog (by awxTextCtlr, or a list of available references)
+     */
+    MODULE* GetFootprintFromBoardByReference();
 
     /**
      * Function OnModify

@@ -46,7 +46,9 @@ class ZONE_CONTAINER;
 class BOARD;
 class REPORTER;
 
-// Shared Config keys for plot and print
+///@{
+/// \ingroup config
+
 #define OPTKEY_LAYERBASE             wxT( "PlotLayer_%d" )
 #define OPTKEY_PRINT_X_FINESCALE_ADJ wxT( "PrintXFineScaleAdj" )
 #define OPTKEY_PRINT_Y_FINESCALE_ADJ wxT( "PrintYFineScaleAdj" )
@@ -59,6 +61,8 @@ class REPORTER;
 #define OPTKEY_PLOT_X_FINESCALE_ADJ  wxT( "PlotXFineScaleAdj" )
 #define OPTKEY_PLOT_Y_FINESCALE_ADJ  wxT( "PlotYFineScaleAdj" )
 #define CONFIG_PS_FINEWIDTH_ADJ      wxT( "PSPlotFineWidthAdj" )
+
+///@}
 
 // Define min and max reasonable values for plot/print scale
 #define PLOT_MIN_SCALE 0.01
@@ -246,10 +250,12 @@ void BuildPlotFileName( wxFileName*     aFilename,
 
 
 /**
- * Function GetGerberExtension
+ * Function GetGerberProtelExtension
  * @return the appropriate Gerber file extension for \a aLayer
+ * used by Protel, and still sometimes in use (although the
+ * official Gerber Ext is now .gbr)
  */
-const wxString GetGerberExtension( LAYER_NUM aLayer );
+const wxString GetGerberProtelExtension( LAYER_NUM aLayer );
 
 /**
  * Function GetGerberFileFunctionAttribute

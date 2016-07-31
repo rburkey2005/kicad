@@ -25,12 +25,16 @@
 #ifndef EDIT_POINTS_H_
 #define EDIT_POINTS_H_
 
-#include <boost/shared_ptr.hpp>
-
 #include <base_struct.h>
 #include <layers_id_colors_and_visibility.h>
 
+#include <list>
+#include <deque>
+
 #include "edit_constraints.h"
+
+#include <memory>
+
 
 /**
  * Class EDIT_POINT
@@ -170,7 +174,7 @@ private:
     VECTOR2I m_position;
 
     ///> Constraint for the point, NULL if none
-    boost::shared_ptr<EDIT_CONSTRAINT<EDIT_POINT> > m_constraint;
+    std::shared_ptr<EDIT_CONSTRAINT<EDIT_POINT> > m_constraint;
 };
 
 
@@ -288,7 +292,7 @@ private:
     EDIT_POINT& m_end;              ///< End point for a line
 
     ///> Constraint for the point, NULL if none
-    boost::shared_ptr<EDIT_CONSTRAINT<EDIT_LINE> > m_constraint;
+    std::shared_ptr<EDIT_CONSTRAINT<EDIT_LINE> > m_constraint;
 };
 
 

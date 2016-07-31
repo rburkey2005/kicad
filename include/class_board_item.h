@@ -199,7 +199,17 @@ public:
      */
     virtual bool IsLocked() const
     {
-        return false;   // only MODULEs can be locked at this time.
+        // only MODULEs & TRACKs can be locked at this time.
+        return false;
+    }
+
+    /**
+     * Function SetLocked
+     * modifies 'lock' status for of the item.
+     */
+    virtual void SetLocked( bool aLocked )
+    {
+        // only MODULEs & TRACKs can be locked at this time.
     }
 
     /**
@@ -322,14 +332,6 @@ public:
 
     /// @copydoc VIEW_ITEM::ViewGetLayers()
     virtual void ViewGetLayers( int aLayers[], int& aCount ) const;
-
-    /*!
-     * Function IncrementItemReference
-     * Implement if the concept of "incrementing" makes sense for an
-     * item (e.g. modules and pads)
-     * @return if item reference was incremented
-     */
-    virtual bool IncrementItemReference() { return false; }
 };
 
 #endif /* BOARD_ITEM_STRUCT_H */

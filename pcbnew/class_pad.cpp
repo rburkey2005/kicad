@@ -1,9 +1,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2012 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
+ * Copyright (C) 2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
-  * Copyright (C) 1992-2012 KiCad Developers, see AUTHORS.txt for contributors.
+  * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,24 +30,19 @@
 
 #include <fctsys.h>
 #include <PolyLine.h>
-#include <common.h>
-#include <confirm.h>
-#include <kicad_string.h>
 #include <trigo.h>
-#include <richio.h>
 #include <wxstruct.h>
 #include <macros.h>
 #include <msgpanel.h>
 #include <base_units.h>
 
 #include <pcbnew.h>
-#include <pcbnew_id.h>                      // ID_TRACK_BUTT
 
 #include <class_board.h>
 #include <class_module.h>
 #include <polygon_test_point_inside.h>
-#include <convert_from_iu.h>
-#include <boost/foreach.hpp>
+#include <convert_to_biu.h>
+#include <convert_basic_shapes_to_polygon.h>
 
 
 int D_PAD::m_PadSketchModePenSize = 0;      // Pen size used to draw pads in sketch mode
@@ -57,9 +52,9 @@ D_PAD::D_PAD( MODULE* parent ) :
     BOARD_CONNECTED_ITEM( parent, PCB_PAD_T )
 {
     m_NumPadName          = 0;
-    m_Size.x = m_Size.y   = DMils2iu( 600 ); // Default pad size 60 mils.
-    m_Drill.x = m_Drill.y = DMils2iu( 300 ); // Default drill size 30 mils.
-    m_Orient              = 0;               // Pad rotation in 1/10 degrees.
+    m_Size.x = m_Size.y   = Mils2iu( 60 );  // Default pad size 60 mils.
+    m_Drill.x = m_Drill.y = Mils2iu( 30 );  // Default drill size 30 mils.
+    m_Orient              = 0;              // Pad rotation in 1/10 degrees.
     m_LengthPadToDie      = 0;
 
     if( m_Parent  &&  m_Parent->Type() == PCB_MODULE_T )
@@ -74,6 +69,9 @@ D_PAD::D_PAD( MODULE* parent ) :
     m_LocalSolderMaskMargin  = 0;
     m_LocalSolderPasteMargin = 0;
     m_LocalSolderPasteMarginRatio = 0.0;
+    // Parameters for round rect only:
+    m_padRoundRectRadiusScale = 0.25;                   // from  IPC-7351C standard
+
     m_ZoneConnection      = PAD_ZONE_CONN_INHERITED; // Use parent setting by default
     m_ThermalWidth        = 0;                  // Use parent setting by default
     m_ThermalGap          = 0;                  // Use parent setting by default
@@ -110,12 +108,16 @@ LSET D_PAD::ConnSMDMask()
 
 LSET D_PAD::UnplatedHoleMask()
 {
-    // was #define PAD_ATTRIB_HOLE_NOT_PLATED_DEFAULT_LAYERS ALL_CU_LAYERS |
-    // SILKSCREEN_LAYER_FRONT | SOLDERMASK_LAYER_BACK | SOLDERMASK_LAYER_FRONT
     static LSET saved = LSET::AllCuMask() | LSET( 3, F_SilkS, B_Mask, F_Mask );
     return saved;
 }
 
+bool D_PAD::IsFlipped()
+{
+    if( GetParent() &&  GetParent()->GetLayer() == B_Cu )
+        return true;
+    return false;
+}
 
 int D_PAD::boundingRadius() const
 {
@@ -142,11 +144,28 @@ int D_PAD::boundingRadius() const
         radius = 1 + KiROUND( hypot( x, y ) / 2 );
         break;
 
+    case PAD_SHAPE_ROUNDRECT:
+        radius = GetRoundRectCornerRadius();
+        x = m_Size.x >> 1;
+        y = m_Size.y >> 1;
+        radius += 1 + KiROUND( EuclideanNorm( wxSize( x - radius, y - radius )));
+        break;
+
     default:
         radius = 0;
     }
 
     return radius;
+}
+
+
+int D_PAD::GetRoundRectCornerRadius( const wxSize& aSize ) const
+{
+    // radius of rounded corners, usually 25% of shorter pad edge for now
+    int r = aSize.x > aSize.y ? aSize.y : aSize.x;
+    r = int( r * m_padRoundRectRadiusScale );
+
+    return r;
 }
 
 
@@ -164,8 +183,7 @@ const EDA_RECT D_PAD::GetBoundingBox() const
         break;
 
     case PAD_SHAPE_OVAL:
-        //Use the maximal two most distant points and track their rotation
-        // (utilise symmetry to avoid four points)
+        // Calculate the position of each rounded ent
         quadrant1.x =  m_Size.x/2;
         quadrant1.y =  0;
         quadrant2.x =  0;
@@ -173,15 +191,21 @@ const EDA_RECT D_PAD::GetBoundingBox() const
 
         RotatePoint( &quadrant1, m_Orient );
         RotatePoint( &quadrant2, m_Orient );
+
+        // Calculate the max position of each end, relative to the pad position
+        // (the min position is symetrical)
         dx = std::max( std::abs( quadrant1.x ) , std::abs( quadrant2.x )  );
         dy = std::max( std::abs( quadrant1.y ) , std::abs( quadrant2.y )  );
-        area.SetOrigin( m_Pos.x-dx, m_Pos.y-dy );
-        area.SetSize( 2*dx, 2*dy );
+
+        // Set the bbox
+        area.SetOrigin( m_Pos );
+        area.Inflate( dx, dy );
         break;
 
     case PAD_SHAPE_RECT:
-        //Use two corners and track their rotation
-        // (utilise symmetry to avoid four points)
+    case PAD_SHAPE_ROUNDRECT:
+        // Use two opposite corners and track their rotation
+        // (use symmetry for other points)
         quadrant1.x =  m_Size.x/2;
         quadrant1.y =  m_Size.y/2;
         quadrant2.x = -m_Size.x/2;
@@ -191,8 +215,10 @@ const EDA_RECT D_PAD::GetBoundingBox() const
         RotatePoint( &quadrant2, m_Orient );
         dx = std::max( std::abs( quadrant1.x ) , std::abs( quadrant2.x )  );
         dy = std::max( std::abs( quadrant1.y ) , std::abs( quadrant2.y )  );
-        area.SetOrigin( m_Pos.x-dx, m_Pos.y-dy );
-        area.SetSize( 2*dx, 2*dy );
+
+        // Set the bbox
+        area.SetOrigin( m_Pos );
+        area.Inflate( dx, dy );
         break;
 
     case PAD_SHAPE_TRAPEZOID:
@@ -277,21 +303,20 @@ void D_PAD::SetOrientation( double aAngle )
 
 void D_PAD::Flip( const wxPoint& aCentre )
 {
-    int y = GetPosition().y - aCentre.y;
-
-    y = -y;         // invert about x axis.
-
-    y += aCentre.y;
-
+    int y = GetPosition().y;
+    MIRROR( y, aCentre.y );  // invert about x axis.
     SetY( y );
 
-    m_Pos0.y = -m_Pos0.y;
-    m_Offset.y = -m_Offset.y;
-    m_DeltaSize.y = -m_DeltaSize.y;
+    MIRROR( m_Pos0.y, 0 );
+    MIRROR( m_Offset.y, 0 );
+    MIRROR( m_DeltaSize.y, 0 );
 
     SetOrientation( -GetOrientation() );
 
     // flip pads layers
+    // PADS items are currently on all copper layers, or
+    // currently, only on Front or Back layers.
+    // So the copper layers count is not taken in account
     SetLayerSet( FlipLayerMask( m_layerMask ) );
 
     // m_boundingRadius = -1;  the shape has not been changed
@@ -335,16 +360,11 @@ const wxPoint D_PAD::ShapePos() const
     if( m_Offset.x == 0 && m_Offset.y == 0 )
         return m_Pos;
 
-    wxPoint shape_pos;
-    int     dX, dY;
+    wxPoint loc_offset = m_Offset;
 
-    dX = m_Offset.x;
-    dY = m_Offset.y;
+    RotatePoint( &loc_offset, m_Orient );
 
-    RotatePoint( &dX, &dY, m_Orient );
-
-    shape_pos.x = m_Pos.x + dX;
-    shape_pos.y = m_Pos.y + dY;
+    wxPoint shape_pos = m_Pos + loc_offset;
 
     return shape_pos;
 }
@@ -352,26 +372,10 @@ const wxPoint D_PAD::ShapePos() const
 
 const wxString D_PAD::GetPadName() const
 {
-#if 0   // m_Padname is not ASCII and not UTF8, it is LATIN1 basically, whatever
-        // 8 bit font is supported in KiCad plotting and drawing.
-
-    // Return pad name as wxString, assume it starts as a non-terminated
-    // utf8 character sequence
-
-    char    temp[sizeof(m_Padname)+1];      // a place to terminate with '\0'
-
-    strncpy( temp, m_Padname, sizeof(m_Padname) );
-
-    temp[sizeof(m_Padname)] = 0;
-
-    return FROM_UTF8( temp );
-#else
-
     wxString name;
 
     StringPadName( name );
     return name;
-#endif
 }
 
 
@@ -405,13 +409,6 @@ void D_PAD::SetPadName( const wxString& name )
 
     for( ii = len; ii < PADNAMEZ; ii++ )
         m_Padname[ii] = '\0';
-}
-
-
-bool D_PAD::IncrementItemReference()
-{
-    // Take the next available pad number
-    return IncrementPadName( true, true );
 }
 
 
@@ -454,26 +451,30 @@ void D_PAD::Copy( D_PAD* source )
     m_ZoneConnection = source->m_ZoneConnection;
     m_ThermalWidth = source->m_ThermalWidth;
     m_ThermalGap = source->m_ThermalGap;
+    m_padRoundRectRadiusScale = source->m_padRoundRectRadiusScale;
 
     SetSubRatsnest( 0 );
     SetSubNet( 0 );
 }
 
 
-void D_PAD::CopyNetlistSettings( D_PAD* aPad )
+void D_PAD::CopyNetlistSettings( D_PAD* aPad, bool aCopyLocalSettings )
 {
     // Don't do anything foolish like trying to copy to yourself.
     wxCHECK_RET( aPad != NULL && aPad != this, wxT( "Cannot copy to NULL or yourself." ) );
 
     aPad->SetNetCode( GetNetCode() );
 
-    aPad->SetLocalClearance( m_LocalClearance );
-    aPad->SetLocalSolderMaskMargin( m_LocalSolderMaskMargin );
-    aPad->SetLocalSolderPasteMargin( m_LocalSolderPasteMargin );
-    aPad->SetLocalSolderPasteMarginRatio( m_LocalSolderPasteMarginRatio );
-    aPad->SetZoneConnection( m_ZoneConnection );
-    aPad->SetThermalWidth( m_ThermalWidth );
-    aPad->SetThermalGap( m_ThermalGap );
+    if( aCopyLocalSettings )
+    {
+        aPad->SetLocalClearance( m_LocalClearance );
+        aPad->SetLocalSolderMaskMargin( m_LocalSolderMaskMargin );
+        aPad->SetLocalSolderPasteMargin( m_LocalSolderPasteMargin );
+        aPad->SetLocalSolderPasteMarginRatio( m_LocalSolderPasteMarginRatio );
+        aPad->SetZoneConnection( m_ZoneConnection );
+        aPad->SetThermalWidth( m_ThermalWidth );
+        aPad->SetThermalGap( m_ThermalGap );
+    }
 }
 
 
@@ -583,7 +584,7 @@ wxSize D_PAD::GetSolderPasteMargin() const
 
 ZoneConnection D_PAD::GetZoneConnection() const
 {
-    MODULE* module = (MODULE*) GetParent();
+    MODULE* module = GetParent();
 
     if( m_ZoneConnection == PAD_ZONE_CONN_INHERITED && module )
         return module->GetZoneConnection();
@@ -594,7 +595,7 @@ ZoneConnection D_PAD::GetZoneConnection() const
 
 int D_PAD::GetThermalWidth() const
 {
-    MODULE* module = (MODULE*) GetParent();
+    MODULE* module = GetParent();
 
     if( m_ThermalWidth == 0 && module )
         return module->GetThermalWidth();
@@ -605,7 +606,7 @@ int D_PAD::GetThermalWidth() const
 
 int D_PAD::GetThermalGap() const
 {
-    MODULE* module = (MODULE*) GetParent();
+    MODULE* module = GetParent();
 
     if( m_ThermalGap == 0 && module )
         return module->GetThermalGap();
@@ -667,14 +668,14 @@ void D_PAD::GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM>& aList )
         aList.push_back( MSG_PANEL_ITEM( _( "Drill X / Y" ), Line, RED ) );
     }
 
-    double module_orient = module ? module->GetOrientation() : 0;
+    double module_orient_degrees = module ? module->GetOrientationDegrees() : 0;
 
-    if( module_orient )
+    if( module_orient_degrees != 0.0 )
         Line.Printf( wxT( "%3.1f(+%3.1f)" ),
-                     ( m_Orient - module_orient ) / 10.0,
-                     module_orient / 10.0 );
+                     GetOrientationDegrees() - module_orient_degrees,
+                     module_orient_degrees );
     else
-        Line.Printf( wxT( "%3.1f" ), m_Orient / 10.0 );
+        Line.Printf( wxT( "%3.1f" ), GetOrientationDegrees() );
 
     aList.push_back( MSG_PANEL_ITEM( _( "Angle" ), Line, LIGHTBLUE ) );
 
@@ -783,6 +784,19 @@ bool D_PAD::HitTest( const wxPoint& aPosition ) const
             return true;
 
         break;
+
+    case PAD_SHAPE_ROUNDRECT:
+    {
+        // Check for hit in polygon
+        SHAPE_POLY_SET outline;
+        const int segmentToCircleCount = 32;
+        TransformRoundRectToPolygon( outline, wxPoint(0,0), GetSize(), m_Orient,
+                                 GetRoundRectCornerRadius(), segmentToCircleCount );
+
+        const SHAPE_LINE_CHAIN &poly = outline.COutline( 0 );
+        return TestPointInsidePolygon( (const wxPoint*)&poly.CPoint(0), poly.PointCount(), delta );
+    }
+        break;
     }
 
     return false;
@@ -822,6 +836,8 @@ int D_PAD::Compare( const D_PAD* padref, const D_PAD* padcmp )
 
     if( ( diff = padref->m_DeltaSize.y - padcmp->m_DeltaSize.y ) != 0 )
         return diff;
+
+// TODO: test custom shapes
 
     // Dick: specctra_export needs this
     // Lorenzo: gencad also needs it to implement padstacks!
@@ -869,6 +885,9 @@ wxString D_PAD::ShowPadShape() const
     case PAD_SHAPE_TRAPEZOID:
         return _( "Trap" );
 
+    case PAD_SHAPE_ROUNDRECT:
+        return _( "Roundrect" );
+
     default:
         return wxT( "???" );
     }
@@ -905,15 +924,15 @@ wxString D_PAD::GetSelectMenuText() const
 
     if( padname.IsEmpty() )
     {
-    text.Printf( _( "Pad on %s of %s" ),
-                 GetChars( padlayers ),
-                 GetChars(( (MODULE*) GetParent() )->GetReference() ) );
+        text.Printf( _( "Pad on %s of %s" ),
+                     GetChars( padlayers ),
+                     GetChars(GetParent()->GetReference() ) );
     }
     else
     {
         text.Printf( _( "Pad %s on %s of %s" ),
                      GetChars(GetPadName() ), GetChars( padlayers ),
-                     GetChars(( (MODULE*) GetParent() )->GetReference() ) );
+                     GetChars(GetParent()->GetReference() ) );
     }
 
     return text;
@@ -956,7 +975,7 @@ void D_PAD::ViewGetLayers( int aLayers[], int& aCount ) const
     static const LAYER_ID layers_mech[] = { F_Mask, B_Mask, F_Paste, B_Paste,
         F_Adhes, B_Adhes, F_SilkS, B_SilkS, Dwgs_User, Eco1_User, Eco2_User };
 
-    BOOST_FOREACH( LAYER_ID each_layer, layers_mech )
+    for( LAYER_ID each_layer : layers_mech )
     {
         if( IsOnLayer( each_layer ) )
             aLayers[aCount++] = each_layer;
@@ -985,7 +1004,7 @@ unsigned int D_PAD::ViewGetLOD( int aLayer ) const
         if( ( m_Size.x == 0 ) && ( m_Size.y == 0 ) )
             return UINT_MAX;
 
-        return ( 100000000 / std::max( m_Size.x, m_Size.y ) );
+        return ( Millimeter2iu( 100 ) / std::max( m_Size.x, m_Size.y ) );
     }
 
     // Other layers are shown without any conditions

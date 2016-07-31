@@ -44,8 +44,8 @@
 #include <class_module.h>
 #include <class_edge_mod.h>
 
-#include <boost/bind.hpp>
-#include <boost/foreach.hpp>
+#include <functional>
+using namespace std::placeholders;
 #include <wx/defs.h>
 
 MODULE_TOOLS::MODULE_TOOLS() :
@@ -105,10 +105,9 @@ int MODULE_TOOLS::PlacePad( const TOOL_EVENT& aEvent )
 {
     m_frame->SetToolID( ID_MODEDIT_PAD_TOOL, wxCURSOR_PENCIL, _( "Add pads" ) );
 
-    MODULE* module = m_board->m_Modules;
-    assert( module );
+    assert( m_board->m_Modules );
 
-    D_PAD* pad = new D_PAD( module );
+    D_PAD* pad = new D_PAD( m_board->m_Modules );
     m_frame->Import_Pad_Settings( pad, false );     // use the global settings for pad
 
     VECTOR2I cursorPos = m_controls->GetCursorPosition();
@@ -159,11 +158,12 @@ int MODULE_TOOLS::PlacePad( const TOOL_EVENT& aEvent )
         else if( evt->IsClick( BUT_LEFT ) )
         {
             m_frame->OnModify();
-            m_frame->SaveCopyInUndoList( module, UR_MODEDIT );
+            m_frame->SaveCopyInUndoList( m_board->m_Modules, UR_MODEDIT );
 
             m_board->m_Status_Pcb = 0;    // I have no clue why, but it is done in the legacy view
-            module->SetLastEditTime();
-            module->Pads().PushBack( pad );
+            pad->SetParent( m_board->m_Modules );
+            m_board->m_Modules->SetLastEditTime();
+            m_board->m_Modules->Pads().PushBack( pad );
 
             // Set the relative pad position
             // ( pad position for module orient, 0, and relative to the module position)
@@ -177,7 +177,7 @@ int MODULE_TOOLS::PlacePad( const TOOL_EVENT& aEvent )
             m_view->Add( pad );
 
             // Start placing next pad
-            pad = new D_PAD( module );
+            pad = new D_PAD( m_board->m_Modules );
             m_frame->Import_Pad_Settings( pad, false );
             pad->SetPosition( wxPoint( cursorPos.x, cursorPos.y ) );
             preview.Add( pad );
@@ -199,9 +199,8 @@ int MODULE_TOOLS::EnumeratePads( const TOOL_EVENT& aEvent )
 {
     std::list<D_PAD*> pads;
     std::set<D_PAD*> allPads;
-    MODULE* module = m_board->m_Modules;
 
-    if( !module || !module->Pads() )
+    if( !m_board->m_Modules || !m_board->m_Modules->Pads() )
         return 0;
 
     GENERAL_COLLECTOR collector;
@@ -215,7 +214,7 @@ int MODULE_TOOLS::EnumeratePads( const TOOL_EVENT& aEvent )
     guide.SetIgnoreModulesRefs( true );
 
     // Create a set containing all pads (to avoid double adding to the list)
-    for( D_PAD* p = module->Pads(); p; p = p->Next() )
+    for( D_PAD* p = m_board->m_Modules->Pads(); p; p = p->Next() )
         allPads.insert( p );
 
     DIALOG_ENUM_PADS settingsDlg( m_frame );
@@ -280,7 +279,7 @@ int MODULE_TOOLS::EnumeratePads( const TOOL_EVENT& aEvent )
                 selectedPads.unique();
             }
 
-            BOOST_FOREACH( D_PAD* pad, selectedPads )
+            for( D_PAD* pad : selectedPads )
             {
                 std::set<D_PAD*>::iterator it = allPads.find( pad );
 
@@ -309,10 +308,13 @@ int MODULE_TOOLS::EnumeratePads( const TOOL_EVENT& aEvent )
         {
             // Accept changes
             m_frame->OnModify();
-            m_frame->SaveCopyInUndoList( module, UR_MODEDIT );
+            m_frame->SaveCopyInUndoList( m_board->m_Modules, UR_MODEDIT );
 
-            BOOST_FOREACH( D_PAD* pad, pads )
+            for( D_PAD* pad : pads )
+            {
                 pad->SetPadName( wxString::Format( wxT( "%s%d" ), padPrefix.c_str(), padNumber++ ) );
+                pad->ViewUpdate();
+            }
 
             break;
         }
@@ -323,7 +325,7 @@ int MODULE_TOOLS::EnumeratePads( const TOOL_EVENT& aEvent )
         }
     }
 
-    BOOST_FOREACH( D_PAD* pad, pads )
+    for( D_PAD* pad : pads )
         pad->ClearSelected();
 
     m_frame->DisplayToolMsg( wxEmptyString );
@@ -429,7 +431,8 @@ int MODULE_TOOLS::PasteItems( const TOOL_EVENT& aEvent )
     KIGFX::VIEW_GROUP preview( m_view );
     pastedModule->SetParent( m_board );
     pastedModule->SetPosition( wxPoint( cursorPos.x, cursorPos.y ) );
-    pastedModule->RunOnChildren( boost::bind( &KIGFX::VIEW_GROUP::Add, boost::ref( preview ), _1 ) );
+    pastedModule->RunOnChildren( std::bind( &KIGFX::VIEW_GROUP::Add, 
+                                                std::ref( preview ),  _1 ) );
     preview.Add( pastedModule );
     m_view->Add( &preview );
 
@@ -546,7 +549,7 @@ int MODULE_TOOLS::ModuleTextOutlines( const TOOL_EVENT& aEvent )
 
     bool enable = !settings->GetSketchMode( layers[0] );
 
-    BOOST_FOREACH( LAYER_NUM layer, layers )
+    for( LAYER_NUM layer : layers )
         settings->SetSketchMode( layer, enable );
 
     for( MODULE* module = getModel<BOARD>()->m_Modules; module; module = module->Next() )
@@ -580,7 +583,7 @@ int MODULE_TOOLS::ModuleEdgeOutlines( const TOOL_EVENT& aEvent )
 
     bool enable = !settings->GetSketchMode( layers[0] );
 
-    BOOST_FOREACH( LAYER_NUM layer, layers )
+    for( LAYER_NUM layer : layers )
         settings->SetSketchMode( layer, enable );
 
     for( MODULE* module = getModel<BOARD>()->m_Modules; module; module = module->Next() )

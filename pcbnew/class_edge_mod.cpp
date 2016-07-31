@@ -274,7 +274,7 @@ wxString EDGE_MODULE::GetSelectMenuText() const
 {
     wxString text;
     text.Printf( _( "Graphic (%s) on %s of %s" ),
-            GetChars( ShowShape( (STROKE_T) m_Shape ) ),
+            GetChars( ShowShape( m_Shape ) ),
             GetChars( GetLayerName() ),
             GetChars( ((MODULE*) GetParent())->GetReference() ) );
 
@@ -318,6 +318,10 @@ void EDGE_MODULE::Flip( const wxPoint& aCentre )
             MIRROR( m_PolyPoints[ii].y, 0 );
     }
 
+    // DRAWSEGMENT items are not usually on copper layers, but
+    // it can happen in microwave apps.
+    // However, currently, only on Front or Back layers.
+    // So the copper layers count is not taken in account
     SetLayer( FlipLayer( GetLayer() ) );
 }
 
@@ -326,8 +330,6 @@ void EDGE_MODULE::Mirror( wxPoint aCentre, bool aMirrorAroundXAxis )
 {
     // Mirror an edge of the footprint. the layer is not modified
     // This is a footprint shape modification.
-    wxPoint pt;
-
     switch( GetShape() )
     {
     case S_ARC:

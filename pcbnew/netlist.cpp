@@ -7,7 +7,7 @@
  * Copyright (C) 1992-2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2013 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2013 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,7 +27,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
+
 #include <fctsys.h>
 #include <pgm_base.h>
 #include <class_drawpanel.h>
@@ -66,6 +68,10 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     NETLIST         netlist;
     KIGFX::VIEW*    view = GetGalCanvas()->GetView();
     BOARD*          board = GetBoard();
+    std::vector<MODULE*> newFootprints;
+    // keep trace of the initial baord area, if we want to place new footprints
+    // outside the existinag board
+    EDA_RECT bbox = GetBoard()->ComputeBoundingBox( false );
 
     netlist.SetIsDryRun( aIsDryRun );
     netlist.SetFindByTimeStamp( aSelectByTimeStamp );
@@ -74,7 +80,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
 
     try
     {
-        std::auto_ptr<NETLIST_READER> netlistReader( NETLIST_READER::GetNetlistReader(
+        std::unique_ptr<NETLIST_READER> netlistReader( NETLIST_READER::GetNetlistReader(
             &netlist, aNetlistFileName, aCmpFileName ) );
 
         if( !netlistReader.get() )
@@ -86,7 +92,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
 
         SetLastNetListRead( aNetlistFileName );
         netlistReader->LoadNetlist();
-        loadFootprints( netlist, aReporter );
+        LoadFootprints( netlist, aReporter );
     }
     catch( const IO_ERROR& ioe )
     {
@@ -104,7 +110,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
         // Remove old modules
         for( MODULE* module = board->m_Modules; module; module = module->Next() )
         {
-            module->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove, view, _1 ) );
+            module->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, view, _1 ) );
             view->Remove( module );
         }
     }
@@ -113,11 +119,36 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     m_toolManager->RunAction( COMMON_ACTIONS::selectionClear, true );
 
     netlist.SortByReference();
-    board->ReplaceNetlist( netlist, aDeleteSinglePadNets, aReporter );
+    board->ReplaceNetlist( netlist, aDeleteSinglePadNets, &newFootprints, aReporter );
 
     // If it was a dry run, nothing has changed so we're done.
     if( netlist.IsDryRun() )
         return;
+
+    if( IsGalCanvasActive() )
+    {
+        SpreadFootprints( &newFootprints, false, false, GetCrossHairPosition() );
+
+        if( !newFootprints.empty() )
+        {
+            for( MODULE* footprint : newFootprints )
+            {
+                m_toolManager->RunAction( COMMON_ACTIONS::selectItem, true, footprint );
+            }
+            m_toolManager->InvokeTool( "pcbnew.InteractiveEdit" );
+        }
+    }
+    else
+    {
+        wxPoint placementAreaPosition;
+
+        // Place area to the left side of the board.
+        // if the board is empty, the bbox position is (0,0)
+        placementAreaPosition.x = bbox.GetEnd().x + Millimeter2iu( 10 );
+        placementAreaPosition.y = bbox.GetOrigin().y;
+
+        SpreadFootprints( &newFootprints, false, false, placementAreaPosition );
+    }
 
     OnModify();
 
@@ -126,7 +157,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     // Reload modules
     for( MODULE* module = board->m_Modules; module; module = module->Next() )
     {
-        module->RunOnChildren( boost::bind( &KIGFX::VIEW::Add, view, _1 ) );
+        module->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1 ) );
         view->Add( module );
         module->ViewUpdate();
     }
@@ -192,7 +223,7 @@ MODULE* PCB_EDIT_FRAME::ListAndSelectModuleName()
 
 #define ALLOW_PARTIAL_FPID      1
 
-void PCB_EDIT_FRAME::loadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
+void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
     throw( IO_ERROR, PARSE_ERROR )
 {
     wxString   msg;
@@ -292,7 +323,6 @@ void PCB_EDIT_FRAME::loadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
             {
                 if( aReporter )
                 {
-                    wxString msg;
                     msg.Printf( _( "Component '%s' footprint '%s' was not found in "
                                    "any libraries in the footprint library table.\n" ),
                                 GetChars( component->GetReference() ),
@@ -316,4 +346,3 @@ void PCB_EDIT_FRAME::loadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
             component->SetModule( module );
     }
 }
-

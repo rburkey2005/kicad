@@ -298,7 +298,7 @@ typename VECTOR2<T>::extended_type VECTOR2<T>::SquaredEuclideanNorm() const
 template <class T>
 double VECTOR2<T>::Angle() const
 {
-    return atan2( y, x );
+    return atan2( (double) y, (double) x );
 }
 
 
@@ -355,9 +355,17 @@ VECTOR2<T>& VECTOR2<T>::operator-=( const T& aScalar )
 }
 
 
+/**
+ * Rotate a VECTOR2 by aAngle.
+ * @param aAngle = rotation angle in radians
+ */
 template <class T>
 VECTOR2<T> VECTOR2<T>::Rotate( double aAngle ) const
 {
+    // Avoid 0 radian rotation, case very frequently found
+    if( aAngle == 0.0 )
+        return VECTOR2<T> ( T( x ), T( y ) );
+
     double  sa  = sin( aAngle );
     double  ca  = cos( aAngle );
 

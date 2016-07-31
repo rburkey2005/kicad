@@ -78,7 +78,7 @@ static void MoveMarkedItems( MODULE* module, wxPoint offset );
 static void DeleteMarkedItems( MODULE* module );
 
 
-int FOOTPRINT_EDIT_FRAME::BlockCommand( int key )
+int FOOTPRINT_EDIT_FRAME::BlockCommand( EDA_KEY key )
 {
     int cmd;
 
@@ -88,7 +88,14 @@ int FOOTPRINT_EDIT_FRAME::BlockCommand( int key )
         cmd = key & 0xFF;
         break;
 
-    case - 1:
+    case EDA_KEY_C( 0xffffffff ):   // -1
+        // Historically, -1 has been used as a key, which can cause bit flag
+        // clashes with unaware code. On debug builds, catch any old code that
+        // might still be doing this. TODO: remove if sure all this old code is gone.
+        wxFAIL_MSG( "negative EDA_KEY value should be converted to GR_KEY_INVALID" );
+        // fall through on release builds
+
+    case GR_KEY_INVALID:
         cmd = BLOCK_PRESELECT_MOVE;
         break;
 
@@ -292,7 +299,7 @@ void FOOTPRINT_EDIT_FRAME::HandleBlockPlace( wxDC* DC )
         break;
 
     case BLOCK_COPY:                // Copy
-    case BLOCK_COPY_AND_INCREMENT:  // Copy and increment references
+    case BLOCK_COPY_AND_INCREMENT:  // Copy and increment pad names
         GetScreen()->m_BlockLocate.ClearItemsList();
         SaveCopyInUndoList( currentModule, UR_MODEDIT );
         CopyMarkedItems( currentModule, GetScreen()->m_BlockLocate.GetMoveVector(),
@@ -450,7 +457,7 @@ void CopyMarkedItems( MODULE* module, wxPoint offset, bool aIncrement )
         module->Pads().PushFront( NewPad );
 
         if( aIncrement )
-            NewPad->IncrementItemReference();
+            NewPad->IncrementPadName( true, true );
     }
 
     BOARD_ITEM* newItem;
@@ -466,9 +473,6 @@ void CopyMarkedItems( MODULE* module, wxPoint offset, bool aIncrement )
         newItem->SetParent( module );
         newItem->SetFlags( SELECTED );
         module->GraphicalItems().PushFront( newItem );
-
-        if( aIncrement )
-            newItem->IncrementItemReference();
     }
 
     MoveMarkedItems( module, offset );

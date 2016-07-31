@@ -31,11 +31,12 @@
 
 //  see http://www.boost.org/libs/ptr_container/doc/ptr_set.html
 #include <boost/ptr_container/ptr_set.hpp>
-#include <boost/shared_ptr.hpp>
 
 #include <fctsys.h>
 #include <specctra_lexer.h>
 #include <pcbnew.h>
+
+#include <memory>
 
 // all outside the DSN namespace:
 class BOARD;
@@ -1246,7 +1247,7 @@ public:
             out->Print( nestLevel+1, "(use_net" );
             for( STRINGS::const_iterator i = use_net.begin();  i!=use_net.end(); ++i )
             {
-                const char* quote = out->GetQuoteChar( i->c_str() );
+                quote = out->GetQuoteChar( i->c_str() );
                 out->Print( 0, " %s%s%s",  quote, i->c_str(), quote );
             }
             out->Print( 0, ")\n" );
@@ -2831,8 +2832,8 @@ class CONNECT : public ELEM
     // @todo not completed.
 
 public:
-    CONNECT( ELEM* parent ) :
-        ELEM( T_connect, parent ) {}
+    CONNECT( ELEM* aParent ) :
+        ELEM( T_connect, aParent ) {}
 };
 
 
@@ -3012,7 +3013,7 @@ public:
                 out->Print( 0, "\n" );
                 perLine = out->Print( nestLevel+1, "%s", "" );
             }
-            const char* quote = out->GetQuoteChar( net_id.c_str() );
+            quote = out->GetQuoteChar( net_id.c_str() );
             perLine += out->Print( 0, "(net %s%s%s)", quote, net_id.c_str(), quote );
         }
 
@@ -3045,7 +3046,7 @@ public:
             }
             if( attr == T_virtual_pin )
             {
-                const char* quote = out->GetQuoteChar( virtual_pin_name.c_str() );
+                quote = out->GetQuoteChar( virtual_pin_name.c_str() );
                 perLine += out->Print( 0, "(attr virtual_pin %s%s%s)",
                            quote, virtual_pin_name.c_str(), quote );
             }
@@ -3070,7 +3071,7 @@ public:
 
             for( STRINGS::iterator i=contact_layers.begin();  i!=contact_layers.end();  ++i )
             {
-                const char* quote = out->GetQuoteChar( i->c_str() );
+                quote = out->GetQuoteChar( i->c_str() );
                 out->Print( nestLevel+2, "%s%s%s\n", quote, i->c_str(), quote );
             }
             out->Print( nestLevel+1, "))\n" );
@@ -3815,7 +3816,7 @@ class SPECCTRA_DB : public SPECCTRA_LEXER
      * Function exportNETCLASS
      * exports \a aNetClass to the DSN file.
      */
-    void exportNETCLASS( boost::shared_ptr<NETCLASS> aNetClass, BOARD* aBoard );
+    void exportNETCLASS( std::shared_ptr<NETCLASS> aNetClass, BOARD* aBoard );
 
     //-----</FromBOARD>------------------------------------------------------
 
@@ -3902,10 +3903,10 @@ public:
      * A design file is nearly a full description of a PCB (seems to be
      * missing only the silkscreen stuff).
      *
-     * @param filename The name of the dsn file to load.
+     * @param aFilename The name of the dsn file to load.
      * @throw IO_ERROR if there is a lexer or parser error.
      */
-    void LoadPCB( const wxString& filename ) throw( IO_ERROR, boost::bad_pointer );
+    void LoadPCB( const wxString& aFilename ) throw( IO_ERROR, boost::bad_pointer );
 
     /**
      * Function LoadSESSION
@@ -3914,12 +3915,10 @@ public:
      * tool (Pcbnew) and should be used to update a BOARD object with the new
      * tracks, vias, and component locations.
      *
-     * @param filename The name of the dsn file to load.
+     * @param aFilename The name of the dsn file to load.
      * @throw IO_ERROR if there is a lexer or parser error.
      */
-    void LoadSESSION( const wxString& filename ) throw( IO_ERROR, boost::bad_pointer );
-
-    void ThrowIOError( const wxString& fmt, ... ) throw( IO_ERROR );
+    void LoadSESSION( const wxString& aFilename ) throw( IO_ERROR, boost::bad_pointer );
 
     /**
      * Function ExportPCB

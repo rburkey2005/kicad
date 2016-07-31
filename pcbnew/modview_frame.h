@@ -67,8 +67,6 @@ private:
     wxListBox*          m_libList;               // The list of libs names
     wxListBox*          m_footprintList;         // The list of footprint names
 
-    wxString            m_configPath;            // subpath for configuration
-
     const wxString      getCurNickname();
     void                setCurNickname( const wxString& aNickname );
 
@@ -106,7 +104,7 @@ private:
     void DClickOnFootprintList( wxCommandEvent& event );
     void OnSetRelativeOffset( wxCommandEvent& event );
 
-    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     ///> @copydoc EDA_DRAW_FRAME::GetHotKeyDescription()
     EDA_HOTKEY* GetHotKeyDescription( int aCommand ) const;

@@ -1,7 +1,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -43,6 +43,8 @@
 #include <class_library.h>
 #include <sch_component.h>
 #include <dialog_helpers.h>
+#include <sch_validators.h>
+
 #include <dialog_edit_component_in_schematic_fbp.h>
 
 
@@ -104,7 +106,12 @@ private:
 
     void copyPanelToOptions();
 
-    void setRowItem( int aFieldNdx, const SCH_FIELD& aField );
+    void setRowItem( int aFieldNdx, const wxString& aName, const wxString& aValue );
+
+    void setRowItem( int aFieldNdx, const SCH_FIELD& aField )
+    {
+        setRowItem( aFieldNdx, aField.GetName( false ), aField.GetText() );
+    }
 
     // event handlers
     void OnCloseDialog( wxCloseEvent& event );
@@ -119,6 +126,13 @@ private:
     void showButtonHandler( wxCommandEvent& event );
     void OnTestChipName( wxCommandEvent& event );
     void OnSelectChipName( wxCommandEvent& event );
+	void OnInitDlg( wxInitDialogEvent& event )
+    {
+        TransferDataToWindow();
+
+        // Now all widgets have the size fixed, call FinishDialogSettings
+        FinishDialogSettings();
+    }
 
     SCH_FIELD* findField( const wxString& aFieldName );
 
@@ -158,6 +172,9 @@ void SCH_EDIT_FRAME::EditComponent( SCH_COMPONENT* aComponent )
     // the QUASIMODAL macros here.
     int ret = dlg->ShowQuasiModal();
 
+    if( m_autoplaceFields )
+        aComponent->AutoAutoplaceFields( GetScreen() );
+
     m_canvas->SetIgnoreMouseEvents( false );
     m_canvas->MoveCursorToCrossHair();
     dlg->Destroy();
@@ -191,11 +208,11 @@ DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::DIALOG_EDIT_COMPONENT_IN_SCHEMATIC( wxWindow
     m_staticTextUnitPosY->SetLabel( GetAbbreviatedUnitsLabel( g_UserUnit ) );
 
     wxToolTip::Enable( true );
-
-    GetSizer()->SetSizeHints( this );
-    Center();
-
     stdDialogButtonSizerOK->SetDefault();
+
+    FixOSXCancelButtonIssue();
+
+    Fit();
 }
 
 
@@ -309,7 +326,7 @@ void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::copyPanelToOptions()
     {
         DisplayError( NULL, _( "No Component Name!" ) );
     }
-    else if( Cmp_KEEPCASE( newname, m_cmp->m_part_name ) )
+    else if( newname != m_cmp->m_part_name )
     {
         PART_LIBS* libs = Prj().SchLibs();
 
@@ -529,12 +546,14 @@ void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::showButtonHandler( wxCommandEvent& even
         // pick a footprint using the footprint picker.
         wxString fpid;
 
-        KIWAY_PLAYER* frame = Kiway().Player( FRAME_PCB_MODULE_VIEWER_MODAL, true );
+        KIWAY_PLAYER* frame = Kiway().Player( FRAME_PCB_MODULE_VIEWER_MODAL, true, m_parent );
 
         if( frame->ShowModal( &fpid, this ) )
         {
             // DBG( printf( "%s: %s\n", __func__, TO_UTF8( fpid ) ); )
             fieldValueTextCtrl->SetValue( fpid );
+
+            setRowItem( fieldNdx, m_FieldsBuf[fieldNdx].GetName( false ), fpid );
         }
 
         frame->Destroy();
@@ -760,7 +779,7 @@ void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::InitBuffers( SCH_COMPONENT* aComponent 
 }
 
 
-void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::setRowItem( int aFieldNdx, const SCH_FIELD& aField )
+void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::setRowItem( int aFieldNdx, const wxString& aName, const wxString& aValue )
 {
     wxASSERT( aFieldNdx >= 0 );
 
@@ -774,8 +793,8 @@ void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::setRowItem( int aFieldNdx, const SCH_FI
         fieldListCtrl->SetItem( ndx, 1, wxEmptyString );
     }
 
-    fieldListCtrl->SetItem( aFieldNdx, 0, aField.GetName( false ) );
-    fieldListCtrl->SetItem( aFieldNdx, 1, aField.GetText() );
+    fieldListCtrl->SetItem( aFieldNdx, 0, aName );
+    fieldListCtrl->SetItem( aFieldNdx, 1, aValue );
 
     // recompute the column widths here, after setting texts
     fieldListCtrl->SetColumnWidth( 0, wxLIST_AUTOSIZE );
@@ -837,16 +856,30 @@ void DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::copySelectedFieldToPanel()
     // may only delete user defined fields
     deleteFieldButton->Enable( fieldNdx >= MANDATORY_FIELDS );
 
+    fieldValueTextCtrl->SetValidator( SCH_FIELD_VALIDATOR( field.GetId() ) );
     fieldValueTextCtrl->SetValue( field.GetText() );
 
     m_show_datasheet_button->Enable( fieldNdx == DATASHEET || fieldNdx == FOOTPRINT );
 
     if( fieldNdx == DATASHEET )
-        m_show_datasheet_button->SetLabel( _( "Show in Browser" ) );
+    {
+        m_show_datasheet_button->SetLabel( _( "Show Datasheet" ) );
+        m_show_datasheet_button->SetToolTip(
+            _("If your datasheet is given as an http:// link,"
+              " then pressing this button should bring it up in your webbrowser.") );
+    }
     else if( fieldNdx == FOOTPRINT )
-        m_show_datasheet_button->SetLabel( _( "Assign Footprint" ) );
+    {
+        m_show_datasheet_button->SetLabel( _( "Browse Footprints" ) );
+        m_show_datasheet_button->SetToolTip(
+            _("Open the footprint browser to choose a footprint and assign it.") );
+    }
     else
+    {
         m_show_datasheet_button->SetLabel( wxEmptyString );
+        m_show_datasheet_button->SetToolTip(
+            _("Used only for fields Footprint and Datasheet.") );
+    }
 
     // For power symbols, the value is NOR editable, because value and pin
     // name must be same and can be edited only in library editor
@@ -893,6 +926,11 @@ bool DIALOG_EDIT_COMPONENT_IN_SCHEMATIC::copyPanelToSelectedField()
 
     if( fieldNdx >= m_FieldsBuf.size() )        // traps the -1 case too
         return true;
+
+    // Check for illegal field text.
+    if( fieldValueTextCtrl->GetValidator()
+      && !fieldValueTextCtrl->GetValidator()->Validate( this ) )
+        return false;
 
     SCH_FIELD& field = m_FieldsBuf[fieldNdx];
 

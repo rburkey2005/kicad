@@ -7,7 +7,9 @@
 
 #include <config_params.h>
 
-// a key to read write in user config the visibility of the rescue library dialog
-#define RESCUE_NEVER_SHOW_KEY wxT("RescueNeverShow")
+extern const wxChar RescueNeverShowEntry[];
+extern const wxChar AutoplaceFieldsEntry[];
+extern const wxChar AutoplaceJustifyEntry[];
+extern const wxChar AutoplaceAlignEntry[];
 
 #endif      // EESCHEMA_CONFIG_H

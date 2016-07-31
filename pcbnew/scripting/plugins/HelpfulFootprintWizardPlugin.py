@@ -81,9 +81,16 @@ class FootprintWizardParameterManager:
             param = "*%s" % param  # star prefix for natural
 
         if section not in self.parameters:
+            if not hasattr(self, 'page_order'):
+                self.page_order = []
+            self.page_order.append(section)
             self.parameters[section] = {}
+            if not hasattr(self, 'parameter_order'):
+                self.parameter_order = {}
+            self.parameter_order[section] = []
 
         self.parameters[section][param] = val
+        self.parameter_order[section].append(param)
 
         return error
 
@@ -95,7 +102,7 @@ class FootprintWizardParameterManager:
         message = ""
 
         for name, section in self.parameters.iteritems():
-            message += "  %s:" % name
+            message += "  %s:\n" % name
 
             for key, value in section.iteritems():
                 unit = ""
@@ -184,7 +191,7 @@ class FootprintWizardParameterManager:
             return
 
         if max_value is not None and (
-                self.parameters[section][param] > min_value):
+                self.parameters[section][param] > max_value):
             self.parameter_errors[section][param] = (
                 "Must be less than or equal to %d" % (max_value))
             return
@@ -241,8 +248,9 @@ class HelpfulFootprintWizardPlugin(pcbnew.FootprintWizardPlugin,
     def GetValue(self):
         raise NotImplementedError
 
+    # this value come from our KiCad Library Convention 1.0
     def GetReferencePrefix(self):
-        return "U"  # footprints needing wizards of often ICs
+        return "REF"
 
     def GetImage(self):
         return ""
@@ -251,14 +259,14 @@ class HelpfulFootprintWizardPlugin(pcbnew.FootprintWizardPlugin,
         """
         IPC nominal
         """
-        return pcbnew.FromMM(1.2)
+        return pcbnew.FromMM(1.0)
 
     def GetTextThickness(self):
         """
         Thicker than IPC guidelines (10% of text height = 0.12mm)
         as 5 wires/mm is a common silk screen limitation
         """
-        return pcbnew.FromMM(0.2)
+        return pcbnew.FromMM(0.15)
 
     def SetModule3DModel(self):
         """
@@ -270,6 +278,24 @@ class HelpfulFootprintWizardPlugin(pcbnew.FootprintWizardPlugin,
         FIXME: This doesn't seem to be enabled yet?
         """
         pass
+
+    def PutOnGridMM(self, value, gridSizeMM=0.05):
+        """
+        Round the value (in KiCAD internal units 1nm) according to the 
+        provided gridSize in mm.
+        """
+        thresh = pcbnew.FromMM(gridSizeMM)
+        res = round(value/thresh)*thresh
+        return res
+
+    def PutOnGridMils(self, value, gridSizeMil=2):
+        """
+        Round the value (in KiCAD internal units 1nm) according to the 
+        provided gridSize in mil.
+        """
+        thresh = pcbnew.FromMils(gridSizeMil)
+        res = round(value/thresh)*thresh
+        return res
 
     def BuildThisFootprint(self):
         """

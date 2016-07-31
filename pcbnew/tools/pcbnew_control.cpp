@@ -1,7 +1,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2014 CERN
+ * Copyright (C) 2014-2016 CERN
  * @author Maciej Suminski <maciej.suminski@cern.ch>
  *
  * This program is free software; you can redistribute it and/or
@@ -36,6 +36,7 @@
 
 #include <confirm.h>
 #include <hotkeys_basic.h>
+#include <properties.h>
 #include <io_mgr.h>
 
 #include <pcbnew_id.h>
@@ -48,7 +49,8 @@
 #include <pcb_painter.h>
 #include <origin_viewitem.h>
 
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
 
 
 // files.cpp
@@ -316,16 +318,12 @@ int PCBNEW_CONTROL::HighContrastMode( const TOOL_EVENT& aEvent )
 
 int PCBNEW_CONTROL::HighContrastInc( const TOOL_EVENT& aEvent )
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
-
     return 0;
 }
 
 
 int PCBNEW_CONTROL::HighContrastDec( const TOOL_EVENT& aEvent )
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
-
     return 0;
 }
 
@@ -479,7 +477,7 @@ int PCBNEW_CONTROL::CursorControl( const TOOL_EVENT& aEvent )
         case COMMON_ACTIONS::CURSOR_CLICK:              // fall through
         case COMMON_ACTIONS::CURSOR_DBL_CLICK:
         {
-            TOOL_ACTIONS action;
+            TOOL_ACTIONS action = TA_NONE;
             int modifiers = 0;
 
             modifiers |= wxGetKeyState( WXK_SHIFT ) ? MD_SHIFT : 0;
@@ -655,10 +653,19 @@ int PCBNEW_CONTROL::GridSetOrigin( const TOOL_EVENT& aEvent )
 
         // TODO it will not check the toolbar button in module editor, as it uses a different ID..
         m_frame->SetToolID( ID_PCB_PLACE_GRID_COORD_BUTT, wxCURSOR_PENCIL, _( "Adjust grid origin" ) );
-        picker->SetClickHandler( boost::bind( setOrigin, getView(), m_frame, m_gridOrigin, _1 ) );
+        picker->SetClickHandler( std::bind( setOrigin, getView(), m_frame, m_gridOrigin, _1 ) );
         picker->Activate();
         Wait();
     }
+
+    return 0;
+}
+
+
+int PCBNEW_CONTROL::GridResetOrigin( const TOOL_EVENT& aEvent )
+{
+    getModel<BOARD>()->SetGridOrigin( wxPoint( 0, 0 ) );
+    m_gridOrigin->SetPosition( VECTOR2D( 0, 0 ) );
 
     return 0;
 }
@@ -751,7 +758,7 @@ int PCBNEW_CONTROL::DeleteItemCursor( const TOOL_EVENT& aEvent )
     // TODO it will not check the toolbar button in the module editor, as it uses a different ID..
     m_frame->SetToolID( ID_PCB_DELETE_ITEM_BUTT, wxCURSOR_PENCIL, _( "Delete item" ) );
     picker->SetSnapping( false );
-    picker->SetClickHandler( boost::bind( deleteItem, m_toolMgr, _1 ) );
+    picker->SetClickHandler( std::bind( deleteItem, m_toolMgr, _1 ) );
     picker->Activate();
     Wait();
 
@@ -845,7 +852,7 @@ int PCBNEW_CONTROL::AppendBoard( const TOOL_EVENT& aEvent )
         picker.SetItem( module );
         undoListPicker.PushItem( picker );
 
-        module->RunOnChildren( boost::bind( &KIGFX::VIEW::Add, view, _1 ) );
+        module->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1 ) );
         view->Add( module );
         m_toolMgr->RunAction( COMMON_ACTIONS::selectItem, true, module );
     }
@@ -982,6 +989,7 @@ void PCBNEW_CONTROL::SetTransitions()
     Go( &PCBNEW_CONTROL::GridNext,           COMMON_ACTIONS::gridNext.MakeEvent() );
     Go( &PCBNEW_CONTROL::GridPrev,           COMMON_ACTIONS::gridPrev.MakeEvent() );
     Go( &PCBNEW_CONTROL::GridSetOrigin,      COMMON_ACTIONS::gridSetOrigin.MakeEvent() );
+    Go( &PCBNEW_CONTROL::GridResetOrigin,    COMMON_ACTIONS::gridResetOrigin.MakeEvent() );
     Go( &PCBNEW_CONTROL::GridPreset,         COMMON_ACTIONS::gridPreset.MakeEvent() );
 
     // Miscellaneous

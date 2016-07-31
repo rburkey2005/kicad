@@ -117,7 +117,7 @@ void SCH_SHEET_PIN::SetNumber( int aNumber )
 
 void SCH_SHEET_PIN::SetEdge( SCH_SHEET_PIN::SHEET_SIDE aEdge )
 {
-    SCH_SHEET* Sheet = (SCH_SHEET*) GetParent();
+    SCH_SHEET* Sheet = GetParent();
 
     // use SHEET_UNDEFINED_SIDE to adjust text orientation without changing edge
 
@@ -161,7 +161,7 @@ enum SCH_SHEET_PIN::SHEET_SIDE SCH_SHEET_PIN::GetEdge() const
 
 void SCH_SHEET_PIN::ConstrainOnEdge( wxPoint Pos )
 {
-    SCH_SHEET* sheet = (SCH_SHEET*) GetParent();
+    SCH_SHEET* sheet = GetParent();
 
     if( sheet == NULL )
         return;
@@ -466,7 +466,7 @@ void SCH_SHEET_PIN::CreateGraphicShape( std::vector <wxPoint>& aPoints, const wx
      * for INPUT type the icon is the OUTPUT shape of SCH_HIERLABEL
      * for OUTPUT type the icon is the INPUT shape of SCH_HIERLABEL
      */
-    int tmp = m_shape;
+    PINSHEETLABEL_SHAPE tmp = m_shape;
 
     switch( m_shape )
     {

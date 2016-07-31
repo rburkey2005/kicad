@@ -1,12 +1,5 @@
-# the map generation creates on Windows/gcc a lot of useless warnings
-# so disable it on windows
-if( WIN32 AND NOT CMAKE_CROSSCOMPILING )
-    set( MAKE_LINK_MAPS false )
-else()
-    set( MAKE_LINK_MAPS true )
-endif()
-
 add_definitions( -DPCBNEW )
+
 add_subdirectory(router)
 
 # psnrouter depends on make_lexer outputs in common (bug # 1285878 )
@@ -15,7 +8,9 @@ add_dependencies( pnsrouter pcbcommon )
 
 if( KICAD_SCRIPTING OR KICAD_SCRIPTING_MODULES )
     file( MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/scripting )
-    find_package( SWIG REQUIRED )
+
+    # SWIG 3.0 or later require for C++11 support.
+    find_package( SWIG 3.0 REQUIRED )
     include( ${SWIG_USE_FILE} )
 
     # Infrequently needed headers go at end of search paths, append to INC_AFTER
@@ -43,6 +38,7 @@ include_directories(
     ../lib_dxf
     ./import_dxf
     ../utils/idftools
+    ${GLM_INCLUDE_DIR}
     ${INC_AFTER}
     )
 
@@ -87,6 +83,7 @@ set( PCBNEW_DIALOGS
     dialogs/dialog_gen_module_position_file_base.cpp
     dialogs/dialog_general_options.cpp
     dialogs/dialog_general_options_BoardEditor_base.cpp
+    dialogs/dialog_get_footprint_by_name_base.cpp
     dialogs/dialog_global_edit_tracks_and_vias.cpp
     dialogs/dialog_global_edit_tracks_and_vias_base.cpp
     dialogs/dialog_global_modules_fields_edition.cpp
@@ -128,13 +125,13 @@ set( PCBNEW_DIALOGS
     dialogs/dialog_print_for_modedit_base.cpp
     dialogs/dialog_print_using_printer.cpp
     dialogs/dialog_print_using_printer_base.cpp
-    dialogs/dialog_orient_footprints.cpp
-    dialogs/dialog_orient_footprints_base.cpp
     dialogs/dialog_mask_clearance.cpp
     dialogs/dialog_mask_clearance_base.cpp
     dialogs/dialog_SVG_print.cpp
     dialogs/dialog_SVG_print_base.cpp
     dialogs/dialog_select_pretty_lib.cpp
+    dialogs/dialog_select_net_from_list_base.cpp
+    dialogs/dialog_select_net_from_list.cpp
     dialogs/dialog_select_pretty_lib_base.cpp
     dialogs/dialog_set_grid.cpp
     dialogs/dialog_set_grid_base.cpp
@@ -143,6 +140,8 @@ set( PCBNEW_DIALOGS
     dialogs/dialog_track_via_properties_base.cpp
     dialogs/dialog_track_via_size.cpp
     dialogs/dialog_track_via_size_base.cpp
+    dialogs/dialog_update_pcb_base.cpp
+    dialogs/dialog_update_pcb.cpp
     footprint_wizard.cpp
     footprint_wizard_frame.cpp
     dialogs/dialog_footprint_wizard_list_base.cpp
@@ -188,9 +187,11 @@ set( PCBNEW_CLASS_SRCS
     pcbframe.cpp
     pcb_base_edit_frame.cpp
     append_board_to_current.cpp
+    array_creator.cpp
     attribut.cpp
     board_items_to_polygon_shape_transform.cpp
     board_undo_redo.cpp
+    board_netlist_updater.cpp
     block.cpp
     block_module_editor.cpp
     build_BOM_from_board.cpp
@@ -294,6 +295,7 @@ set( PCBNEW_CLASS_SRCS
     tools/common_actions.cpp
     tools/grid_helper.cpp
     tools/picker_tool.cpp
+    tools/zoom_tool.cpp
     tools/tools_common.cpp
 
     tools/grid_menu.cpp
@@ -420,15 +422,15 @@ if( KICAD_SCRIPTING_MODULES )
         3d-viewer
         pcbcommon
         pnsrouter
-        common
         pcad2kicadpcb
+        common
         lib_dxf
         idf3
-        ${GITHUB_PLUGIN_LIBRARIES}
         polygon
         bitmaps
         gal
         ${wxWidgets_LIBRARIES}
+        ${GITHUB_PLUGIN_LIBRARIES}
         ${GDI_PLUS_LIBRARIES}
         ${PYTHON_LIBRARIES}
         ${PCBNEW_EXTRA_LIBS}
@@ -453,7 +455,6 @@ endif()
 # Doxygen python documentation
 ###
 
-find_package( Doxygen )
 if( DOXYGEN_FOUND )
     if( KICAD_SCRIPTING )
 
@@ -489,14 +490,14 @@ if( DOXYGEN_FOUND )
             COMMENT "building doxygen docs into directory doxygen-python/html"
             )
     endif()
-else()
-    message( STATUS "WARNING: Doxygen not found - doxygen-docs (Source Docs) target not created" )
 endif()
 
 
 if( MINGW )
     # PCBNEW_RESOURCES variable is set by the macro.
     mingw_resource_compiler( pcbnew )
+else()
+    set( PCBNEW_RESOURCES pcbnew.rc )
 endif()
 
 
@@ -510,7 +511,7 @@ if( APPLE )
         MACOSX_PACKAGE_LOCATION Resources
         )
     set( MACOSX_BUNDLE_ICON_FILE pcbnew.icns )
-    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-eda.kicad )
+    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-pcb.kicad )
     set( MACOSX_BUNDLE_NAME pcbnew )
 endif()
 
@@ -536,6 +537,8 @@ add_subdirectory( pcad2kicadpcb_plugin )
 if( BUILD_GITHUB_PLUGIN )
     add_subdirectory( github )
     add_dependencies( github_plugin lib-dependencies )
+    # github_plugin depends on make_lexer outputs in common
+    add_dependencies( github_plugin pcbcommon )
 endif()
 
 
@@ -585,15 +588,15 @@ target_link_libraries( pcbnew_kiface
     3d-viewer
     pcbcommon
     pnsrouter
-    common
     pcad2kicadpcb
+    common
     polygon
     bitmaps
     gal
     lib_dxf
     idf3
-    ${GITHUB_PLUGIN_LIBRARIES}
     ${wxWidgets_LIBRARIES}
+    ${GITHUB_PLUGIN_LIBRARIES}
     ${GDI_PLUS_LIBRARIES}
     ${PYTHON_LIBRARIES}
     ${Boost_LIBRARIES}      # must follow GITHUB
@@ -677,6 +680,12 @@ if( KICAD_SCRIPTING )
         DESTINATION ${KICAD_DATA}/scripting/plugins
         FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ OWNER_WRITE GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
     )
+
+    # scripting python shell
+    install( DIRECTORY ${PROJECT_SOURCE_DIR}/pcbnew/scripting/kicad_pyshell/
+        DESTINATION ${KICAD_DATA}/scripting/kicad_pyshell
+        FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ OWNER_WRITE GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
+    )
 endif()
 
 if( KICAD_SCRIPTING_MODULES )
@@ -685,18 +694,6 @@ if( KICAD_SCRIPTING_MODULES )
         DEPENDS _pcbnew
         COMMENT "Fixing swig_import_helper in Kicad scripting modules"
         )
-
-    if( NOT APPLE )
-        install( FILES ${CMAKE_BINARY_DIR}/pcbnew/pcbnew.py DESTINATION ${PYTHON_DEST} )
-    else()
-        # put everything into bundle at build time, it is relocated at install
-        add_custom_target( ScriptingModulesPcbnewPyCopy ALL
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/pcbnew/pcbnew.py" "${PYTHON_DEST}/"
-            DEPENDS FixSwigImportsModuleScripting
-            COMMENT "Copying pcbnew.py into ${PYTHON_DEST}"
-            )
-        add_dependencies( ScriptingModulesPcbnewPyCopy ScriptingWxpythonCopy )
-    endif()
 
     if( MINGW )
         install( FILES ${CMAKE_BINARY_DIR}/pcbnew/_pcbnew.pyd DESTINATION ${PYTHON_DEST} )

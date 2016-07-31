@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2007 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
- * Copyright (C) 1992-2012 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -58,9 +58,6 @@ class NETLIST;
 class REPORTER;
 class RN_DATA;
 class SHAPE_POLY_SET;
-
-// non-owning container of item candidates when searching for items on the same track.
-typedef std::vector< TRACK* >   TRACK_PTRS;
 
 
 /**
@@ -156,6 +153,11 @@ protected:
 };
 
 
+DECL_VEC_FOR_SWIG(MARKERS, MARKER_PCB*)
+DECL_VEC_FOR_SWIG(ZONE_CONTAINERS, ZONE_CONTAINER*)
+DECL_VEC_FOR_SWIG(TRACKS, TRACK*)
+
+
 /**
  * Class BOARD
  * holds information pertinent to a Pcbnew printed circuit board.
@@ -168,14 +170,8 @@ private:
     /// the board filename
     wxString                m_fileName;
 
-    // @todo: switch to boost:ptr_vector, and change ~BOARD()
-    typedef std::vector<MARKER_PCB*> MARKERS;
-
     /// MARKER_PCBs for clearance problems, owned by pointer.
     MARKERS                 m_markers;
-
-    // @todo: switch to boost::ptr_vector, and change ~BOARD()
-    typedef std::vector<ZONE_CONTAINER*> ZONE_CONTAINERS;
 
     /// edge zone descriptors, owned by pointer.
     ZONE_CONTAINERS         m_ZoneDescriptorList;
@@ -214,7 +210,7 @@ private:
      * @param aLayerSet The allowed layers for segments to search.
      * @param aList The track list to fill with points of flagged segments.
      */
-    void chainMarkedSegments( wxPoint aPosition, const LSET& aLayerSet, TRACK_PTRS* aList );
+    void chainMarkedSegments( wxPoint aPosition, const LSET& aLayerSet, TRACKS* aList );
 
 public:
     static inline bool ClassOf( const EDA_ITEM* aItem )
@@ -294,15 +290,13 @@ public:
      */
     BOARD_ITEM* Remove( BOARD_ITEM* aBoardItem );
 
-    BOARD_ITEM* DuplicateAndAddItem( const BOARD_ITEM* aItem,
-                                     bool aIncrementReferences );
-
     /**
-     * Function GetNextModuleReferenceWithPrefix
-     * Get the next available module reference with this prefix
+     * Function DuplicateAndAddItem
+     * duplicates  an item, and add it to the board list.
+     * @param aItem The item to duplicate.
+     * @return BOARD_ITEM* \a the new item which was added.
      */
-    wxString GetNextModuleReferenceWithPrefix( const wxString& aPrefix,
-                                               bool aFillSequenceGaps );
+    BOARD_ITEM* DuplicateAndAddItem( const BOARD_ITEM* aItem );
 
     /**
      * Function GetRatsnest()
@@ -780,15 +774,12 @@ public:
 
     /**
      * Function GetPads
-     * returns a list of all the pads by value.  The returned list is not
+     * returns a reference to a list of all the pads.  The returned list is not
      * sorted and contains pointers to PADS, but those pointers do not convey
      * ownership of the respective PADs.
-     * @return std::vector<D_PAD*> - a full list of pads
+     * @return D_PADS - a full list of pads
      */
-    std::vector<D_PAD*> GetPads()
-    {
-        return m_NetInfo.m_PadsFullList;
-    }
+    const D_PADS& GetPads()     { return m_NetInfo.m_PadsFullList; }
 
     void BuildListOfNets()
     {
@@ -819,6 +810,11 @@ public:
     void AppendNet( NETINFO_ITEM* aNewNet )
     {
         m_NetInfo.AppendNet( aNewNet );
+    }
+
+    NETINFO_LIST& GetNetInfo()
+    {
+        return m_NetInfo;
     }
 
 #ifndef SWIG
@@ -906,8 +902,7 @@ public:
      * @return SEARCH_RESULT - SEARCH_QUIT if the Iterator is to stop the scan,
      *  else SCAN_CONTINUE, and determined by the inspector.
      */
-    SEARCH_RESULT Visit( INSPECTOR* inspector, const void* testData,
-                         const KICAD_T scanTypes[] );
+    SEARCH_RESULT Visit( INSPECTOR inspector, void* testData, const KICAD_T scanTypes[] ) override;
 
     /**
      * Function FindModuleByReference
@@ -962,7 +957,7 @@ public:
      *                  the #BOARD.  If NULL, no change reporting occurs.
      */
     void ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
-                         REPORTER* aReporter = NULL );
+                         std::vector<MODULE*>* aNewFootprints, REPORTER* aReporter = NULL );
 
     /**
      * Function SortedNetnamesList
@@ -1216,10 +1211,10 @@ public:
      * of the via.
      * </p>
      * @param aPosition The wxPoint to HitTest() against.
-     * @param aLayer The layer to search.  Use -1 for a don't care.
+     * @param aLayer The layer to search.  Use -1 (LAYER_ID::UNDEFINED_LAYER) for a don't care.
      * @return VIA* A point a to the VIA object if found, else NULL.
      */
-    VIA* GetViaByPosition( const wxPoint& aPosition, LAYER_ID aLayer = UNDEFINED_LAYER ) const;
+    VIA* GetViaByPosition( const wxPoint& aPosition, LAYER_ID aLayer = LAYER_ID( -1 ) ) const;
 
     /**
      * Function GetPad
@@ -1297,17 +1292,19 @@ public:
     void GetSortedPadListByXthenYCoord( std::vector<D_PAD*>& aVector, int aNetCode = -1 );
 
     /**
-     * Function GetTrack
-     * find the segment of \a aTrace at \a aPosition on \a aLayer if \a Layer is visible.
+     * Function GetVisibleTrack
+     * finds the neighboring visible segment of \a aTrace at \a aPosition that is
+     * on a layer in \a aLayerSet.
      * Traces that are flagged as deleted or busy are ignored.
      *
-     * @param aTrace A pointer to the TRACK object to search.
+     * @param aStartingTrace is the first TRACK to test, testing continues to end of m_Track list from
+     *   this starting point.
      * @param aPosition A wxPoint object containing the position to test.
-     * @param aLayerMask A layer or layers to mask the hit test.  Use -1 to ignore
-     *                   layer mask.
+     * @param aLayerSet A set of layers; returned TRACK must be on one of these.
+     *     May pass a full set to request any layer.
      * @return A TRACK object pointer if found otherwise NULL.
      */
-    TRACK* GetTrack( TRACK* aTrace, const wxPoint& aPosition, LSET aLayerMask ) const;
+    TRACK* GetVisibleTrack( TRACK* aStartingTrace, const wxPoint& aPosition, LSET aLayerSet ) const;
 
     /**
      * Function MarkTrace
@@ -1331,10 +1328,38 @@ public:
      *                 set (the user is responsible of flag clearing). False
      *                 for no reorder : useful when we want just calculate the
      *                 track length in this case, flags are reset
-     * @return TRACK* The first in the chain of interesting segments.
+     * @return TRACK* - The first in the chain of interesting segments.
      */
     TRACK* MarkTrace( TRACK* aTrace, int* aCount, double* aTraceLength,
                       double* aInPackageLength, bool aReorder );
+
+    /**
+     * Function TrackInNet
+     * collects all the TRACKs and VIAs that are members of a net given by aNetCode.
+     * Used from python.
+     * @param aList is a non-owning container that is appended to with the TRACKs and VIAs,
+     *  and is not initiallly cleared.
+     * @param aNetCode gives the id of the net.
+     * @return TRACKS - which are in the net identified by @a aNetCode.
+     */
+    TRACKS TracksInNet( int aNetCode );
+
+    /**
+     * Function TrackInNetBetweenPoints
+     * collects all the TRACKs and VIAs that are members of a net given by aNetCode and that
+     * make up a path between two end points.  The end points must be carefully chosen,
+     * and are typically the locations of two neighboring pads.  The function fails if there
+     * is an intervening pad or a 3 way intersection at a track or via.
+     * Used from python.
+     * @param aStartPos must correspond to a point on the BOARD which has a TRACK end or start,
+     *  typically the location of either a via or pad.
+     * @param aEndPos must correspond to a point on the BOARD which has a TRACK end or start,
+     *  typically the location of either a via or pad.
+     * @param aNetCode gives the id of the net.
+     * @return TRACKS - non empty if success, empty if your aStartPos or aEndPos are bad or
+     *  the net is interrupted along the way by an intervening D_PAD or a 3 way path.
+     */
+    TRACKS TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint& aEndPos, int aNetCode );
 
     /**
      * Function GetFootprint

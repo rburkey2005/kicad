@@ -18,7 +18,6 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
 
 #include <colors.h>
@@ -163,12 +162,14 @@ bool PNS_DIFF_PAIR_PLACER::propagateDpHeadForces ( const VECTOR2I& aP, VECTOR2I&
 }
 
 
-bool PNS_DIFF_PAIR_PLACER::attemptWalk ( PNS_NODE* aNode, PNS_DIFF_PAIR* aCurrent, PNS_DIFF_PAIR& aWalk, bool aPFirst, bool aWindCw, bool aSolidsOnly )
+bool PNS_DIFF_PAIR_PLACER::attemptWalk( PNS_NODE* aNode, PNS_DIFF_PAIR* aCurrent,
+        PNS_DIFF_PAIR& aWalk, bool aPFirst, bool aWindCw, bool aSolidsOnly )
 {
     PNS_WALKAROUND walkaround( aNode, Router() );
     PNS_WALKAROUND::WALKAROUND_STATUS wf1;
 
-    Router()->GetClearanceFunc()->OverrideClearance( true, aCurrent->NetP(), aCurrent->NetN(), aCurrent->Gap() );
+    Router()->GetClearanceFunc()->OverrideClearance( true,
+            aCurrent->NetP(), aCurrent->NetN(), aCurrent->Gap() );
 
     walkaround.SetSolidsOnly( aSolidsOnly );
     walkaround.SetIterationLimit( Settings().WalkaroundIterationLimit() );
@@ -247,21 +248,21 @@ bool PNS_DIFF_PAIR_PLACER::tryWalkDp( PNS_NODE* aNode, PNS_DIFF_PAIR &aPair, boo
     PNS_DIFF_PAIR best;
     double bestScore = 100000000000000.0;
 
-    for( int attempt = 0; attempt <= 1; attempt++ )
+    for( int attempt = 0; attempt <= 3; attempt++ )
     {
         PNS_DIFF_PAIR p;
         PNS_NODE *tmp = m_currentNode->Branch();
 
-        bool pfirst = attempt % 2 ? true : false;
-        bool wind_cw = attempt / 2 ? true : false;
+        bool pfirst = ( attempt & 1 ) ? true : false;
+        bool wind_cw = ( attempt & 2 ) ? true : false;
 
-        if( attemptWalk ( tmp, &aPair, p, pfirst, wind_cw, aSolidsOnly ) )
+        if( attemptWalk( tmp, &aPair, p, pfirst, wind_cw, aSolidsOnly ) )
         {
         //    double len = p.TotalLength();
             double cl = p.CoupledLength();
             double skew = p.Skew();
 
-            double score = cl + fabs(skew) * 3.0;
+            double score = cl + fabs( skew ) * 3.0;
 
             if( score < bestScore )
             {
@@ -530,7 +531,7 @@ bool PNS_DIFF_PAIR_PLACER::findDpPrimitivePair( const VECTOR2I& aP, PNS_ITEM* aI
     double bestDist = std::numeric_limits<double>::max();
     bool found = false;
 
-    BOOST_FOREACH( PNS_ITEM* item, items )
+    for( PNS_ITEM* item : items )
     {
         if( item->Kind() == aItem->Kind() )
         {

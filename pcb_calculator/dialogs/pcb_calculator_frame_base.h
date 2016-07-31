@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// C++ code generated with wxFormBuilder (version Jun 17 2015)
+// C++ code generated with wxFormBuilder (version May  6 2016)
 // http://www.wxformbuilder.org/
 //
 // PLEASE DO "NOT" EDIT THIS FILE!
@@ -16,6 +16,7 @@ class UNIT_SELECTOR_ANGLE;
 class UNIT_SELECTOR_FREQUENCY;
 class UNIT_SELECTOR_LEN;
 class UNIT_SELECTOR_RESISTOR;
+class UNIT_SELECTOR_THICKNESS;
 
 #include "kiway_player.h"
 #include <wx/string.h>
@@ -41,6 +42,7 @@ class UNIT_SELECTOR_RESISTOR;
 #include <wx/statline.h>
 #include <wx/grid.h>
 #include <wx/radiobox.h>
+#include <wx/bmpbuttn.h>
 #include <wx/notebook.h>
 #include <wx/frame.h>
 
@@ -110,7 +112,10 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		UNIT_SELECTOR_LEN* m_TW_ExtTrackWidth_choiceUnit;
 		wxStaticText* m_staticText65;
 		wxTextCtrl* m_ExtTrackThicknessValue;
-		UNIT_SELECTOR_LEN* m_ExtTrackThicknessUnit;
+		UNIT_SELECTOR_THICKNESS* m_ExtTrackThicknessUnit;
+		wxStaticLine* m_staticline3;
+		wxStaticLine* m_staticline4;
+		wxStaticLine* m_staticline5;
 		wxStaticText* m_staticTextArea;
 		wxStaticText* m_ExtTrackAreaValue;
 		wxStaticText* m_ExtTrackAreaUnitLabel;
@@ -128,7 +133,7 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		UNIT_SELECTOR_LEN* m_TW_IntTrackWidth_choiceUnit;
 		wxStaticText* m_staticText652;
 		wxTextCtrl* m_IntTrackThicknessValue;
-		UNIT_SELECTOR_LEN* m_IntTrackThicknessUnit;
+		UNIT_SELECTOR_THICKNESS* m_IntTrackThicknessUnit;
 		wxStaticText* m_staticTextArea1;
 		wxStaticText* m_IntTrackAreaValue;
 		wxStaticText* m_IntTrackAreaUnitLabel;
@@ -196,10 +201,10 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		wxStaticText* m_phys_prm3_label;
 		wxTextCtrl* m_Phys_prm3_Value;
 		UNIT_SELECTOR_LEN* m_choiceUnit_Param3;
-		wxStaticBitmap* m_bitmapAnalyse;
+		wxBitmapButton* m_bpButtonAnalyze;
 		wxButton* m_AnalyseButton;
 		wxButton* m_SynthetizeButton;
-		wxStaticBitmap* m_bitmapSynthetize;
+		wxBitmapButton* m_bpButtonSynthetize;
 		wxStaticText* m_elec_prm1_label;
 		wxTextCtrl* m_Elec_prm1_Value;
 		UNIT_SELECTOR_RESISTOR* m_choiceUnit_ElecPrm1;
@@ -236,7 +241,7 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		wxTextCtrl* m_ZoutValueCtrl;
 		wxStaticText* m_attZoutUnit;
 		wxButton* m_buttonAlcAtt;
-		wxStaticBitmap* m_bitmapAnalyse1;
+		wxBitmapButton* m_bpButtonCalcAtt;
 		wxStaticText* m_attenuatorR1Label;
 		wxTextCtrl* m_Att_R1_Value;
 		wxStaticText* m_attR1Unit;
@@ -248,7 +253,7 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		wxStaticText* m_attR3Unit;
 		wxStaticText* m_staticTextAttMsg;
 		wxHtmlWindow* m_Attenuator_Messages;
-		wxPanel* m_panelAttFormula;
+		wxHtmlWindow* m_panelAttFormula;
 		wxPanel* m_panelColorCode;
 		wxRadioBox* m_rbToleranceSelection;
 		wxStaticText* m_staticText31;
@@ -294,14 +299,13 @@ class PCB_CALCULATOR_FRAME_BASE : public KIWAY_PLAYER
 		virtual void OnAttenuatorSelection( wxCommandEvent& event ) { event.Skip(); }
 		virtual void OnPaintAttenuatorPanel( wxPaintEvent& event ) { event.Skip(); }
 		virtual void OnCalculateAttenuator( wxCommandEvent& event ) { event.Skip(); }
-		virtual void OnPaintAttFormulaPanel( wxPaintEvent& event ) { event.Skip(); }
 		virtual void OnToleranceSelection( wxCommandEvent& event ) { event.Skip(); }
 		virtual void OnBoardClassesUnitsSelection( wxCommandEvent& event ) { event.Skip(); }
 		
 	
 	public:
 		
-		PCB_CALCULATOR_FRAME_BASE( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = _("PCB Calculator"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 754,485 ), long style = wxDEFAULT_FRAME_STYLE|wxRESIZE_BORDER|wxFULL_REPAINT_ON_RESIZE|wxTAB_TRAVERSAL, const wxString& name = wxT("pcb_calculator") );
+		PCB_CALCULATOR_FRAME_BASE( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = _("PCB Calculator"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 877,485 ), long style = wxDEFAULT_FRAME_STYLE|wxRESIZE_BORDER|wxFULL_REPAINT_ON_RESIZE|wxTAB_TRAVERSAL, const wxString& name = wxT("pcb_calculator") );
 		
 		~PCB_CALCULATOR_FRAME_BASE();
 	

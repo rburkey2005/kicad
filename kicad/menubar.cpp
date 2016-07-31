@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2009-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,12 +27,15 @@
  * @file kicad/menubar.cpp
  * @brief (Re)Create the project manager menubar for KiCad
  */
-#include <fctsys.h>
-#include <pgm_kicad.h>
-#include <kicad.h>
-#include <menus_helpers.h>
-#include <tree_project_frame.h>
+
+
+#include <bitmaps.h>
 #include <hotkeys_basic.h>
+#include <menus_helpers.h>
+
+#include "kicad.h"
+#include "pgm_kicad.h"
+
 
 // Menubar and toolbar event table
 BEGIN_EVENT_TABLE( KICAD_MANAGER_FRAME, EDA_BASE_FRAME )
@@ -148,7 +151,7 @@ static EDA_HOTKEY HkRunGerbview( _HKI( "Run Gerbview" ), HK_RUN_GERBVIEW, 'G' + 
 static EDA_HOTKEY HkRunBm2Cmp( _HKI( "Run Bitmap2Component" ),
                                HK_RUN_BM2COMPONENT, 'B' + GR_KB_CTRL, 0 );
 static EDA_HOTKEY HkRunPcbCalc( _HKI( "Run PcbCalculator" ),
-                                HK_RUN_PCBCALCULATOR, 'C' + GR_KB_CTRL, 0 );
+                                HK_RUN_PCBCALCULATOR, 'A' + GR_KB_CTRL, 0 );
 static EDA_HOTKEY HkRunPleditor( _HKI( "Run PlEditor" ), HK_RUN_PLEDITOR, 'Y' + GR_KB_CTRL, 0 );
 
 // List of hotkey descriptors
@@ -198,7 +201,7 @@ void KICAD_MANAGER_FRAME::ReCreateMenuBar()
     // Before deleting, remove the menus managed by m_fileHistory
     // (the file history will be updated when adding/removing files in history)
     if( openRecentMenu )
-        Pgm().GetFileHistory().RemoveMenu( openRecentMenu );
+        PgmTop().GetFileHistory().RemoveMenu( openRecentMenu );
 
     // Delete all existing menus
     while( menuBar->GetMenuCount() )
@@ -217,8 +220,8 @@ void KICAD_MANAGER_FRAME::ReCreateMenuBar()
 
     // File history
     openRecentMenu = new wxMenu();
-    Pgm().GetFileHistory().UseMenu( openRecentMenu );
-    Pgm().GetFileHistory().AddFilesToMenu( );
+    PgmTop().GetFileHistory().UseMenu( openRecentMenu );
+    PgmTop().GetFileHistory().AddFilesToMenu( );
     AddMenuItem( fileMenu, openRecentMenu,
                  wxID_ANY,
                  _( "Open &Recent" ),
@@ -399,9 +402,6 @@ void KICAD_MANAGER_FRAME::ReCreateMenuBar()
     // Menu Help:
     wxMenu* helpMenu = new wxMenu;
 
-    // Version info
-    AddHelpVersionInfoMenuEntry( helpMenu );
-
     // Contents
     AddMenuItem( helpMenu, wxID_HELP,
                  _( "KiCad &Manual" ),
@@ -412,6 +412,12 @@ void KICAD_MANAGER_FRAME::ReCreateMenuBar()
                  _( "&Getting Started in KiCad" ),
                  _( "Open \"Getting Started in KiCad\" guide for beginners" ),
                  KiBitmap( help_xpm ) );
+
+    AddMenuItem( helpMenu,
+                 ID_PREFERENCES_HOTKEY_SHOW_CURRENT_LIST,
+                 _( "&List Hotkeys" ),
+                 _( "Displays the current hotkeys list and corresponding commands" ),
+                 KiBitmap( hotkeys_xpm ) );
 
     // Separator
     helpMenu->AppendSeparator();

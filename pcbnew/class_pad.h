@@ -1,8 +1,8 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2004 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
- * Copyright (C) 1992-2011 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2016 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -105,16 +105,32 @@ public:
 
     MODULE* GetParent() const { return (MODULE*) m_Parent; }
 
+    /**
+     * @return true if the pad has a footprint parent flipped
+     * (on the back/bottom layer)
+     */
+    bool IsFlipped();
+
+    /**
+     * Set the pad name (sometimes called pad number, although
+     * it can be an array ref like AA12
+     * the pad name is limited to 4 ASCII chars
+     */
     void SetPadName( const wxString& name );    // Change pad name
+
+    /**
+     * @return the pad name
+     * the pad name is limited to 4 ASCII chars
+     */
     const wxString GetPadName() const;
 
-    /*!
-     * Function IncrementItemReference
-     * Implementation of the generic "reference" incrementing interface
-     * Increments the numeric suffix, filling any sequence gaps and skipping
-     * pads that aren't connectable
+    /**
+     * @return the pad name in a wxUint32 which is possible
+     * because the pad name is limited to 4 ASCII chars
+     * The packed pad name should be used only to compare 2
+     * pad names, not to try to print this name
      */
-    bool IncrementItemReference(); // override
+    const wxUint32 GetPackedPadName() const { return m_NumPadName; }
 
     /**
      * Function IncrementPadName
@@ -122,6 +138,8 @@ public:
      * Increments the pad name to the next available name in the module.
      *
      * @param aSkipUnconnectable skips any pads that are not connectable (for example NPTH)
+     * @param aFillSequenceGaps if true, the next reference in a sequence
+     * like A1,A3,A4 will be A2. If false, it will be A5.
      * @return pad name incremented
      */
     bool IncrementPadName( bool aSkipUnconnectable, bool aFillSequenceGaps );
@@ -162,7 +180,9 @@ public:
     void SetOffset( const wxPoint& aOffset )    { m_Offset = aOffset; }
     const wxPoint& GetOffset() const            { return m_Offset; }
 
+
     void Flip( const wxPoint& aCentre );        // Virtual function
+
 
     /**
      * Function SetOrientation
@@ -173,13 +193,21 @@ public:
     void SetOrientation( double aAngle );
 
     /**
+     * Set orientation in degrees
+     */
+    void SetOrientationDegrees( double aOrientation ) { SetOrientation( aOrientation*10.0 ); }
+
+    /**
      * Function GetOrientation
      * returns the rotation angle of the pad in tenths of degrees, but soon degrees.
      */
     double GetOrientation() const { return m_Orient; }
+    double GetOrientationDegrees() const   { return m_Orient/10.0; }
+    double GetOrientationRadians() const   { return m_Orient*M_PI/1800; }
 
     void SetDrillShape( PAD_DRILL_SHAPE_T aDrillShape )
         { m_drillShape = aDrillShape; }
+
     PAD_DRILL_SHAPE_T GetDrillShape() const     { return m_drillShape; }
 
     /**
@@ -306,6 +334,27 @@ public:
     void BuildPadPolygon( wxPoint aCoord[4], wxSize aInflateValue, double aRotation ) const;
 
     /**
+     * Function GetRoundRectCornerRadius
+     * Has meaning only for rounded rect pads
+     * @return The radius of the rounded corners for this pad.
+     */
+    int GetRoundRectCornerRadius() const
+    {
+        return GetRoundRectCornerRadius( m_Size );
+    }
+
+    /**
+     * Helper function GetRoundRectCornerRadius
+     * Has meaning only for rounded rect pads
+     * Returns the radius of the rounded corners of a rectangle
+     * size aSize, using others setting of the pad
+     * @param aSize = size of the of the round rect. Usually the pad size
+     * but can be the size of the pad on solder mask or solder paste
+     * @return The radius of the rounded corners for this pad size.
+     */
+    int GetRoundRectCornerRadius( const wxSize& aSize ) const;
+
+    /**
      * Function BuildPadShapePolygon
      * Build the Corner list of the polygonal shape,
      * depending on shape, extra size (clearance ...) pad and orientation
@@ -322,7 +371,7 @@ public:
      * @param aSegmentsPerCircle = number of segments to approximate a circle
      *              (used for round and oblong shapes only (16 to 32 is a good value)
      * @param aCorrectionFactor = the correction to apply to circles radius to keep
-     *        the pad size when the circle is approximated by segments
+     *        the pad size/clearance when the arcs are approximated by segments
      */
     void BuildPadShapePolygon( SHAPE_POLY_SET& aCornerBuffer,
                                wxSize aInflateValue, int aSegmentsPerCircle,
@@ -364,6 +413,7 @@ public:
     /**
      * Function GetBoundingRadius
      * returns the radius of a minimum sized circle which fully encloses this pad.
+     * The center is the pad position
      */
     int GetBoundingRadius() const
     {
@@ -379,6 +429,33 @@ public:
     }
 
     const wxPoint ShapePos() const;
+
+    /**
+     * has meaning only for rounded rect pads
+     * @return the scaling factor between the smaller Y or Y size and the radius
+     * of the rounded corners.
+     * Cannot be > 0.5
+     * the normalized IPC-7351C value is 0.25
+     */
+    double GetRoundRectRadiusRatio()
+    {
+        return m_padRoundRectRadiusScale;
+    }
+
+    /**
+     * has meaning only for rounded rect pads
+     * Set the scaling factor between the smaller Y or Y size and the radius
+     * of the rounded corners.
+     * Cannot be < 0.5 and obviously must be > 0
+     * the normalized IPC-7351C value is 0.25
+     */
+    void SetRoundRectRadiusRatio( double aRadiusScale )
+    {
+        if( aRadiusScale < 0.0 )
+            aRadiusScale = 0.0;
+
+        m_padRoundRectRadiusScale = std::min( aRadiusScale, 0.5 );
+    }
 
     /**
      * Function GetSubRatsnest
@@ -472,15 +549,20 @@ public:
 
     /**
      * Function CopyNetlistSettings
-     * copies the netlist settings to \a aPad.
+     * copies the netlist settings to \a aPad, and the net name.
+     * Used to copy some pad parameters when replacing a footprint by an other
+     * footprint when reading a netlist, or in exchange footprint dialog
      *
      * The netlist settings are all of the #D_PAD settings not define by a #D_PAD in
-     * a netlist.  These setting include local clearances, net names, etc.  The pad
-     * physical geometry settings are not copied.
+     * a netlist.
+     * The copied settings are the net name and optionally include local clearance, etc.
+     * The pad physical geometry settings are not copied.
      *
      * @param aPad is the #D_PAD to copy the settings to.
+     * @param aCopyLocalSettings = false to copy only the net name
+     *   true to also copy local prms
      */
-    void CopyNetlistSettings( D_PAD* aPad );
+    void CopyNetlistSettings( D_PAD* aPad, bool aCopyLocalSettings );
 
 #if defined(DEBUG)
     virtual void Show( int nestLevel, std::ostream& os ) const { ShowDummy( os ); }    // override
@@ -494,9 +576,12 @@ private:
      */
     int boundingRadius() const;
 
+private:    // Private variable members:
+
     // Actually computed and cached on demand by the accessor
     mutable int m_boundingRadius;  ///< radius of the circle containing the pad shape
 
+#ifndef SWIG
     /// Pad name (4 char) or a long identifier (used in pad name
     /// comparisons because this is faster than string comparison)
     union
@@ -505,11 +590,13 @@ private:
         char        m_Padname[PADNAMEZ];    // zero padded at end to full size
         wxUint32    m_NumPadName;           // same number of bytes as m_Padname[]
     };
+#endif
 
     wxPoint     m_Pos;              ///< pad Position on board
 
-    PAD_SHAPE_T m_padShape;         ///< Shape: PAD_CIRCLE, PAD_RECT, PAD_OVAL, PAD_TRAPEZOID
-
+    PAD_SHAPE_T m_padShape;         ///< Shape: PAD_SHAPE_CIRCLE, PAD_SHAPE_RECT,
+                                    ///< PAD_SHAPE_OVAL, PAD_SHAPE_TRAPEZOID,
+                                    ///< PAD_SHAPE_ROUNDRECT, PAD_SHAPE_POLYGON
 
     int         m_SubRatsnest;      ///< variable used in rats nest computations
                                     ///< handle subnet (block) number in ratsnest connection
@@ -522,15 +609,17 @@ private:
 
     PAD_DRILL_SHAPE_T m_drillShape; ///< PAD_DRILL_SHAPE_CIRCLE, PAD_DRILL_SHAPE_OBLONG
 
+    double      m_padRoundRectRadiusScale;  ///< scaling factor from smallest m_Size coord
+                                            ///< to corner radius, default 0.25
 
     /**
-     * m_Offset is useful only for oblong pads (it can be used for other
+     * m_Offset is useful only for oblong and rect pads (it can be used for other
      * shapes, but without any interest).
      * This is the offset between the pad hole and the pad shape (you must
      * understand here pad shape = copper area around the hole)
      * Most of cases, the hole is the center of the shape (m_Offset = 0).
-     * But some board designers use oblong pads with a hole moved to one of the
-     * oblong pad shape ends.
+     * But some board designers use oblong/rect pads with a hole moved to one of the
+     * oblong/rect pad shape ends.
      * In all cases the pad position is the pad hole.
      * The physical shape position (used to draw it for instance) is pad
      * position (m_Pos) + m_Offset.
@@ -559,14 +648,16 @@ private:
     /// Usually the local clearance is null
     int         m_LocalClearance;
 
-    // Local mask margins: when 0, the parent footprint design values are used
+    /// Local mask margins: when 0, the parent footprint design values are used
 
     int         m_LocalSolderMaskMargin;        ///< Local solder mask margin
     int         m_LocalSolderPasteMargin;       ///< Local solder paste margin absolute value
 
     double      m_LocalSolderPasteMarginRatio;  ///< Local solder mask margin ratio value of pad size
                                                 ///< The final margin is the sum of these 2 values
+    /// how the connection to zone is made: no connection, thermal relief ...
     ZoneConnection m_ZoneConnection;
+
     int         m_ThermalWidth;
     int         m_ThermalGap;
 };

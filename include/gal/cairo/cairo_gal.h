@@ -33,8 +33,9 @@
 #include <cairo.h>
 
 #include <gal/graphics_abstraction_layer.h>
-#include <boost/smart_ptr/shared_ptr.hpp>
 #include <wx/dcbuffer.h>
+
+#include <memory>
 
 #if defined(__WXMSW__)
 #define SCREEN_DEPTH 24
@@ -85,6 +86,11 @@ public:
 
     virtual ~CAIRO_GAL();
 
+    ///> @copydoc GAL::IsVisible()
+    bool IsVisible() const override {
+        return IsShownOnScreen();
+    }
+
     // ---------------
     // Drawing methods
     // ---------------
@@ -112,10 +118,12 @@ public:
     virtual void DrawRectangle( const VECTOR2D& aStartPoint, const VECTOR2D& aEndPoint );
 
     /// @copydoc GAL::DrawPolyline()
-    virtual void DrawPolyline( std::deque<VECTOR2D>& aPointList );
+    virtual void DrawPolyline( const std::deque<VECTOR2D>& aPointList ) { drawPoly( aPointList ); }
+    virtual void DrawPolyline( const VECTOR2D aPointList[], int aListSize ) { drawPoly( aPointList, aListSize ); }
 
     /// @copydoc GAL::DrawPolygon()
-    virtual void DrawPolygon( const std::deque<VECTOR2D>& aPointList );
+    virtual void DrawPolygon( const std::deque<VECTOR2D>& aPointList ) { drawPoly( aPointList ); }
+    virtual void DrawPolygon( const VECTOR2D aPointList[], int aListSize ) { drawPoly( aPointList, aListSize ); }
 
     /// @copydoc GAL::DrawCurve()
     virtual void DrawCurve( const VECTOR2D& startPoint, const VECTOR2D& controlPointA,
@@ -267,7 +275,7 @@ private:
     typedef GAL super;
 
     // Compositing variables
-    boost::shared_ptr<CAIRO_COMPOSITOR> compositor; ///< Object for layers compositing
+    std::shared_ptr<CAIRO_COMPOSITOR> compositor;   ///< Object for layers compositing
     unsigned int            mainBuffer;             ///< Handle to the main buffer
     unsigned int            overlayBuffer;          ///< Handle to the overlay buffer
     RENDER_TARGET           currentTarget;          ///< Current rendering target
@@ -380,6 +388,10 @@ private:
 
     /// Prepare the compositor
     void setCompositor();
+
+    /// Drawing polygons & polylines is the same in cairo, so here is the common code
+    void drawPoly( const std::deque<VECTOR2D>& aPointList );
+    void drawPoly( const VECTOR2D aPointList[], int aListSize );
 
     /**
      * @brief Returns a valid key that can be used as a new group number.

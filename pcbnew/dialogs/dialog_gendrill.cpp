@@ -230,8 +230,8 @@ void DIALOG_GENDRILL::UpdateConfig()
 
     m_config->Write( ZerosFormatKey, m_ZerosFormat );
     m_config->Write( MirrorKey, m_Mirror );
-    m_config->Write( MinimalHeaderKey, m_MinimalHeader );
     m_config->Write( MergePTHNPTHKey, m_Merge_PTH_NPTH );
+    m_config->Write( MinimalHeaderKey, m_MinimalHeader );
     m_config->Write( UnitDrillInchKey, m_UnitDrillIsInch );
     m_config->Write( DrillOriginIsAuxAxisKey, m_DrillOriginIsAuxAxis );
     m_config->Write( DrillMapFileTypeKey, m_mapFileType );
@@ -299,18 +299,19 @@ void DIALOG_GENDRILL::OnOutputDirectoryBrowseClicked( wxCommandEvent& event )
 
     wxFileName      dirName = wxFileName::DirName( dirDialog.GetPath() );
 
-    wxMessageDialog dialog( this, _( "Use a relative path? " ),
-                            _( "Plot Output Directory" ),
+    fn = Prj().AbsolutePath( m_parent->GetBoard()->GetFileName() );
+    wxString defaultPath = fn.GetPathWithSep();
+    wxString msg;
+    msg.Printf( _( "Do you want to use a path relative to\n'%s'" ),
+                   GetChars( defaultPath ) );
+
+    wxMessageDialog dialog( this, msg, _( "Plot Output Directory" ),
                             wxYES_NO | wxICON_QUESTION | wxYES_DEFAULT );
 
     if( dialog.ShowModal() == wxID_YES )
     {
-        wxString boardFilePath = Prj().AbsolutePath( m_parent->GetBoard()->GetFileName() );
-
-        boardFilePath = wxPathOnly( boardFilePath );
-
-        if( !dirName.MakeRelativeTo( boardFilePath ) )
-            wxMessageBox( _( "Cannot make path relative.  The target volume is different from board file volume!" ),
+        if( !dirName.MakeRelativeTo( defaultPath ) )
+            wxMessageBox( _( "Cannot make path relative (target volume different from file volume)!" ),
                           _( "Plot Output Directory" ), wxOK | wxICON_ERROR );
     }
 
@@ -373,7 +374,8 @@ void DIALOG_GENDRILL::GenDrillAndMapFiles(bool aGenDrill, bool aGenMap)
     excellonWriter.SetFormat( !m_UnitDrillIsInch,
                               (EXCELLON_WRITER::ZEROS_FMT) m_ZerosFormat,
                               m_Precision.m_lhs, m_Precision.m_rhs );
-    excellonWriter.SetOptions( m_Mirror, m_MinimalHeader, m_FileDrillOffset, m_Merge_PTH_NPTH );
+    excellonWriter.SetOptions( m_Mirror, m_MinimalHeader,
+                               m_FileDrillOffset, m_Merge_PTH_NPTH );
     excellonWriter.SetMapFileFormat( filefmt[choice] );
 
     excellonWriter.CreateDrillandMapFilesSet( defaultPath, aGenDrill, aGenMap,
@@ -390,7 +392,7 @@ void DIALOG_GENDRILL::OnGenReportFile( wxCommandEvent& event )
     fn.SetName( fn.GetName() + wxT( "-drl" ) );
     fn.SetExt( ReportFileExtension );
 
-    wxString defaultPath = m_plotOpts.GetOutputDirectory();
+    wxString defaultPath = Prj().AbsolutePath( m_plotOpts.GetOutputDirectory() );
 
     if( defaultPath.IsEmpty() )
         defaultPath = wxStandardPaths::Get().GetDocumentsDir();
@@ -406,7 +408,8 @@ void DIALOG_GENDRILL::OnGenReportFile( wxCommandEvent& event )
     excellonWriter.SetFormat( !m_UnitDrillIsInch,
                               (EXCELLON_WRITER::ZEROS_FMT) m_ZerosFormat,
                               m_Precision.m_lhs, m_Precision.m_rhs );
-    excellonWriter.SetOptions( m_Mirror, m_MinimalHeader, m_FileDrillOffset, m_Merge_PTH_NPTH );
+    excellonWriter.SetOptions( m_Mirror, m_MinimalHeader,
+                               m_FileDrillOffset, m_Merge_PTH_NPTH );
 
     bool success = excellonWriter.GenDrillReportFile( dlg.GetPath() );
 

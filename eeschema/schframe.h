@@ -38,6 +38,8 @@
 #include <class_sch_screen.h>
 #include <sch_collectors.h>
 
+// enum PINSHEETLABEL_SHAPE
+#include <sch_text.h>
 
 class LIB_EDIT_FRAME;
 class LIB_VIEW_FRAME;
@@ -143,8 +145,14 @@ private:
                                                   ///< simulator (gnucap, spice, ...)
     wxString                m_netListerCommand;   ///< Command line to call a custom net list
                                                   ///< generator.
+    int                     m_exec_flags;         ///< Flags of the wxExecute() function
+                                                  ///< to call a custom net list generator.
 
     bool                    m_forceHVLines;       ///< force H or V directions for wires, bus, line
+
+    bool                    m_autoplaceFields;    ///< automatically place component fields
+    bool                    m_autoplaceJustify;   ///< allow autoplace to change justification
+    bool                    m_autoplaceAlign;     ///< align autoplaced fields to the grid
 
     /// An index to the last find item in the found items list #m_foundItems.
     int         m_foundItemIndex;
@@ -169,9 +177,9 @@ private:
     wxArrayString   m_componentLibFiles;
     */
 
-    static int      m_lastSheetPinType;         ///< Last sheet pin type.
-    static wxSize   m_lastSheetPinTextSize;     ///< Last sheet pin text size.
-    static wxPoint  m_lastSheetPinPosition;     ///< Last sheet pin position.
+    static PINSHEETLABEL_SHAPE m_lastSheetPinType;  ///< Last sheet pin type.
+    static wxSize   m_lastSheetPinTextSize;         ///< Last sheet pin text size.
+    static wxPoint  m_lastSheetPinPosition;         ///< Last sheet pin position.
 
 protected:
     TEMPLATES             m_TemplateFieldNames;
@@ -262,11 +270,10 @@ public:
     void SetPlotDirectoryName( const wxString& aDirName ) { m_plotDirectoryName = aDirName; }
 
     void Process_Special_Functions( wxCommandEvent& event );
-    void OnColorConfig( wxCommandEvent& aEvent );
     void Process_Config( wxCommandEvent& event );
     void OnSelectTool( wxCommandEvent& aEvent );
 
-    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     /**
      * Function GetProjectFileParametersList
@@ -517,7 +524,7 @@ public:
     bool CreateNetlist( int             aFormat,
                         const wxString& aFullFileName,
                         unsigned        aNetlistOptions,
-                        REPORTER* aReporter = NULL );
+                        REPORTER*       aReporter = NULL );
 
     /**
      * Function  WriteNetListFile
@@ -666,7 +673,6 @@ public:
     void SetPrintSheetReference( bool aShow ) { m_printSheetReference = aShow; }
 
     // Plot functions:
-//    void ToPostProcess( wxCommandEvent& event );
     void PlotSchematic( wxCommandEvent& event );
 
     // read and save files
@@ -765,6 +771,12 @@ public:
 private:
 
     /**
+     * Function OnAutoplaceFields
+     * handles the #ID_AUTOPLACE_FIELDS event.
+     */
+    void OnAutoplaceFields( wxCommandEvent& aEvent );
+
+    /**
      * Function OnMoveItem
      * handles the #ID_SCH_MOVE_ITEM event used to move schematic itams.
      */
@@ -800,6 +812,7 @@ private:
     void OnAnnotate( wxCommandEvent& event );
     void OnErc( wxCommandEvent& event );
     void OnCreateNetlist( wxCommandEvent& event );
+    void OnUpdatePCB( wxCommandEvent& event );
     void OnCreateBillOfMaterials( wxCommandEvent& event );
     void OnFindItems( wxCommandEvent& event );
     void OnFindDialogClose( wxFindDialogEvent& event );
@@ -899,7 +912,7 @@ private:
     // Text, label, glabel
     SCH_TEXT* CreateNewText( wxDC* aDC, int aType );
     void EditSchematicText( SCH_TEXT* TextStruct );
-    void ChangeTextOrient( SCH_TEXT* aTextItem, wxDC* aDC );
+    void ChangeTextOrient( SCH_TEXT* aTextItem );
 
     /**
      * Function OnCovertTextType
@@ -1102,7 +1115,7 @@ private:
      */
     void EditComponentFieldText( SCH_FIELD* aField );
 
-    void RotateField( SCH_FIELD* aField, wxDC* aDC );
+    void RotateField( SCH_FIELD* aField );
 
     /**
      * Function PastListOfItems
@@ -1219,7 +1232,7 @@ public:
      * @param aKey = the key modifiers (Alt, Shift ...)
      * @return the block command id (BLOCK_MOVE, BLOCK_COPY...)
      */
-    virtual int BlockCommand( int aKey );
+    virtual int BlockCommand( EDA_KEY aKey );
 
     /**
      * Function HandleBlockPlace
@@ -1341,6 +1354,29 @@ public:
     wxString GetSimulatorCommand() const { return m_simulatorCommand; }
 
     void SetNetListerCommand( const wxString& aCommand ) { m_netListerCommand = aCommand; }
+
+    /**
+     * Function DefaultExecFlags
+     * resets the execution flags to defaults for external netlist and
+     * bom generators.
+     */
+    void DefaultExecFlags() { m_exec_flags = wxEXEC_SYNC; }
+
+    /**
+     * Function SetExecFlags
+     * sets (adds) specified flags for next execution of external
+     * generator of the netlist or bom.
+     * @param aFlags = wxEXEC_* flags, see wxExecute docs.
+     */
+    void SetExecFlags( const int aFlags ) { m_exec_flags |= aFlags; }
+
+    /**
+     * Function ClearExecFlags
+     * clears (removes) specified flags that not needed for next execution
+     * of external generator of the netlist or bom.
+     * @param aFlags = wxEXEC_* flags, see wxExecute docs.
+     */
+    void ClearExecFlags( const int aFlags ) { m_exec_flags &= ~( aFlags ); }
 
     wxString GetNetListerCommand() const { return m_netListerCommand; }
 

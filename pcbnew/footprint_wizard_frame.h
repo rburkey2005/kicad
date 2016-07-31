@@ -151,7 +151,7 @@ private:
     void                ClickOnPageList( wxCommandEvent& event );
     void                OnSetRelativeOffset( wxCommandEvent& event );
 
-    bool                GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool                GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     void                LoadSettings( wxConfigBase* aCfg ); // override virtual
     void                SaveSettings( wxConfigBase* aCfg ); // override virtual
@@ -220,6 +220,11 @@ private:
     wxPoint m_position;
     wxSize m_size;
     wxConfigBase* m_config;
+    bool m_canClose;        // false to veto a close event, true to allow it
+
+    void OnCloseMsgWindow( wxCloseEvent& aEvent );
+
+    DECLARE_EVENT_TABLE()
 };
 
 #endif    // FOOTPRINT_WIZARD_FRM_H_

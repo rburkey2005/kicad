@@ -32,8 +32,6 @@
 #include <list>
 #include <algorithm>
 
-#include <boost/foreach.hpp>
-
 #include <geometry/shape.h>
 #include <geometry/shape_line_chain.h>
 #include <geometry/shape_poly_set.h>
@@ -207,20 +205,20 @@ const SHAPE_LINE_CHAIN SHAPE_POLY_SET::convertFromClipper( const Path& aPath )
 }
 
 void SHAPE_POLY_SET::booleanOp( ClipType aType, const SHAPE_POLY_SET& aOtherShape,
-                                bool aFastMode )
+                                POLYGON_MODE aFastMode )
 {
     Clipper c;
 
-    if( !aFastMode )
+    if( aFastMode == PM_STRICTLY_SIMPLE )
         c.StrictlySimple( true );
 
-    BOOST_FOREACH( const POLYGON& poly, m_polys )
+    for( const POLYGON& poly : m_polys )
     {
         for( unsigned int i = 0; i < poly.size(); i++ )
             c.AddPath( convertToClipper( poly[i], i > 0 ? false : true ), ptSubject, true );
     }
 
-    BOOST_FOREACH( const POLYGON& poly, aOtherShape.m_polys )
+    for( const POLYGON& poly : aOtherShape.m_polys )
     {
         for( unsigned int i = 0; i < poly.size(); i++ )
             c.AddPath( convertToClipper( poly[i], i > 0 ? false : true ), ptClip, true );
@@ -237,20 +235,20 @@ void SHAPE_POLY_SET::booleanOp( ClipType aType, const SHAPE_POLY_SET& aOtherShap
 void SHAPE_POLY_SET::booleanOp( ClipperLib::ClipType aType,
                                 const SHAPE_POLY_SET& aShape,
                                 const SHAPE_POLY_SET& aOtherShape,
-                                bool aFastMode )
+                                POLYGON_MODE aFastMode )
 {
     Clipper c;
 
-    if( !aFastMode )
+    if( aFastMode == PM_STRICTLY_SIMPLE )
         c.StrictlySimple( true );
 
-    BOOST_FOREACH( const POLYGON& poly, aShape.m_polys )
+    for( const POLYGON& poly : aShape.m_polys )
     {
         for( unsigned int i = 0; i < poly.size(); i++ )
             c.AddPath( convertToClipper( poly[i], i > 0 ? false : true ), ptSubject, true );
     }
 
-    BOOST_FOREACH( const POLYGON& poly, aOtherShape.m_polys )
+    for( const POLYGON& poly : aOtherShape.m_polys )
     {
         for( unsigned int i = 0; i < poly.size(); i++ )
             c.AddPath( convertToClipper( poly[i], i > 0 ? false : true ), ptClip, true );
@@ -264,37 +262,37 @@ void SHAPE_POLY_SET::booleanOp( ClipperLib::ClipType aType,
 }
 
 
-void SHAPE_POLY_SET::BooleanAdd( const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanAdd( const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctUnion, b, aFastMode );
 }
 
 
-void SHAPE_POLY_SET::BooleanSubtract( const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanSubtract( const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctDifference, b, aFastMode );
 }
 
 
-void SHAPE_POLY_SET::BooleanIntersection( const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanIntersection( const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctIntersection, b, aFastMode );
 }
 
 
-void SHAPE_POLY_SET::BooleanAdd( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanAdd( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctUnion, a, b, aFastMode );
 }
 
 
-void SHAPE_POLY_SET::BooleanSubtract( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanSubtract( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctDifference, a, b, aFastMode );
 }
 
 
-void SHAPE_POLY_SET::BooleanIntersection( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, bool aFastMode )
+void SHAPE_POLY_SET::BooleanIntersection( const SHAPE_POLY_SET& a, const SHAPE_POLY_SET& b, POLYGON_MODE aFastMode )
 {
     booleanOp( ctIntersection, a, b, aFastMode );
 }
@@ -302,9 +300,15 @@ void SHAPE_POLY_SET::BooleanIntersection( const SHAPE_POLY_SET& a, const SHAPE_P
 
 void SHAPE_POLY_SET::Inflate( int aFactor, int aCircleSegmentsCount )
 {
+    // A static table to avoid repetitive calculations of the coefficient
+    // 1.0 - cos( M_PI/aCircleSegmentsCount)
+    // aCircleSegmentsCount is most of time <= 64 and usually 8, 12, 16, 32
+    #define SEG_CNT_MAX 64
+    static double arc_tolerance_factor[SEG_CNT_MAX+1];
+
     ClipperOffset c;
 
-    BOOST_FOREACH( const POLYGON& poly, m_polys )
+    for( const POLYGON& poly : m_polys )
     {
         for( unsigned int i = 0; i < poly.size(); i++ )
             c.AddPath( convertToClipper( poly[i], i > 0 ? false : true ), jtRound, etClosedPolygon );
@@ -312,7 +316,27 @@ void SHAPE_POLY_SET::Inflate( int aFactor, int aCircleSegmentsCount )
 
     PolyTree solution;
 
-    c.ArcTolerance = fabs( (double) aFactor ) / M_PI / aCircleSegmentsCount;
+    // Calculate the arc tolerance (arc error) from the seg count by circle.
+    // the seg count is nn = M_PI / acos(1.0 - c.ArcTolerance / abs(aFactor))
+    // see:
+    // www.angusj.com/delphi/clipper/documentation/Docs/Units/ClipperLib/Classes/ClipperOffset/Properties/ArcTolerance.htm
+
+    if( aCircleSegmentsCount < 6 )  // avoid incorrect aCircleSegmentsCount values
+        aCircleSegmentsCount = 6;
+
+    double coeff;
+
+    if( aCircleSegmentsCount > SEG_CNT_MAX || arc_tolerance_factor[aCircleSegmentsCount] == 0 )
+    {
+        coeff = 1.0 - cos( M_PI/aCircleSegmentsCount);
+
+        if( aCircleSegmentsCount <= SEG_CNT_MAX )
+            arc_tolerance_factor[aCircleSegmentsCount] = coeff;
+    }
+    else
+        coeff = arc_tolerance_factor[aCircleSegmentsCount];
+
+    c.ArcTolerance = std::abs( aFactor ) * coeff;
 
     c.Execute( solution, aFactor );
 
@@ -320,7 +344,7 @@ void SHAPE_POLY_SET::Inflate( int aFactor, int aCircleSegmentsCount )
 }
 
 
-void SHAPE_POLY_SET::importTree( PolyTree* tree)
+void SHAPE_POLY_SET::importTree( PolyTree* tree )
 {
     m_polys.clear();
 
@@ -329,6 +353,7 @@ void SHAPE_POLY_SET::importTree( PolyTree* tree)
         if( !n->IsHole() )
         {
             POLYGON paths;
+            paths.reserve( n->Childs.size() + 1 );
             paths.push_back( convertFromClipper( n->Contour ) );
 
             for( unsigned int i = 0; i < n->Childs.size(); i++ )
@@ -462,7 +487,7 @@ void SHAPE_POLY_SET::fractureSingle( POLYGON& paths )
 
     int num_unconnected = 0;
 
-    BOOST_FOREACH( SHAPE_LINE_CHAIN& path, paths )
+    for( SHAPE_LINE_CHAIN& path : paths )
     {
         int index = 0;
 
@@ -550,18 +575,18 @@ void SHAPE_POLY_SET::fractureSingle( POLYGON& paths )
 }
 
 
-void SHAPE_POLY_SET::Fracture( bool aFastMode )
+void SHAPE_POLY_SET::Fracture( POLYGON_MODE aFastMode )
 {
     Simplify( aFastMode ); // remove overlapping holes/degeneracy
 
-    BOOST_FOREACH( POLYGON& paths, m_polys )
+    for( POLYGON& paths : m_polys )
     {
         fractureSingle( paths );
     }
 }
 
 
-void SHAPE_POLY_SET::Simplify( bool aFastMode )
+void SHAPE_POLY_SET::Simplify( POLYGON_MODE aFastMode )
 {
     SHAPE_POLY_SET empty;
 
@@ -699,7 +724,7 @@ bool SHAPE_POLY_SET::Contains( const VECTOR2I& aP, int aSubpolyIndex ) const
     if( aSubpolyIndex >= 0 )
         return pointInPolygon( aP, m_polys[aSubpolyIndex][0] );
 
-    BOOST_FOREACH ( const POLYGON& polys, m_polys )
+    for( const POLYGON& polys : m_polys )
     {
         if( polys.size() == 0 )
             continue;
@@ -779,9 +804,9 @@ bool SHAPE_POLY_SET::pointInPolygon( const VECTOR2I& aP, const SHAPE_LINE_CHAIN&
 
 void SHAPE_POLY_SET::Move( const VECTOR2I& aVector )
 {
-    BOOST_FOREACH( POLYGON &poly, m_polys )
+    for( POLYGON &poly : m_polys )
     {
-        BOOST_FOREACH( SHAPE_LINE_CHAIN &path, poly )
+        for( SHAPE_LINE_CHAIN &path : poly )
         {
             path.Move( aVector );
         }
@@ -793,9 +818,9 @@ int SHAPE_POLY_SET::TotalVertices() const
 {
     int c = 0;
 
-    BOOST_FOREACH( const POLYGON& poly, m_polys )
+    for( const POLYGON& poly : m_polys )
     {
-        BOOST_FOREACH ( const SHAPE_LINE_CHAIN& path, poly )
+        for( const SHAPE_LINE_CHAIN& path : poly )
         {
             c += path.PointCount();
         }

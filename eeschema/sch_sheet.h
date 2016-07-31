@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,7 +31,6 @@
 #define SCH_SHEEET_H
 
 #include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/foreach.hpp>
 #include <sch_text.h>
 
 
@@ -62,12 +61,7 @@ class NETLIST_OBJECT_LIST;
  */
 class SCH_SHEET_PIN : public SCH_HIERLABEL
 {
-private:
-    int m_number;       ///< Label number use for saving sheet label to file.
-                        ///< Sheet label numbering begins at 2.
-                        ///< 0 is reserved for the sheet name.
-                        ///< 1 is reserve for the sheet file name.
-
+public:
     /**
      * Defines the edge of the sheet that the sheet pin is positioned
      * SHEET_LEFT_SIDE = 0: pin on left side
@@ -85,6 +79,13 @@ private:
         SHEET_BOTTOM_SIDE,
         SHEET_UNDEFINED_SIDE
     };
+
+private:
+    int m_number;       ///< Label number use for saving sheet label to file.
+                        ///< Sheet label numbering begins at 2.
+                        ///< 0 is reserved for the sheet name.
+                        ///< 1 is reserve for the sheet file name.
+
     SHEET_SIDE m_edge;
 
 public:
@@ -287,6 +288,19 @@ public:
     wxSize GetSize() { return m_size; }
 
     void SetSize( const wxSize& aSize ) { m_size = aSize; }
+
+    /**
+     * Function GetRootSheet
+     *
+     * returns the root sheet of this SCH_SHEET object.
+     *
+     * The root (top level) sheet can be found by walking up the parent links until the only
+     * sheet that has no parent is found.  The root sheet can be found from any sheet without
+     * having to maintain a global root sheet pointer.
+     *
+     * @return a SCH_SHEET pointer to the root sheet.
+     */
+    SCH_SHEET* GetRootSheet();
 
     /**
      * Function SetScreen
@@ -505,7 +519,7 @@ public:
     {
         m_pos += aMoveVector;
 
-        BOOST_FOREACH( SCH_SHEET_PIN& pin, m_pins )
+        for( SCH_SHEET_PIN& pin : m_pins )
         {
             pin.Move( aMoveVector );
         }
@@ -554,8 +568,7 @@ public:
 
     void GetConnectionPoints( std::vector< wxPoint >& aPoints ) const;
 
-    SEARCH_RESULT Visit( INSPECTOR* inspector, const void* testData,
-                                 const KICAD_T scanTypes[] );
+    SEARCH_RESULT Visit( INSPECTOR inspector, void* testData, const KICAD_T scanTypes[] ) override;
 
     wxString GetSelectMenuText() const;
 
@@ -595,6 +608,6 @@ protected:
 };
 
 
-typedef std::vector< SCH_SHEET* > SCH_SHEETS;
+typedef std::vector< SCH_SHEET* > SCH_SHEETS;   // no ownership over contained SCH_SHEETs
 
-#endif /* SCH_SHEEET_H */
+#endif // SCH_SHEEET_H

@@ -27,14 +27,12 @@
  * @brief utilities to display some error, warning and info short messges
  */
 
-#include <fctsys.h>
-#include <common.h>
-#include <wx/wx.h>
-#include <wx/html/htmlwin.h>
 #include <wx/stockitem.h>
+
+#include <bitmaps.h>
 #include <html_messagebox.h>
 #include <dialog_exit_base.h>
-#include <bitmaps.h>
+
 
 class DIALOG_EXIT: public DIALOG_EXIT_BASE
 {
@@ -53,7 +51,6 @@ public:
 
 private:
     void OnSaveAndExit( wxCommandEvent& event ) { EndModal( wxID_YES ); }
-    void OnCancel( wxCommandEvent& event ) { EndModal( wxID_CANCEL ); }
     void OnExitNoSave( wxCommandEvent& event ) { EndModal( wxID_NO ); }
 };
 
@@ -63,6 +60,8 @@ int DisplayExitDialog( wxWindow* parent, const wxString& aMessage )
     DIALOG_EXIT dlg( parent, aMessage );
 
     int ret = dlg.ShowModal();
+
+    // Returns wxID_YES, wxID_NO, or wxID_CANCEL
     return ret;
 }
 

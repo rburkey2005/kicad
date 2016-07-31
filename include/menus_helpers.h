@@ -1,8 +1,3 @@
-/**
- * @file menus_helpers.h
- * @brief Usefull macros and inline functions to create menus items
- * in menubars or popup menus
- */
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
@@ -26,24 +21,24 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
+#ifndef MENUS_HELPERS_H_
+#define MENUS_HELPERS_H_
+
+/**
+ * @file menus_helpers.h
+ * @brief Usefull macros and inline functions to create menus items
+ * in menubars or popup menus
+ */
+
+
+#include <wx/menu.h>
+#include <wx/menuitem.h>
 
 #include <bitmaps.h>
 
-/**
- * Definition SETBITMAPS
- * is a macro use to add a bitmaps to check menu item.
- * @note Do not use with normal menu items or any platform other than Windows.
- * @param aImage is the image to add the menu item.
- */
-#if defined( USE_IMAGES_IN_MENUS ) && defined(  __WINDOWS__ )
-#  define SETBITMAPS( aImage ) item->SetBitmaps( KiBitmap( checked_ok_xpm ), KiBitmap( aImage ) )
-#else
-#  define SETBITMAPS( aImage )
-#endif
 
 /**
- * Definition SETBITMAP
- * is a macro use to add a bitmap to a menu items.
+ * SET_BITMAP is a macro used to add a bitmap to a menu item.
  * @note Do not use with checked menu items.
  * @param aImage is the image to add the menu item.
  */
@@ -203,3 +198,5 @@ static inline wxMenuItem* AddMenuItem( wxMenu*          aMenu,
 
     return item;
 };
+
+#endif // MENUS_HELPERS_H_

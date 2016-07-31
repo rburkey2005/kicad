@@ -2,8 +2,8 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2004 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
- * Copyright (C) 2008-2011 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2011 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2008-2016 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2004-2016 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -52,8 +52,6 @@
 
 #include <kicad_device_context.h>
 
-#include <boost/foreach.hpp>
-
 #include <dialogs/dialog_schematic_find.h>
 
 
@@ -62,10 +60,9 @@ void SCH_EDIT_FRAME::OnFindDrcMarker( wxFindDialogEvent& event )
     static SCH_MARKER* lastMarker = NULL;
 
     wxString           msg;
-    SCH_SHEET_LIST     schematic;
+    SCH_SHEET_LIST     schematic( g_RootSheet );
     SCH_SHEET_PATH*    sheetFoundIn = NULL;
     bool               wrap = ( event.GetFlags() & FR_SEARCH_WRAP ) != 0;
-    wxRect             clientRect( wxPoint( 0, 0 ), GetClientSize() );
     bool               warpCursor = ( ( event.GetId() == wxEVT_COMMAND_FIND_CLOSE ) ||
                                       !( event.GetFlags() & FR_NO_WARP_CURSOR ) );
 
@@ -114,24 +111,25 @@ SCH_ITEM* SCH_EDIT_FRAME::FindComponentAndItem( const wxString& aReference,
                                                 const wxString& aSearchText,
                                                 bool            aWarpMouse )
 {
-    SCH_SHEET_PATH* sheet;
+    SCH_SHEET_PATH* sheet = NULL;
     SCH_SHEET_PATH* sheetWithComponentFound = NULL;
     SCH_ITEM*       item = NULL;
     SCH_COMPONENT*  Component = NULL;
-    wxPoint         pos, curpos;
+    wxPoint         pos;
     bool            centerAndRedraw = false;
     bool            notFound = true;
     LIB_PIN*        pin;
-    SCH_SHEET_LIST  sheetList;
-
-    sheet = sheetList.GetFirst();
+    SCH_SHEET_LIST  sheetList( g_RootSheet );
 
     if( !aSearchHierarchy )
-        sheet = m_CurrentSheet;
+        sheetList.push_back( *m_CurrentSheet );
+    else
+        sheetList.BuildSheetList( g_RootSheet );
 
-    for( ; sheet != NULL; sheet = sheetList.GetNext() )
+    for( SCH_SHEET_PATHS_ITER it = sheetList.begin(); it != sheetList.end(); ++it )
     {
-        item = (SCH_ITEM*) sheet->LastDrawList();
+        sheet = &(*it);
+        item = (*it).LastDrawList();
 
         for( ; ( item != NULL ) && ( notFound == true ); item = item->Next() )
         {
@@ -182,7 +180,7 @@ SCH_ITEM* SCH_EDIT_FRAME::FindComponentAndItem( const wxString& aReference,
             }
         }
 
-        if( (aSearchHierarchy == false) || (notFound == false) )
+        if( notFound == false )
             break;
     }
 
@@ -252,11 +250,11 @@ SCH_ITEM* SCH_EDIT_FRAME::FindComponentAndItem( const wxString& aReference,
         break;
 
     case FIND_VALUE:               // find value
-        msg_item.Printf( _( "value" ), GetChars( aSearchText ) );
+        msg_item.Printf( _( "value %s" ), GetChars( aSearchText ) );
         break;
 
     case FIND_FIELD:               // find field. todo
-        msg_item.Printf( _( "field" ), GetChars( aSearchText ) );
+        msg_item.Printf( _( "field %s" ), GetChars( aSearchText ) );
         break;
     }
 
@@ -306,10 +304,6 @@ bool SCH_EDIT_FRAME::IsSearchCacheObsolete( const SCH_FIND_REPLACE_DATA& aSearch
 
 void SCH_EDIT_FRAME::OnFindSchematicItem( wxFindDialogEvent& aEvent )
 {
-    static wxPoint          itemPosition;  // the actual position of the matched item.
-
-    SCH_SHEET_LIST          schematic;
-    wxString                msg;
     SCH_FIND_REPLACE_DATA   searchCriteria;
     SCH_FIND_COLLECTOR_DATA data;
 
@@ -366,13 +360,14 @@ void SCH_EDIT_FRAME::OnFindReplace( wxFindDialogEvent& aEvent )
     static int              nextFoundIndex = 0;
     SCH_ITEM*               item;
     SCH_SHEET_PATH*         sheet;
-    SCH_SHEET_LIST          schematic;
+    SCH_SHEET_LIST          schematic( g_RootSheet );
     SCH_FIND_COLLECTOR_DATA data;
     SCH_FIND_REPLACE_DATA   searchCriteria;
 
     searchCriteria.SetFlags( aEvent.GetFlags() );
     searchCriteria.SetFindString( aEvent.GetFindString() );
     searchCriteria.SetReplaceString( aEvent.GetReplaceString() );
+    m_foundItems.SetReplaceString( aEvent.GetReplaceString() );
 
     if( IsSearchCacheObsolete( searchCriteria ) )
     {
@@ -458,7 +453,7 @@ void SCH_EDIT_FRAME::OnFindReplace( wxFindDialogEvent& aEvent )
 void SCH_EDIT_FRAME::updateFindReplaceView( wxFindDialogEvent& aEvent )
 {
     wxString                msg;
-    SCH_SHEET_LIST          schematic;
+    SCH_SHEET_LIST          schematic( g_RootSheet );
     SCH_FIND_COLLECTOR_DATA data;
     SCH_FIND_REPLACE_DATA   searchCriteria;
     bool                    warpCursor = !( aEvent.GetFlags() & FR_NO_WARP_CURSOR );

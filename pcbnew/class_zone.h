@@ -261,7 +261,7 @@ public:
      */
     void TransformSolidAreasShapesToPolygonSet( SHAPE_POLY_SET& aCornerBuffer,
                                                 int             aCircleToSegmentsCount,
-                                                double          aCorrectionFactor );
+                                                double          aCorrectionFactor ) const;
     /**
      * Function BuildFilledSolidAreasPolygons
      * Build the filled solid areas data from real outlines (stored in m_Poly)
@@ -347,9 +347,9 @@ public:
      * A scan is made line per line, on the whole filled areas, with a step of m_ZoneMinThickness.
      * all intersecting points with the horizontal infinite line and polygons to fill are calculated
      * a list of SEGZONE items is built, line per line
-     * @return number of segments created
+     * @return true if success, false on error
      */
-    int FillZoneAreasWithSegments();
+    bool FillZoneAreasWithSegments();
 
     /**
      * Function UnFill

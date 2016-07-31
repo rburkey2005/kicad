@@ -30,7 +30,7 @@
 #define _DRC_STUFF_H
 
 #include <vector>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 #define OK_DRC  0
 #define BAD_DRC 1
@@ -193,17 +193,17 @@ private:
     int                 m_xcliphi;
     int                 m_ycliphi;
 
-    PCB_EDIT_FRAME*     m_mainWindow;
+    PCB_EDIT_FRAME*     m_pcbEditorFrame;   ///< The pcb frame editor which owns the board
     BOARD*              m_pcb;
-    DIALOG_DRC_CONTROL* m_ui;
+    DIALOG_DRC_CONTROL* m_drcDialog;
 
-    DRC_LIST            m_unconnected;  ///< list of unconnected pads, as DRC_ITEMs
+    DRC_LIST            m_unconnected;      ///< list of unconnected pads, as DRC_ITEMs
 
 
     /**
      * Function updatePointers
      * is a private helper function used to update needed pointers from the
-     * one pointer which is known not to change, m_mainWindow.
+     * one pointer which is known not to change, m_pcbEditorFrame.
      */
     void updatePointers();
 
@@ -289,7 +289,7 @@ private:
 
     //-----<single "item" tests>-----------------------------------------
 
-    bool doNetClass( boost::shared_ptr<NETCLASS> aNetClass, wxString& msg );
+    bool doNetClass( std::shared_ptr<NETCLASS> aNetClass, wxString& msg );
 
     /**
      * Function doPadToPadsDrc
@@ -365,12 +365,12 @@ private:
 
     /**
      * Helper function checkMarginToCircle
-     * Check the distance from a point to
-     * a segment. the segment is expected starting at 0,0, and on the X axis
+     * Check the distance from a point to a segment.
+     * The segment is expected starting at 0,0, and on the X axis
      * (used to test DRC between a segment and a round pad, via or round end of a track
      * @param aCentre The coordinate of the circle's center
      * @param aRadius A "keep out" radius centered over the circle
-     * @param aLength The length of the segment (i.e. coordinate of end, becuase it is on
+     * @param aLength The length of the segment (i.e. coordinate of end, because it is on
      *                the X axis)
      * @return bool - true if distance >= radius, else
      *                false when distance < aRadius
@@ -437,20 +437,29 @@ public:
 
 
     /**
-     * Function ShowDialog
+     * Function ShowDRCDialog
      * opens a dialog and prompts the user, then if a test run button is
      * clicked, runs the test(s) and creates the MARKERS.  The dialog is only
      * created if it is not already in existence.
+     * @param aParent is the parent window for wxWidgets. Usually the PCB editor frame
+     * but can be an other dialog
+     * if aParent == NULL (default), the parent will be the PCB editor frame
+     * and the dialog will be not modal (just float on parent
+     * if aParent is specified, the dialog will be modal.
+     * The modal mode is mandatory if the dialog is created from an other dialog, not
+     * from the PCB editor frame
      */
-    void ShowDialog();
+    void ShowDRCDialog( wxWindow* aParent = NULL );
 
     /**
-     * Function DestroyDialog
+     * Function DestroyDRCDialog
      * deletes this ui dialog box and zeros out its pointer to remember
      * the state of the dialog's existence.
      * @param aReason Indication of which button was clicked to cause the destruction.
+     * if aReason == wxID_OK, design parameters values which can be entered from the dialog will bbe saved
+     * in design parameters list
      */
-    void DestroyDialog( int aReason );
+    void DestroyDRCDialog( int aReason );
 
 
     /**

@@ -57,19 +57,38 @@ public:
     BOARD_DESIGN_SETTINGS  m_BrdSettings;
 
     /// Constructors
-    DIALOG_DRC_CONTROL( DRC* aTester, PCB_EDIT_FRAME* parent );
+    DIALOG_DRC_CONTROL( DRC* aTester, PCB_EDIT_FRAME* aEditorFrame, wxWindow* aParent );
     ~DIALOG_DRC_CONTROL(){};
+
+    /**
+     * Enable/disable the report file creation
+     * @param aEnbale = true to ask for creation
+     * @param aFileName = the filename or the report file
+     */
+    void SetRptSettings( bool aEnable, const wxString& aFileName );
+
+    void GetRptSettings( bool* aEnable, wxString& aFileName );
 
 private:
     /**
      * Function writeReport
      * outputs the MARKER items and unconnecte DRC_ITEMs with commentary to an
      * open text file.
-     * @param fpOut The text file to write the report to.
+     * @param aFullFileName The text filename to write the report to.
+     * @return true if OK, false on error
      */
-    void writeReport( FILE* fpOut );
+    bool writeReport( const wxString& aFullFileName );
+
+    /**
+     * filenames can be entered by name.
+     * @return a good report filename  (with .rpt extension) (a full filename)
+     * from m_CreateRptCtrl
+     */
+    const wxString makeValidFileNameReport();
 
     void InitValues( );
+
+    void DisplayDRCValues( );
 
     void SetDrcParmeters( );
 
@@ -109,6 +128,10 @@ private:
     /// wxEVT_COMMAND_BUTTON_CLICKED event handler for wxID_OK
     void OnOkClick( wxCommandEvent& event );
 
+    /// handler for activate event, updating data which can be modified outside the dialog
+    /// (DRC parameters)
+    void OnActivateDlg( wxActivateEvent& event );
+
     void OnMarkerSelectionEvent( wxCommandEvent& event );
     void OnUnconnectedSelectionEvent( wxCommandEvent& event );
     void OnChangingMarkerList( wxNotebookEvent& event );
@@ -118,8 +141,9 @@ private:
 
     void OnPopupMenu( wxCommandEvent& event );
 
+    BOARD*              m_currentBoard;     // the board currently on test
     DRC*                m_tester;
-    PCB_EDIT_FRAME*     m_Parent;
+    PCB_EDIT_FRAME*     m_brdEditor;
 };
 
 #endif  // _DIALOG_DRC_H_

@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2012 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2012 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2012-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -33,7 +33,6 @@
 #include <pgm_base.h>
 #include <class_drawpanel.h>
 #include <wxPcbStruct.h>
-#include <3d_viewer.h>
 #include <dialog_helpers.h>
 #include <class_board.h>
 #include <pcbnew.h>
@@ -82,8 +81,6 @@ void PCB_EDIT_FRAME::OnUpdateSelectCustomTrackWidth( wxUpdateUIEvent& aEvent )
 
 void PCB_EDIT_FRAME::OnUpdateSelectViaSize( wxUpdateUIEvent& aEvent )
 {
-    wxString msg;
-
     if( aEvent.GetId() == ID_AUX_TOOLBAR_PCB_VIA_SIZE )
     {
         if( m_SelViaSizeBox->GetSelection() != (int) GetDesignSettings().GetViaSizeIndex() )
@@ -106,6 +103,9 @@ void PCB_EDIT_FRAME::OnUpdateLayerSelectBox( wxUpdateUIEvent& aEvent )
     m_SelLayerBox->SetLayerSelection( GetActiveLayer() );
 }
 
+
+#if defined( KICAD_SCRIPTING_WXPYTHON )
+
 // Used only when the DKICAD_SCRIPTING_WXPYTHON option is on
 void PCB_EDIT_FRAME::OnUpdateScriptingConsoleState( wxUpdateUIEvent& aEvent )
 {
@@ -113,6 +113,9 @@ void PCB_EDIT_FRAME::OnUpdateScriptingConsoleState( wxUpdateUIEvent& aEvent )
     bool pythonPanelShown = pythonPanelFrame ? pythonPanelFrame->IsShown() : false;
     aEvent.Check( pythonPanelShown );
 }
+
+#endif
+
 
 void PCB_EDIT_FRAME::OnUpdateZoneDisplayStyle( wxUpdateUIEvent& aEvent )
 {
@@ -143,17 +146,6 @@ void PCB_EDIT_FRAME::OnUpdateShowBoardRatsnest( wxUpdateUIEvent& aEvent )
                                         GetBoard()->IsElementVisible( RATSNEST_VISIBLE ) ?
                                         _( "Hide board ratsnest" ) :
                                         _( "Show board ratsnest" ) );
-}
-
-
-void PCB_EDIT_FRAME::OnUpdateShowModuleRatsnest( wxUpdateUIEvent& aEvent )
-{
-    DISPLAY_OPTIONS* displ_opts = (DISPLAY_OPTIONS*)GetDisplayOptions();
-    aEvent.Check( displ_opts->m_Show_Module_Ratsnest );
-    m_optionsToolBar->SetToolShortHelp( ID_TB_OPTIONS_SHOW_MODULE_RATSNEST,
-                                        displ_opts->m_Show_Module_Ratsnest ?
-                                        _( "Hide footprint ratsnest" ) :
-                                        _( "Show footprint ratsnest" ) );
 }
 
 

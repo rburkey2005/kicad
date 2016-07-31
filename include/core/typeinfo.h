@@ -26,9 +26,62 @@
 #ifndef __KICAD_TYPEINFO_H
 #define __KICAD_TYPEINFO_H
 
+
+#ifndef SWIG
 #include <cstdio>
 
+template<typename T>
+struct remove_pointer
+{
+    typedef T type;
+};
+
+template<typename T>
+struct remove_pointer<T*>
+{
+    typedef typename remove_pointer<T>::type type;
+};
+
+/**
+ * Function IsA()
+ *
+ * Checks if the type of aObject is T.
+ * @param aObject object for type check
+ * @return true, if aObject type equals T.
+ */
+template <class T, class I>
+bool IsA( const I* aObject )
+{
+    return aObject && remove_pointer<T>::type::ClassOf( aObject );
+}
+
+template <class T, class I>
+bool IsA( const I& aObject )
+{
+    return remove_pointer<T>::type::ClassOf( &aObject );
+}
+
+/**
+ * Function dyn_cast()
+ *
+ * A lightweight dynamic downcast. Casts aObject to type Casted*.
+ * Uses EDA_ITEM::Type() and EDA_ITEM::ClassOf() to check if type matches.
+ * @param aObject object to be casted
+ * @return down-casted object or NULL if type doesn't match Casted.
+ */
+template<class Casted, class From>
+Casted dyn_cast( From aObject )
+{
+    if( remove_pointer<Casted>::type::ClassOf ( aObject ) )
+        return static_cast<Casted>( aObject );
+
+    return NULL;
+}
+
 class EDA_ITEM;
+
+#endif  // SWIG
+
 
 /**
  * Enum KICAD_T
@@ -60,6 +113,7 @@ enum KICAD_T
     PCB_TARGET_T,           ///< class PCB_TARGET, a target (graphic item)
     PCB_ZONE_AREA_T,        ///< class ZONE_CONTAINER, a zone area
     PCB_ITEM_LIST_T,        ///< class BOARD_ITEM_LIST, a list of board items
+    PCB_NETINFO_T,          ///< class NETINFO_ITEM, a description of a net
 
     // Schematic draw Items.  The order of these items effects the sort order.
     // It is currently ordered to mimic the old Eeschema locate behavior where
@@ -127,53 +181,5 @@ enum KICAD_T
     // End value
     MAX_STRUCT_TYPE_ID
 };
-
-template<typename T>
-struct remove_pointer
-{
-    typedef T type;
-};
-
-template<typename T>
-struct remove_pointer<T*>
-{
-    typedef typename remove_pointer<T>::type type;
-};
-
-/**
- * Function IsA()
- *
- * Checks if the type of aObject is T.
- * @param aObject object for type check
- * @return true, if aObject type equals T.
- */
-template <class T, class I>
-bool IsA( const I* aObject )
-{
-    return aObject && remove_pointer<T>::type::ClassOf( aObject );
-}
-
-template <class T, class I>
-bool IsA( const I& aObject )
-{
-    return remove_pointer<T>::type::ClassOf( &aObject );
-}
-
-/**
- * Function dyn_cast()
- *
- * A lightweight dynamic downcast. Casts aObject to type Casted*.
- * Uses EDA_ITEM::Type() and EDA_ITEM::ClassOf() to check if type matches.
- * @param aObject object to be casted
- * @return down-casted object or NULL if type doesn't match Casted.
- */
-template<class Casted, class From>
-Casted dyn_cast( From aObject )
-{
-    if( remove_pointer<Casted>::type::ClassOf ( aObject ) )
-        return static_cast<Casted>( aObject );
-
-    return NULL;
-}
 
 #endif // __KICAD_TYPEINFO_H

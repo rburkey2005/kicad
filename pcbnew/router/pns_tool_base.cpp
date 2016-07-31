@@ -20,9 +20,9 @@
 
 #include <wx/numdlg.h>
 
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
 
 #include "class_draw_panel_gal.h"
 #include "class_board.h"
@@ -42,6 +42,7 @@
 
 #include <tool/context_menu.h>
 #include <tools/common_actions.h>
+#include <tools/grid_helper.h>
 
 #include <ratsnest_data.h>
 
@@ -75,19 +76,25 @@ PNS_TOOL_BASE::PNS_TOOL_BASE( const std::string& aToolName ) :
     m_frame = NULL;
     m_ctls = NULL;
     m_board = NULL;
+    m_gridHelper = NULL;
 }
 
 
 PNS_TOOL_BASE::~PNS_TOOL_BASE()
 {
     delete m_router;
+    delete m_gridHelper;
 }
+
 
 
 void PNS_TOOL_BASE::Reset( RESET_REASON aReason )
 {
     if( m_router )
         delete m_router;
+
+    if( m_gridHelper)
+        delete m_gridHelper;
 
     m_frame = getEditFrame<PCB_EDIT_FRAME>();
     m_ctls = getViewControls();
@@ -100,6 +107,10 @@ void PNS_TOOL_BASE::Reset( RESET_REASON aReason )
     m_router->SyncWorld();
     m_router->LoadSettings( m_savedSettings );
     m_router->UpdateSizes( m_savedSizes );
+
+    m_gridHelper = new GRID_HELPER( m_frame );
+    m_router->SetGrid( m_gridHelper );
+
     m_needsSync = false;
 
     if( getView() )
@@ -121,7 +132,7 @@ PNS_ITEM* PNS_TOOL_BASE::pickSingleItem( const VECTOR2I& aWhere, int aNet, int a
 
     PNS_ITEMSET candidates = m_router->QueryHoverItems( aWhere );
 
-    BOOST_FOREACH( PNS_ITEM* item, candidates.Items() )
+    for( PNS_ITEM* item : candidates.Items() )
     {
         if( !IsCopperLayer( item->Layers().Start() ) )
             continue;
@@ -269,7 +280,7 @@ void PNS_TOOL_BASE::updateEndItem( TOOL_EVENT& aEvent )
 
     std::vector<int> nets = m_router->GetCurrentNets();
 
-    BOOST_FOREACH( int net, nets )
+    for( int net : nets )
     {
         endItem = pickSingleItem( p, net, layer );
 

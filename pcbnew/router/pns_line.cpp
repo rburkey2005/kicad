@@ -18,7 +18,6 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
 
 #include <math/vector2d.h>
@@ -88,7 +87,7 @@ void PNS_LINE::Mark( int aMarker )
 
     if( m_segmentRefs )
     {
-        BOOST_FOREACH( PNS_SEGMENT* s, *m_segmentRefs )
+        for( PNS_SEGMENT* s : *m_segmentRefs )
             s->Mark( aMarker );
     }
 }
@@ -98,7 +97,7 @@ void PNS_LINE::Unmark()
 {
     if( m_segmentRefs )
     {
-        BOOST_FOREACH( PNS_SEGMENT* s, *m_segmentRefs )
+        for( PNS_SEGMENT* s : *m_segmentRefs )
             s->Unmark();
     }
 
@@ -112,7 +111,7 @@ int PNS_LINE::Marker() const
 
     if( m_segmentRefs )
     {
-        BOOST_FOREACH( PNS_SEGMENT* s, *m_segmentRefs )
+        for( PNS_SEGMENT* s : *m_segmentRefs )
         {
             marker |= s->Marker();
         }
@@ -417,7 +416,7 @@ SHAPE_LINE_CHAIN dragCornerInternal( const SHAPE_LINE_CHAIN& aOrigin, const VECT
 
     DIRECTION_45 dir( aOrigin.CPoint( -1 ) - aOrigin.CPoint( -2 ) );
 
-    return DIRECTION_45().BuildInitialTrace( aOrigin.CPoint( -1 ), aP, dir.IsDiagonal() );
+    return DIRECTION_45().BuildInitialTrace( aOrigin.CPoint( 0 ), aP, dir.IsDiagonal() );
 }
 
 
@@ -580,8 +579,8 @@ void PNS_LINE::DragSegment ( const VECTOR2I& aP, int aIndex, int aSnappingThresh
     s_next = path.CSegment( index + 1 );
     dragged = path.CSegment( index );
 
-    bool lockEndpointA = true;
-    bool lockEndpointB = true;
+    const bool lockEndpointA = true;
+    const bool lockEndpointB = true;
 
     if( aIndex == 0 )
     {
@@ -734,7 +733,7 @@ void PNS_LINE::SetRank( int aRank )
 
     if( m_segmentRefs )
     {
-        BOOST_FOREACH( PNS_SEGMENT* s, *m_segmentRefs )
+        for( PNS_SEGMENT* s : *m_segmentRefs )
             s->SetRank( aRank );
     }
 }
@@ -747,7 +746,7 @@ int PNS_LINE::Rank() const
 
     if( m_segmentRefs )
     {
-        BOOST_FOREACH( PNS_SEGMENT *s, *m_segmentRefs )
+        for( PNS_SEGMENT *s : *m_segmentRefs )
             min_rank = std::min( min_rank, s->Rank() );
         rank = ( min_rank == INT_MAX ) ? -1 : min_rank;
     }

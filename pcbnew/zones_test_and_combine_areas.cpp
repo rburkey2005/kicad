@@ -293,8 +293,8 @@ bool BOARD::CombineAreas( PICKED_ITEMS_LIST* aDeletedList, ZONE_CONTAINER* area_
     SHAPE_POLY_SET mergedOutlines = ConvertPolyListToPolySet( area_ref->Outline()->m_CornersList );
     SHAPE_POLY_SET areaToMergePoly = ConvertPolyListToPolySet( area_to_combine->Outline()->m_CornersList );
 
-    mergedOutlines.BooleanAdd( areaToMergePoly );
-    mergedOutlines.Simplify();
+    mergedOutlines.BooleanAdd( areaToMergePoly, SHAPE_POLY_SET::PM_FAST  );
+    mergedOutlines.Simplify( SHAPE_POLY_SET::PM_FAST );
 
     // We should have one polygon with hole
     // We can have 2 polygons with hole, if the 2 initial polygons have only one common corner
@@ -323,7 +323,6 @@ bool BOARD::CombineAreas( PICKED_ITEMS_LIST* aDeletedList, ZONE_CONTAINER* area_
 int BOARD::Test_Drc_Areas_Outlines_To_Areas_Outlines( ZONE_CONTAINER* aArea_To_Examine,
                                                       bool            aCreate_Markers )
 {
-    wxString    str;
     int         nerrors = 0;
 
     // iterate through all areas
@@ -508,8 +507,6 @@ bool DRC::doEdgeZoneDrc( ZONE_CONTAINER* aArea, int aCornerIndex )
 {
     if( !aArea->IsOnCopperLayer() )    // Cannot have a Drc error if not on copper layer
         return true;
-
-    wxString str;
 
     wxPoint  start = aArea->GetCornerPosition( aCornerIndex );
     wxPoint  end;

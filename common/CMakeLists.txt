@@ -1,14 +1,23 @@
 include_directories( BEFORE ${INC_BEFORE} )
 include_directories(
     ./dialogs
+    ./widgets
     ./dialog_about
     ${CAIRO_INCLUDE_DIR}
     ${GLEW_INCLUDE_DIR}
+    ${GLM_INCLUDE_DIR}
+    ${CURL_INCLUDE_DIRS}
     ../3d-viewer
     ../pcbnew
     ../polygon
     ${INC_AFTER}
     )
+
+
+if( NOT APPLE )     # windows and linux use openssl under curl
+    find_package( OpenSSL REQUIRED )
+endif()
+
 
 # Generate header files containing shader programs
 # Order of input files is significant
@@ -29,10 +38,13 @@ add_custom_target(
 
 set( GAL_SRCS
     # Common part
+    basic_gal.cpp
     draw_panel_gal.cpp
     painter.cpp
+    newstroke_font.cpp
     worksheet_viewitem.cpp
     origin_viewitem.cpp
+    gl_context_mgr.cpp
     gal/graphics_abstraction_layer.cpp
     gal/stroke_font.cpp
     gal/color4d.cpp
@@ -50,6 +62,7 @@ set( GAL_SRCS
     gal/opengl/vertex_manager.cpp
     gal/opengl/gpu_manager.cpp
     gal/opengl/opengl_compositor.cpp
+    gal/opengl/utils.cpp
 
     # Cairo GAL
     gal/cairo/cairo_gal.cpp
@@ -124,7 +137,7 @@ add_custom_target(
     version_header ALL
     COMMAND ${CMAKE_COMMAND}
         -DKICAD_BUILD_VERSION=${KICAD_BUILD_VERSION}
-        -DOUTPUT_FILE=${CMAKE_BINARY_DIR}/version.h
+        -DOUTPUT_FILE=${CMAKE_BINARY_DIR}/kicad_build_version.h
         -DSRC_PATH=${PROJECT_SOURCE_DIR}
         -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}
         -P ${CMAKE_MODULE_PATH}/WriteVersionHeader.cmake
@@ -136,6 +149,9 @@ set( COMMON_ABOUT_DLG_SRCS
     dialog_about/AboutDialog_main.cpp
     dialog_about/dialog_about.cpp
     dialog_about/dialog_about_base.cpp
+    )
+
+set( COMMON_DLG_SRCS
     dialogs/dialog_display_info_HTML_base.cpp
     dialogs/dialog_exit_base.cpp
     dialogs/dialog_image_editor.cpp
@@ -152,6 +168,10 @@ set( COMMON_ABOUT_DLG_SRCS
     dialogs/wx_html_report_panel.cpp
     )
 
+set( COMMON_WIDGET_SRCS
+    widgets/widget_hotkey_list.cpp
+    )
+
 set( COMMON_PAGE_LAYOUT_SRCS
     page_layout/title_block_shapes.cpp
     page_layout/class_worksheet_dataitem.cpp
@@ -165,6 +185,8 @@ set( COMMON_PAGE_LAYOUT_SRCS
 set( COMMON_SRCS
     ${LIB_KICAD_SRCS}
     ${COMMON_ABOUT_DLG_SRCS}
+    ${COMMON_DLG_SRCS}
+    ${COMMON_WIDGET_SRCS}
     ${COMMON_PAGE_LAYOUT_SRCS}
     base_struct.cpp
     basicframe.cpp
@@ -200,6 +222,7 @@ set( COMMON_SRCS
     dsnlexer.cpp
     eda_dde.cpp
     eda_doc.cpp
+    eda_pattern_match.cpp
     filter_reader.cpp
 #    findkicadhelppath.cpp.notused      deprecated, use searchhelpfilefullpath.cpp
     gestfich.cpp
@@ -216,9 +239,9 @@ set( COMMON_SRCS
     lockfile.cpp
     msgpanel.cpp
     netlist_keywords.cpp
-    newstroke_font.cpp
     prependpath.cpp
     project.cpp
+    properties.cpp
     ptree.cpp
     reporter.cpp
     richio.cpp
@@ -252,6 +275,9 @@ endif()
 
 set( COMMON_SRCS
     ${COMMON_SRCS}
+    kicad_curl/kicad_curl.cpp
+    kicad_curl/kicad_curl_easy.cpp
+
     view/view.cpp
     view/view_item.cpp
     view/view_group.cpp
@@ -273,11 +299,16 @@ set( COMMON_SRCS
     geometry/shape_poly_set.cpp
     geometry/shape_collisions.cpp
     geometry/shape_file_io.cpp
+    geometry/convex_hull.cpp
     )
 add_library( common STATIC ${COMMON_SRCS} )
 add_dependencies( common lib-dependencies )
 add_dependencies( common version_header )
-target_link_libraries( common ${Boost_LIBRARIES} )
+target_link_libraries( common
+    ${Boost_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${OPENSSL_LIBRARIES}        # empty on Apple
+    )
 
 
 set( PCB_COMMON_SRCS
@@ -472,3 +503,4 @@ target_link_libraries( dsntest common ${wxWidgets_LIBRARIES} rt )
 
 add_dependencies( dsntest lib-dependencies )
 
+target_link_libraries( pcbcommon 3d-viewer )

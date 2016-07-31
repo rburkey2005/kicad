@@ -24,7 +24,6 @@
 #include <component_tree_search_container.h>
 
 #include <algorithm>
-#include <boost/foreach.hpp>
 #include <set>
 
 #include <wx/string.h>
@@ -34,6 +33,8 @@
 
 #include <class_library.h>
 #include <macros.h>
+
+#include <eda_pattern_match.h>
 
 // Each node gets this lowest score initially, without any matches applied. Matches
 // will then increase this score depending on match quality.
@@ -111,8 +112,9 @@ COMPONENT_TREE_SEARCH_CONTAINER::COMPONENT_TREE_SEARCH_CONTAINER( PART_LIBS* aLi
 
 COMPONENT_TREE_SEARCH_CONTAINER::~COMPONENT_TREE_SEARCH_CONTAINER()
 {
-    BOOST_FOREACH( TREE_NODE* node, m_nodes )
+    for( TREE_NODE* node : m_nodes )
         delete node;
+
     m_nodes.clear();
 }
 
@@ -155,7 +157,7 @@ void COMPONENT_TREE_SEARCH_CONTAINER::AddAliasList( const wxString& aNodeName,
                                                aNodeName, wxEmptyString, wxEmptyString );
     m_nodes.push_back( lib_node );
 
-    BOOST_FOREACH( const wxString& aName, aAliasNameList )
+    for( const wxString& aName : aAliasNameList )
     {
         LIB_ALIAS* a;
 
@@ -223,14 +225,17 @@ LIB_ALIAS* COMPONENT_TREE_SEARCH_CONTAINER::GetSelectedAlias( int* aUnit )
 
     const wxTreeItemId& select_id = m_tree->GetSelection();
 
-    BOOST_FOREACH( TREE_NODE* node, m_nodes )
+    for( TREE_NODE* node : m_nodes )
     {
-        if( node->MatchScore > 0 && node->TreeId == select_id ) {
+        if( node->MatchScore > 0 && node->TreeId == select_id )
+        {
             if( aUnit && node->Unit > 0 )
                 *aUnit = node->Unit;
+
             return node->Alias;
         }
     }
+
     return NULL;
 }
 
@@ -249,6 +254,72 @@ static int matchPosScore(int aPosition, int aMaximum)
 }
 
 
+namespace
+{
+class EDA_COMBINED_MATCHER
+{
+public:
+    EDA_COMBINED_MATCHER( const wxString &aPattern )
+    {
+        // Whatever syntax users prefer, it shall be matched.
+        AddMatcher( aPattern, new EDA_PATTERN_MATCH_REGEX() );
+        AddMatcher( aPattern, new EDA_PATTERN_MATCH_WILDCARD() );
+        // If any of the above matchers couldn't be created because the pattern
+        // syntax does not match, the substring will try its best.
+        AddMatcher( aPattern, new EDA_PATTERN_MATCH_SUBSTR() );
+    }
+
+    ~EDA_COMBINED_MATCHER()
+    {
+        for( const EDA_PATTERN_MATCH* matcher : m_matchers )
+            delete matcher;
+    }
+
+    /*
+     * Look in all existing matchers, return the earliest match of any of
+     * the existing. Returns EDA_PATTERN_NOT_FOUND if no luck.
+     */
+    int Find( const wxString &aTerm, int *aMatchersTriggered )
+    {
+        int result = EDA_PATTERN_NOT_FOUND;
+
+        for( const EDA_PATTERN_MATCH* matcher : m_matchers )
+        {
+            int local_find = matcher->Find( aTerm );
+
+            if ( local_find != EDA_PATTERN_NOT_FOUND )
+            {
+                *aMatchersTriggered += 1;
+
+                if ( local_find < result || result == EDA_PATTERN_NOT_FOUND )
+                {
+                    result = local_find;
+                }
+            }
+        }
+
+        return result;
+    }
+
+private:
+    // Add matcher if it can compile the pattern.
+    void AddMatcher( const wxString &aPattern, EDA_PATTERN_MATCH *aMatcher )
+    {
+        if ( aMatcher->SetPattern( aPattern ) )
+        {
+            m_matchers.push_back( aMatcher );
+        }
+        else
+        {
+            delete aMatcher;
+        }
+    }
+
+    std::vector<const EDA_PATTERN_MATCH*> m_matchers;
+};
+}
+
+
 void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch )
 {
     if( m_tree == NULL )
@@ -264,7 +335,7 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
     // on an i5. Good enough, no index needed.
 
     // Initial AND condition: Leaf nodes are considered to match initially.
-    BOOST_FOREACH( TREE_NODE* node, m_nodes )
+    for( TREE_NODE* node : m_nodes )
     {
         node->PreviousScore = node->MatchScore;
         node->MatchScore = ( node->Type == TREE_NODE::TYPE_LIB ) ? 0 : kLowestDefaultScore;
@@ -286,8 +357,9 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
     while ( tokenizer.HasMoreTokens() )
     {
         const wxString term = tokenizer.GetNextToken().Lower();
+        EDA_COMBINED_MATCHER matcher( term );
 
-        BOOST_FOREACH( TREE_NODE* node, m_nodes )
+        for( TREE_NODE* node : m_nodes )
         {
             if( node->Type != TREE_NODE::TYPE_ALIAS )
                 continue;      // Only aliases are actually scored here.
@@ -299,17 +371,18 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
             // least two characters long. That avoids spurious, low quality
             // matches. Most abbreviations are at three characters long.
             int found_pos;
+            int matcher_fired = 0;
 
             if( term == node->MatchName )
                 node->MatchScore += 1000;  // exact match. High score :)
-            else if( (found_pos = node->MatchName.Find( term ) ) != wxNOT_FOUND )
+            else if( (found_pos = matcher.Find( node->MatchName, &matcher_fired ) ) != EDA_PATTERN_NOT_FOUND )
             {
                 // Substring match. The earlier in the string the better.  score += 20..40
                 node->MatchScore += matchPosScore( found_pos, 20 ) + 20;
             }
-            else if( node->Parent->MatchName.Find( term ) != wxNOT_FOUND )
+            else if( matcher.Find( node->Parent->MatchName, &matcher_fired ) != EDA_PATTERN_NOT_FOUND )
                 node->MatchScore += 19;   // parent name matches.         score += 19
-            else if( ( found_pos = node->SearchText.Find( term ) ) != wxNOT_FOUND )
+            else if( ( found_pos = matcher.Find( node->SearchText, &matcher_fired ) ) != EDA_PATTERN_NOT_FOUND )
             {
                 // If we have a very short search term (like one or two letters), we don't want
                 // to accumulate scores if they just happen to be in keywords or description as
@@ -322,6 +395,8 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
             }
             else
                 node->MatchScore = 0;    // No match. That's it for this item.
+
+            node->MatchScore += 2 * matcher_fired;
         }
     }
 
@@ -330,7 +405,7 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
     unsigned highest_score_seen = 0;
     bool any_change = false;
 
-    BOOST_FOREACH( TREE_NODE* node, m_nodes )
+    for( TREE_NODE* node : m_nodes )
     {
         switch( node->Type )
         {
@@ -371,7 +446,7 @@ void COMPONENT_TREE_SEARCH_CONTAINER::UpdateSearchTerm( const wxString& aSearch 
     const TREE_NODE* first_match = NULL;
     const TREE_NODE* preselected_node = NULL;
 
-    BOOST_FOREACH( TREE_NODE* node, m_nodes )
+    for( TREE_NODE* node : m_nodes )
     {
         if( node->MatchScore == 0 )
             continue;

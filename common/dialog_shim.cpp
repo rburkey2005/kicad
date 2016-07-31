@@ -1,9 +1,8 @@
-
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2012 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 2012-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -70,6 +69,9 @@ DIALOG_SHIM::DIALOG_SHIM( wxWindow* aParent, wxWindowID id, const wxString& titl
     if( h )
         SetKiway( this, &h->Kiway() );
 
+    Bind( wxEVT_CLOSE_WINDOW, &DIALOG_SHIM::OnCloseWindow, this );
+    Bind( wxEVT_BUTTON, &DIALOG_SHIM::OnButton, this );
+
 #ifdef __WINDOWS__
     // On Windows, the app top windows can be brought to the foreground
     // (at least temporary) in certain circumstances,
@@ -95,6 +97,33 @@ DIALOG_SHIM::~DIALOG_SHIM()
         EndQuasiModal( wxID_CANCEL );
 
     delete m_qmodal_parent_disabler;    // usually NULL by now
+}
+
+void DIALOG_SHIM::FinishDialogSettings()
+{
+    // must be called from the constructor of derived classes,
+    // when all widgets are initialized, and therefore their size fixed
+
+    // SetSizeHints fixes the minimal size of sizers in the dialog
+    // (SetSizeHints calls Fit(), so no need to call it)
+    GetSizer()->SetSizeHints( this );
+
+    // the default position, when calling the first time the dlg
+    Center();
+}
+
+void DIALOG_SHIM::FixOSXCancelButtonIssue()
+{
+#ifdef  __WXMAC__
+    // A ugly hack to fix an issue on OSX: ctrl+c closes the dialog instead of
+    // copying a text if a  button with wxID_CANCEL is used in a wxStdDialogButtonSizer
+    // created by wxFormBuilder: the label is &Cancel, and this accelerator key has priority
+    // to copy text standard accelerator, and the dlg is closed when trying to copy text
+    wxButton* button = dynamic_cast< wxButton* > ( wxWindow::FindWindowById( wxID_CANCEL, this ) );
+
+    if( button )
+        button->SetLabel( _( "Cancel" ) );
+#endif
 }
 
 
@@ -233,72 +262,6 @@ void DIALOG_SHIM::onInit( wxInitDialogEvent& aEvent )
     you want to use KIWAY_PLAYER::ShowModal() from a dialog event.
 */
 
-
-#if !wxCHECK_VERSION( 2, 9, 4 )
-wxWindow* DIALOG_SHIM::CheckIfCanBeUsedAsParent( wxWindow* parent ) const
-{
-    if ( !parent )
-        return NULL;
-
-    extern WXDLLIMPEXP_DATA_BASE(wxList) wxPendingDelete;
-
-    if ( wxPendingDelete.Member(parent) || parent->IsBeingDeleted() )
-    {
-        // this window is being deleted and we shouldn't create any children
-        // under it
-        return NULL;
-    }
-
-    if ( parent->GetExtraStyle() & wxWS_EX_TRANSIENT )
-    {
-        // this window is not being deleted yet but it's going to disappear
-        // soon so still don't parent this window under it
-        return NULL;
-    }
-
-    if ( !parent->IsShownOnScreen() )
-    {
-        // using hidden parent won't work correctly neither
-        return NULL;
-    }
-
-    // FIXME-VC6: this compiler requires an explicit const cast or it fails
-    //            with error C2446
-    if ( const_cast<const wxWindow *>(parent) == this )
-    {
-        // not sure if this can really happen but it doesn't hurt to guard
-        // against this clearly invalid situation
-        return NULL;
-    }
-
-    return parent;
-}
-
-
-wxWindow* DIALOG_SHIM::GetParentForModalDialog(wxWindow *parent, long style) const
-{
-    // creating a parent-less modal dialog will result (under e.g. wxGTK2)
-    // in an unfocused dialog, so try to find a valid parent for it unless we
-    // were explicitly asked not to
-    if ( style & wxDIALOG_NO_PARENT )
-        return NULL;
-
-    // first try the given parent
-    if ( parent )
-        parent = CheckIfCanBeUsedAsParent(wxGetTopLevelParent(parent));
-
-    // then the currently active window
-    if ( !parent )
-        parent = CheckIfCanBeUsedAsParent(
-                    wxGetTopLevelParent(wxGetActiveWindow()));
-
-    // and finally the application main window
-    if ( !parent )
-        parent = CheckIfCanBeUsedAsParent(wxTheApp->GetTopWindow());
-
-    return parent;
-}
-#endif
 
 
 /*
@@ -571,6 +534,11 @@ int DIALOG_SHIM::ShowQuasiModal()
 
 void DIALOG_SHIM::EndQuasiModal( int retCode )
 {
+    // Hook up validator and transfer data from controls handling so quasi-modal dialogs
+    // handle validation in the same way as other dialogs.
+    if( ( retCode == wxID_OK ) && ( !Validate() || !TransferDataFromWindow() ) )
+        return;
+
     SetReturnCode( retCode );
 
     if( !IsQuasiModal() )
@@ -583,14 +551,11 @@ void DIALOG_SHIM::EndQuasiModal( int retCode )
 
     if( m_qmodal_loop )
     {
-#if wxCHECK_VERSION( 2, 9, 4 )  // 2.9.4 is only approximate, might be 3, 0, 0.
         if( m_qmodal_loop->IsRunning() )
             m_qmodal_loop->Exit( 0 );
         else
             m_qmodal_loop->ScheduleExit( 0 );
-#else
-        m_qmodal_loop->Exit( 0 );
-#endif
+
         m_qmodal_loop = NULL;
     }
 
@@ -598,4 +563,57 @@ void DIALOG_SHIM::EndQuasiModal( int retCode )
     m_qmodal_parent_disabler = 0;
 
     Show( false );
+}
+
+
+void DIALOG_SHIM::OnCloseWindow( wxCloseEvent& aEvent )
+{
+    if( IsQuasiModal() )
+    {
+        EndQuasiModal( wxID_CANCEL );
+        return;
+    }
+
+    // This is mandatory to allow wxDialogBase::OnCloseWindow() to be called.
+    aEvent.Skip();
+}
+
+
+void DIALOG_SHIM::OnButton( wxCommandEvent& aEvent )
+{
+    if( IsQuasiModal() )
+    {
+        const int id = aEvent.GetId();
+
+        if( id == GetAffirmativeId() )
+        {
+            EndQuasiModal( id );
+        }
+        else if( id == wxID_APPLY )
+        {
+            // Dialogs that provide Apply buttons should make sure data is valid before
+            // allowing a transfer, as there is no other way to indicate failure
+            // (i.e. the dialog can't refuse to close as it might with OK, because it
+            // isn't closing anyway)
+            if( Validate() )
+            {
+                bool success = TransferDataFromWindow();
+                (void) success;
+            }
+        }
+        else if( id == GetEscapeId() ||
+                 (id == wxID_CANCEL && GetEscapeId() == wxID_ANY) )
+        {
+            EndQuasiModal( wxID_CANCEL );
+        }
+        else // not a standard button
+        {
+            aEvent.Skip();
+        }
+
+        return;
+    }
+
+    // This is mandatory to allow wxDialogBase::OnButton() to be called.
+    aEvent.Skip();
 }

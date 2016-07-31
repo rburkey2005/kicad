@@ -68,9 +68,15 @@ static void ShowBoundingBoxMicroWaveInductor( EDA_DRAW_PANEL* aPanel,
                                               bool            aErase );
 
 
-int         BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
+static int  BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
                                       wxPoint aStartPoint, wxPoint aEndPoint,
                                       int aLength, int aWidth );
+
+/**
+ * Creates a self-shaped coil for microwave applications.
+ */
+static MODULE* CreateMicrowaveInductor( PCB_EDIT_FRAME* aPcbFrame, wxString& aErrorMessage );
+
 
 class MUWAVE_INDUCTOR
 {
@@ -78,7 +84,7 @@ public:
     wxPoint m_Start;
     wxPoint m_End;
     wxSize  m_Size;
-    int     m_lenght;       // full length trace.
+    int     m_length;       // full length trace.
     int     m_Width;        // Trace width.
     // A flag set to true when mu-wave inductor is being created
     bool    m_Flag;
@@ -95,7 +101,7 @@ static void ShowBoundingBoxMicroWaveInductor( EDA_DRAW_PANEL* aPanel, wxDC* aDC,
                                               const wxPoint& aPosition, bool aErase )
 {
     /* Calculate the orientation and size of the box containing the inductor:
-     * the box is a rectangle with height = lenght/2
+     * the box is a rectangle with height = length/2
      * the shape is defined by a rectangle, nor necessary horizontal or vertical
      */
     GRSetDrawMode( aDC, GR_XOR );
@@ -155,7 +161,28 @@ void PCB_EDIT_FRAME::Begin_Self( wxDC* DC )
 {
     if( s_inductor_pattern.m_Flag )
     {
-        Genere_Self( DC );
+        m_canvas->CallMouseCapture( DC, wxDefaultPosition, false );
+        m_canvas->SetMouseCapture( NULL, NULL );
+
+        wxString errorMessage;
+
+        // Prepare parameters for inductor
+        // s_inductor_pattern.m_Start is already initialized,
+        // when s_inductor_pattern.m_Flag == false
+        s_inductor_pattern.m_Width = GetDesignSettings().GetCurrentTrackWidth();
+        s_inductor_pattern.m_End = GetCrossHairPosition();
+
+        MODULE* footprint = CreateMicrowaveInductor( this, errorMessage );
+
+        if( footprint )
+        {
+            SetMsgPanel( footprint );
+            footprint->Draw( m_canvas, DC, GR_OR );
+        }
+
+        else if( !errorMessage.IsEmpty() )
+            DisplayError( this, errorMessage );
+
         return;
     }
 
@@ -173,69 +200,92 @@ void PCB_EDIT_FRAME::Begin_Self( wxDC* DC )
 }
 
 
-MODULE* PCB_EDIT_FRAME::Genere_Self( wxDC* DC )
+
+MODULE* CreateMicrowaveInductor( PCB_EDIT_FRAME* aPcbFrame, wxString& aErrorMessage )
 {
+    /* Build a microwave inductor footprint.
+     * - Length Mself.lng
+     * - Extremities Mself.m_Start and Mself.m_End
+     * We must determine:
+     * Mself.nbrin = number of segments perpendicular to the direction
+     * (The coil nbrin will demicercles + 1 + 2 1 / 4 circle)
+     * Mself.lbrin = length of a strand
+     * Mself.radius = radius of rounded parts of the coil
+     * Mself.delta = segments extremities connection between him and the coil even
+     *
+     * The equations are
+     * Mself.m_Size.x = 2 * Mself.radius + Mself.lbrin
+     * Mself.m_Size.y * Mself.delta = 2 + 2 * Mself.nbrin * Mself.radius
+     * Mself.lng = 2 * Mself.delta / / connections to the coil
+     + (Mself.nbrin-2) * Mself.lbrin / / length of the strands except 1st and last
+     + (Mself.nbrin 1) * (PI * Mself.radius) / / length of rounded
+     * Mself.lbrin + / 2 - Melf.radius * 2) / / length of 1st and last bit
+     *
+     * The constraints are:
+     * Nbrin >= 2
+     * Mself.radius < Mself.m_Size.x
+     * Mself.m_Size.y = Mself.radius * 4 + 2 * Mself.raccord
+     * Mself.lbrin> Mself.radius * 2
+     *
+     * The calculation is conducted in the following way:
+     * Initially:
+     * Nbrin = 2
+     * Radius = 4 * m_Size.x (arbitrarily fixed value)
+     * Then:
+     * Increasing the number of segments to the desired length
+     * (Radius decreases if necessary)
+     */
+
     D_PAD*   pad;
     int      ll;
     wxString msg;
 
-    m_canvas->CallMouseCapture( DC, wxDefaultPosition, false );
-    m_canvas->SetMouseCapture( NULL, NULL );
-
-    if( s_inductor_pattern.m_Flag == false )
-    {
-        DisplayError( this, wxT( "Starting point not init.." ) );
-        return NULL;
-    }
+    wxASSERT( s_inductor_pattern.m_Flag );
 
     s_inductor_pattern.m_Flag = false;
 
-    s_inductor_pattern.m_End = GetCrossHairPosition();
-
     wxPoint pt = s_inductor_pattern.m_End - s_inductor_pattern.m_Start;
     int     min_len = KiROUND( EuclideanNorm( pt ) );
-    s_inductor_pattern.m_lenght = min_len;
+    s_inductor_pattern.m_length = min_len;
 
     // Enter the desired length.
-    msg = StringFromValue( g_UserUnit, s_inductor_pattern.m_lenght );
-    wxTextEntryDialog dlg( this, wxEmptyString, _( "Length of Trace:" ), msg );
+    msg = StringFromValue( g_UserUnit, s_inductor_pattern.m_length );
+    wxTextEntryDialog dlg( NULL, wxEmptyString, _( "Length of Trace:" ), msg );
 
     if( dlg.ShowModal() != wxID_OK )
         return NULL; // canceled by user
 
     msg = dlg.GetValue();
-    s_inductor_pattern.m_lenght = ValueFromString( g_UserUnit, msg );
+    s_inductor_pattern.m_length = ValueFromString( g_UserUnit, msg );
 
     // Control values (ii = minimum length)
-    if( s_inductor_pattern.m_lenght < min_len )
+    if( s_inductor_pattern.m_length < min_len )
     {
-        DisplayError( this, _( "Requested length < minimum length" ) );
+        aErrorMessage = _( "Requested length < minimum length" );
         return NULL;
     }
 
     // Calculate the elements.
-    s_inductor_pattern.m_Width = GetDesignSettings().GetCurrentTrackWidth();
-
     std::vector <wxPoint> buffer;
     ll = BuildCornersList_S_Shape( buffer, s_inductor_pattern.m_Start,
-                                   s_inductor_pattern.m_End, s_inductor_pattern.m_lenght,
+                                   s_inductor_pattern.m_End, s_inductor_pattern.m_length,
                                    s_inductor_pattern.m_Width );
 
     if( !ll )
     {
-        DisplayError( this, _( "Requested length too large" ) );
+        aErrorMessage = _( "Requested length too large" );
         return NULL;
     }
 
     // Generate footprint. the value is also used as footprint name.
     msg.Empty();
-    wxTextEntryDialog cmpdlg( this, wxEmptyString, _( "Component Value:" ), msg );
+    wxTextEntryDialog cmpdlg( NULL, wxEmptyString, _( "Component Value:" ), msg );
     cmpdlg.SetTextValidator( FILE_NAME_CHAR_VALIDATOR( &msg ) );
 
     if( ( cmpdlg.ShowModal() != wxID_OK ) || msg.IsEmpty() )
         return NULL;    //  Aborted by user
 
-    MODULE* module = CreateNewModule( msg );
+    MODULE* module = aPcbFrame->CreateNewModule( msg );
 
     // here the module is already in the BOARD, CreateNewModule() does that.
     module->SetFPID( FPID( std::string( "mw_inductor" ) ) );
@@ -283,8 +333,6 @@ MODULE* PCB_EDIT_FRAME::Genere_Self( wxDC* DC )
     pad->SetPos0( pad->GetPosition() - module->GetPosition() );
 
     // Modify text positions.
-    SetMsgPanel( module );
-
     wxPoint refPos( ( s_inductor_pattern.m_Start.x + s_inductor_pattern.m_End.x ) / 2,
                     ( s_inductor_pattern.m_Start.y + s_inductor_pattern.m_End.y ) / 2 );
 
@@ -296,8 +344,6 @@ MODULE* PCB_EDIT_FRAME::Genere_Self( wxDC* DC )
     module->Value().SetPosition( valPos );
 
     module->CalculateBoundingBox();
-    module->Draw( m_canvas, DC, GR_OR );
-
     return module;
 }
 
@@ -350,7 +396,7 @@ static void gen_arc( std::vector <wxPoint>& aBuffer,
  * @param  aBuffer =  a buffer where to store points (ends of segments)
  * @param  aStartPoint = starting point of the path
  * @param  aEndPoint = ending point of the path
- * @param  aLength = full lenght of the path
+ * @param  aLength = full length of the path
  * @param  aWidth = segment width
  */
 int BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
@@ -367,7 +413,7 @@ int BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
  * The equations are (assuming the area size of the entire shape is Size:
  * Size.x = 2 * radius + segm_len
  * Size.y = (segm_count + 2 ) * 2 * radius + 2 * stubs_len
- * s_inductor_pattern.m_lenght = 2 * delta // connections to the coil
+ * s_inductor_pattern.m_length = 2 * delta // connections to the coil
  *             + (segm_count-2) * segm_len      // length of the strands except 1st and last
  *             + (segm_count) * (PI * radius)   // length of rounded
  * segm_len + / 2 - radius * 2)                 // length of 1st and last bit
@@ -402,7 +448,7 @@ int BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
     double  angle    = -ArcTangente( pt.y, pt.x );
     int     min_len  = KiROUND( EuclideanNorm( pt ) );
     int     segm_len = 0;           // length of segments
-    int     full_len;               // full len of shape (sum of lenght of all segments + arcs)
+    int     full_len;               // full len of shape (sum of length of all segments + arcs)
 
 
     /* Note: calculations are made for a vertical coil (more easy calculations)
@@ -421,7 +467,7 @@ int BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
 
     int segm_count;     // number of full len segments
                         // the half size segments (first and last segment) are not counted here
-    int stubs_len = 0;  // lenght of first or last segment (half size of others segments)
+    int stubs_len = 0;  // length of first or last segment (half size of others segments)
 
     for( segm_count = 0; ; segm_count++ )
     {
@@ -508,7 +554,8 @@ int BuildCornersList_S_Shape( std::vector <wxPoint>& aBuffer,
     pt        = aBuffer.back();
     centre    = pt;
     centre.y += radius;
-    gen_arc( aBuffer, pt, centre, 900 * sign );    pt = aBuffer.back();
+    gen_arc( aBuffer, pt, centre, 900 * sign );
+    aBuffer.back();
 
     // Rotate point
     angle += 900;
@@ -970,7 +1017,7 @@ MODULE* PCB_EDIT_FRAME::Create_MuWavePolygonShape()
     pad1->SetX0( offset.x );
     pad1->SetX( pad1->GetPos0().x );
 
-    pad2 = (D_PAD*) pad1->Next();
+    pad2 = pad1->Next();
     pad2->SetX0( offset.x + ShapeSize.x );
     pad2->SetX( pad2->GetPos0().x );
 
@@ -988,7 +1035,7 @@ MODULE* PCB_EDIT_FRAME::Create_MuWavePolygonShape()
     // Init start point coord:
     polyPoints.push_back( wxPoint( offset.x, 0 ) );
 
-    wxPoint first_coordinate, last_coordinate;
+    wxPoint last_coordinate;
 
     for( unsigned ii = 0; ii < PolyEdges.size(); ii++ )  // Copy points
     {
@@ -1001,8 +1048,6 @@ MODULE* PCB_EDIT_FRAME::Create_MuWavePolygonShape()
     // finish the polygonal shape
     if( last_coordinate.y != 0 )
         polyPoints.push_back( wxPoint( last_coordinate.x, 0 ) );
-
-    first_coordinate.y = polyPoints[1].y;
 
     switch( PolyShapeType )
     {
@@ -1051,7 +1096,7 @@ void PCB_EDIT_FRAME::Edit_Gap( wxDC* DC, MODULE* aModule )
         return;
     }
 
-    next_pad = (D_PAD*) pad->Next();
+    next_pad = pad->Next();
 
     if( next_pad == NULL )
     {

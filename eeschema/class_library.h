@@ -37,6 +37,8 @@
 
 #include <project.h>
 
+#include <map>
+
 class LINE_READER;
 class OUTPUTFORMATTER;
 
@@ -169,7 +171,7 @@ struct AliasMapSort
 {
     bool operator() ( const wxString& aItem1, const wxString& aItem2 ) const
     {
-        return Cmp_KEEPCASE( aItem1, aItem2 ) < 0;
+        return aItem1 < aItem2;
     }
 };
 
@@ -308,7 +310,7 @@ public:
      * @param aEntryName - Name of entry to search for (case sensitive).
      * @param aEntries - a std::vector to store entries
      */
-    void FindLibraryEntries( const wxString& aEntryName, std::vector<LIB_ALIAS*>& aEntries );
+    // void FindLibraryEntries( const wxString& aEntryName, std::vector<LIB_ALIAS*>& aEntries );
 
     /**
      * Function FindLibraryNearEntries
@@ -326,14 +328,7 @@ public:
     void FindLibraryNearEntries( std::vector<LIB_ALIAS*>& aCandidates, const wxString& aEntryName,
             const wxString& aLibraryName = wxEmptyString );
 
-    /**
-     * Function RemoveCacheLibrary
-     * removes all cache libraries from library list.
-     */
-    //void RemoveCacheLibrary();
-
     int GetLibraryCount() { return size(); }
-
 };
 
 
@@ -438,47 +433,15 @@ public:
      * Load a string array with the names of all the entries in this library.
      *
      * @param aNames - String array to place entry names into.
-     * @param aSort - Sort names if true.
-     * @param aMakeUpperCase - Force entry names to upper case.
      */
-    void GetEntryNames( wxArrayString& aNames, bool aSort = true,
-                        bool aMakeUpperCase = false );
+    void GetEntryNames( wxArrayString& aNames );
 
     /**
      * Load a string array with the names of  entries of type POWER in this library.
      *
      * @param aNames - String array to place entry names into.
-     * @param aSort - Sort names if true.
-     * @param aMakeUpperCase - Force entry names to upper case.
      */
-    void GetEntryTypePowerNames( wxArrayString& aNames, bool aSort = true,
-                        bool aMakeUpperCase = false );
-
-    /**
-     * Load string array with entry names matching name and/or key word.
-     *
-     * This currently mimics the old behavior of calling KeyWordOk() and
-     * WildCompareString().  The names array will be populated with the
-     * library entry names that meat the search criteria on exit.
-     *
-     * @param aNames - String array to place entry names into.
-     * @param aNameSearch - Name wild card search criteria.
-     * @param aKeySearch - Key word search criteria.
-     * @param aSort - Sort names if true.
-     */
-    void SearchEntryNames( std::vector<wxArrayString>& aNames,
-                           const wxString& aNameSearch = wxEmptyString,
-                           const wxString& aKeySearch = wxEmptyString,
-                           bool aSort = true );
-
-    /**
-     * Find parts in library by key word regular expression search.
-     *
-     * @param aNames - String array to place found part names into.
-     * @param aRe - Regular expression used to search part key words.
-     * @param aSort - Sort part name list.
-     */
-    void SearchEntryNames( wxArrayString& aNames, const wxRegEx& aRe, bool aSort = true );
+    void GetEntryTypePowerNames( wxArrayString& aNames );
 
     /**
      * Checks \a aPart for name conflict in the library.

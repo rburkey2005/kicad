@@ -30,18 +30,18 @@
 #include <confirm.h>
 #include <gestfich.h>
 #include <wildcards_and_files_ext.h>
-
-#include <bitmap2cmp_gui_base.h>
-#include <bitmap2component.h>
-
-#include <potracelib.h>
 #include <bitmap_io.h>
-
 #include <colors_selection.h>
 #include <build_version.h>
 #include <menus_helpers.h>
 #include <kiway.h>
 #include <kiface_i.h>
+
+#include <potracelib.h>
+
+#include "bitmap2component.h"
+
+#include "bitmap2cmp_gui_base.h"
 
 
 #define KEYWORD_FRAME_POSX          wxT( "Bmconverter_Pos_x" )
@@ -672,15 +672,7 @@ static struct IFACE : public KIFACE_I
 
     wxWindow* CreateWindow( wxWindow* aParent, int aClassId, KIWAY* aKiway, int aCtlBits = 0 )
     {
-        switch( aClassId )
-        {
-
-        default:
-            {
-                KIWAY_PLAYER* frame = new BM2CMP_FRAME( aKiway, aParent );
-                return frame;
-            }
-        }
+        return new BM2CMP_FRAME( aKiway, aParent );
     }
 
     /**
@@ -719,7 +711,7 @@ KIFACE_I& Kiface()
 
 // KIFACE_GETTER's actual spelling is a substitution macro found in kiway.h.
 // KIFACE_GETTER will not have name mangling due to declaration in kiway.h.
-MY_API( KIFACE* ) KIFACE_GETTER( int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram )
+KIFACE* KIFACE_GETTER( int* aKIFACEversion, int aKIWAYversion, PGM_BASE* aProgram )
 {
     process = (PGM_BASE*) aProgram;
     return &kiface;

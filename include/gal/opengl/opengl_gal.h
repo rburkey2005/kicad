@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2012 Torsten Hueter, torstenhtr <at> gmx.de
  * Copyright (C) 2012 Kicad Developers, see change_log.txt for contributors.
- * Copyright (C) 2013-2015 CERN
+ * Copyright (C) 2013-2016 CERN
  * @author Maciej Suminski <maciej.suminski@cern.ch>
  *
  * Graphics Abstraction Layer (GAL) for OpenGL
@@ -34,14 +34,15 @@
 #include <gal/opengl/shader.h>
 #include <gal/opengl/vertex_manager.h>
 #include <gal/opengl/vertex_item.h>
+#include <gal/opengl/cached_container.h>
 #include <gal/opengl/noncached_container.h>
 #include <gal/opengl/opengl_compositor.h>
 
 #include <wx/glcanvas.h>
 
 #include <map>
-#include <boost/smart_ptr/shared_ptr.hpp>
 #include <boost/smart_ptr/shared_array.hpp>
+#include <memory>
 
 #ifndef CALLBACK
 #define CALLBACK
@@ -50,6 +51,7 @@
 namespace KIGFX
 {
 class SHADER;
+
 
 /**
  * @brief Class OpenGL_GAL is the OpenGL implementation of the Graphics Abstraction Layer.
@@ -61,7 +63,6 @@ class SHADER;
 class OPENGL_GAL : public GAL, public wxGLCanvas
 {
 public:
-
     /**
      * @brief Constructor OPENGL_GAL
      *
@@ -82,8 +83,13 @@ public:
 
     virtual ~OPENGL_GAL();
 
-   /// @copydoc GAL::IsInitialized()
+    /// @copydoc GAL::IsInitialized()
     virtual bool IsInitialized() const { return IsShownOnScreen(); }
+
+    ///> @copydoc GAL::IsVisible()
+    bool IsVisible() const override {
+        return IsShownOnScreen();
+    }
 
     // ---------------
     // Drawing methods
@@ -94,6 +100,12 @@ public:
 
     /// @copydoc GAL::EndDrawing()
     virtual void EndDrawing();
+
+    /// @copydoc GAL::BeginUpdate()
+    virtual void BeginUpdate();
+
+    /// @copydoc GAL::EndUpdate()
+    virtual void EndUpdate();
 
     /// @copydoc GAL::DrawLine()
     virtual void DrawLine( const VECTOR2D& aStartPoint, const VECTOR2D& aEndPoint );
@@ -113,14 +125,23 @@ public:
     virtual void DrawRectangle( const VECTOR2D& aStartPoint, const VECTOR2D& aEndPoint );
 
     /// @copydoc GAL::DrawPolyline()
-    virtual void DrawPolyline( std::deque<VECTOR2D>& aPointList );
+    virtual void DrawPolyline( const std::deque<VECTOR2D>& aPointList );
+    virtual void DrawPolyline( const VECTOR2D aPointList[], int aListSize );
 
     /// @copydoc GAL::DrawPolygon()
     virtual void DrawPolygon( const std::deque<VECTOR2D>& aPointList );
+    virtual void DrawPolygon( const VECTOR2D aPointList[], int aListSize );
 
     /// @copydoc GAL::DrawCurve()
     virtual void DrawCurve( const VECTOR2D& startPoint, const VECTOR2D& controlPointA,
                             const VECTOR2D& controlPointB, const VECTOR2D& endPoint );
+
+    /// @copydoc GAL::BitmapText()
+    virtual void BitmapText( const wxString& aText, const VECTOR2D& aPosition,
+                             double aRotationAngle );
+
+    /// @copydoc GAL::DrawGrid()
+    virtual void DrawGrid();
 
     // --------------
     // Screen methods
@@ -245,9 +266,6 @@ public:
         std::deque< boost::shared_array<GLdouble> >& intersectPoints;
     } TessParams;
 
-protected:
-    virtual void drawGridLine( const VECTOR2D& aStartPoint, const VECTOR2D& aEndPoint );
-
 private:
     /// Super class definition
     typedef GAL super;
@@ -255,31 +273,36 @@ private:
     static const int    CIRCLE_POINTS   = 64;   ///< The number of points for circle approximation
     static const int    CURVE_POINTS    = 32;   ///< The number of points for curve approximation
 
-    wxClientDC*             clientDC;               ///< Drawing context
-    static wxGLContext*     glContext;              ///< OpenGL context of wxWidgets
+    static wxGLContext*     glMainContext;      ///< Parent OpenGL context
+    wxGLContext*            glPrivContext;      ///< Canvas-specific OpenGL context
+    static int              instanceCounter;    ///< GL GAL instance counter
     wxEvtHandler*           mouseListener;
     wxEvtHandler*           paintListener;
 
+    static GLuint fontTexture;                  ///< Bitmap font texture handle (shared)
+
     // Vertex buffer objects related fields
-    typedef std::map< unsigned int, boost::shared_ptr<VERTEX_ITEM> > GROUPS_MAP;
+    typedef std::map< unsigned int, std::shared_ptr<VERTEX_ITEM> > GROUPS_MAP;
     GROUPS_MAP              groups;                 ///< Stores informations about VBO objects (groups)
     unsigned int            groupCounter;           ///< Counter used for generating keys for groups
     VERTEX_MANAGER*         currentManager;         ///< Currently used VERTEX_MANAGER (for storing VERTEX_ITEMs)
-    VERTEX_MANAGER          cachedManager;          ///< Container for storing cached VERTEX_ITEMs
-    VERTEX_MANAGER          nonCachedManager;       ///< Container for storing non-cached VERTEX_ITEMs
-    VERTEX_MANAGER          overlayManager;         ///< Container for storing overlaid VERTEX_ITEMs
+    VERTEX_MANAGER*         cachedManager;          ///< Container for storing cached VERTEX_ITEMs
+    VERTEX_MANAGER*         nonCachedManager;       ///< Container for storing non-cached VERTEX_ITEMs
+    VERTEX_MANAGER*         overlayManager;         ///< Container for storing overlaid VERTEX_ITEMs
 
     // Framebuffer & compositing
-    OPENGL_COMPOSITOR       compositor;             ///< Handles multiple rendering targets
+    OPENGL_COMPOSITOR*      compositor;             ///< Handles multiple rendering targets
     unsigned int            mainBuffer;             ///< Main rendering target
     unsigned int            overlayBuffer;          ///< Auxiliary rendering target (for menus etc.)
     RENDER_TARGET           currentTarget;          ///< Current rendering target
 
     // Shader
-    SHADER                  shader;         ///< There is only one shader used for different objects
+    static SHADER*          shader;                 ///< There is only one shader used for different objects
 
     // Internal flags
     bool                    isFramebufferInitialized;   ///< Are the framebuffers initialized?
+    static bool             isBitmapFontLoaded;         ///< Is the bitmap font texture loaded?
+    bool                    isBitmapFontInitialized;    ///< Is the shader set to use bitmap fonts?
     bool                    isGrouping;                 ///< Was a group started?
 
     // Polygon tesselation
@@ -327,6 +350,35 @@ private:
      */
     void drawStrokedSemiCircle( const VECTOR2D& aCenterPoint, double aRadius, double aAngle );
 
+    /**
+     * @brief Draws a single character using bitmap font.
+     * Its main purpose is to be used in BitmapText() function.
+     *
+     * @param aCharacter is the character to be drawn.
+     * @return Width of the drawn glyph.
+     */
+    int drawBitmapChar( unsigned long aChar );
+
+    /**
+     * @brief Draws an overbar over the currently drawn text.
+     * Its main purpose is to be used in BitmapText() function.
+     * This method requires appropriate scaling to be applied (as is done in BitmapText() function).
+     * The current X coordinate will be the overbar ending.
+     *
+     * @param aLength is the width of the overbar.
+     * @param aHeight is the height for the overbar.
+     */
+    void drawBitmapOverbar( double aLength, double aHeight );
+
+    /**
+     * @brief Computes a size of text drawn using bitmap font with current text setting applied.
+     *
+     * @param aText is the text to be drawn.
+     * @return Pair containing text bounding box and common Y axis offset. The values are expressed
+     * as a number of pixels on the bitmap font texture and need to be scaled before drawing.
+     */
+    std::pair<VECTOR2D, int> computeBitmapTextSize( const wxString& aText ) const;
+
     // Event handling
     /**
      * @brief This is the OnPaint event handler.
@@ -364,7 +416,7 @@ private:
     class OPENGL_TEST: public wxGLCanvas
     {
     public:
-        OPENGL_TEST( wxDialog* aParent, OPENGL_GAL* aGal );
+        OPENGL_TEST( wxDialog* aParent, OPENGL_GAL* aGal, wxGLContext* aContext );
 
         void Render( wxPaintEvent& aEvent );
         void OnTimeout( wxTimerEvent& aEvent );
@@ -379,6 +431,7 @@ private:
 
         wxDialog* m_parent;
         OPENGL_GAL* m_gal;
+        wxGLContext* m_context;
         bool m_tested;
         bool m_result;
         std::string m_error;

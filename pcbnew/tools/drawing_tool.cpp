@@ -39,6 +39,7 @@
 #include <gal/graphics_abstraction_layer.h>
 #include <tool/tool_manager.h>
 #include <router/direction.h>
+#include <ratsnest_data.h>
 
 #include <class_board.h>
 #include <class_edge_mod.h>
@@ -234,7 +235,7 @@ int DRAWING_TOOL::PlaceText( const TOOL_EVENT& aEvent )
 int DRAWING_TOOL::DrawDimension( const TOOL_EVENT& aEvent )
 {
     DIMENSION* dimension = NULL;
-    int width, maxThickness;
+    int maxThickness;
 
     // if one day it is possible to draw dimensions in the footprint editor,
     // then hereby I'm letting you know that this tool does not handle UR_MODEDIT undo yet
@@ -321,7 +322,7 @@ int DRAWING_TOOL::DrawDimension( const TOOL_EVENT& aEvent )
                         dimension->SetEnd( wxPoint( cursorPos.x, cursorPos.y ) );
                         dimension->Text().SetSize( m_board->GetDesignSettings().m_PcbTextSize );
 
-                        width = m_board->GetDesignSettings().m_PcbTextWidth;
+                        int width = m_board->GetDesignSettings().m_PcbTextWidth;
                         maxThickness = Clamp_Text_PenSize( width, dimension->Text().GetSize() );
 
                         if( width > maxThickness )
@@ -356,7 +357,7 @@ int DRAWING_TOOL::DrawDimension( const TOOL_EVENT& aEvent )
 
                         m_view->Add( dimension );
                         m_board->Add( dimension );
-                        dimension->ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
+                        //dimension->ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
 
                         m_frame->OnModify();
                         m_frame->SaveCopyInUndoList( dimension, UR_NEW );
@@ -452,8 +453,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
     KIGFX::VIEW_GROUP preview( m_view );
 
     // Build the undo list & add items to the current view
-    std::list<BOARD_ITEM*>::const_iterator it, itEnd;
-    for( it = list.begin(), itEnd = list.end(); it != itEnd; ++it )
+    for( auto it = list.begin(), itEnd = list.end(); it != itEnd; ++it )
     {
         KICAD_T type = (*it)->Type();
         assert( type == PCB_LINE_T || type == PCB_TEXT_T );
@@ -480,7 +480,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
         {
             delta = cursorPos - firstItem->GetPosition();
 
-            for( KIGFX::VIEW_GROUP::iter it = preview.Begin(), end = preview.End(); it != end; ++it )
+            for( KIGFX::VIEW_GROUP::const_iter it = preview.Begin(), end = preview.End(); it != end; ++it )
                 static_cast<BOARD_ITEM*>( *it )->Move( wxPoint( delta.x, delta.y ) );
 
             preview.ViewUpdate();
@@ -490,7 +490,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
         {
             if( evt->IsAction( &COMMON_ACTIONS::rotate ) )
             {
-                for( KIGFX::VIEW_GROUP::iter it = preview.Begin(), end = preview.End(); it != end; ++it )
+                for( KIGFX::VIEW_GROUP::const_iter it = preview.Begin(), end = preview.End(); it != end; ++it )
                     static_cast<BOARD_ITEM*>( *it )->Rotate( wxPoint( cursorPos.x, cursorPos.y ),
                                                              m_frame->GetRotationAngle() );
 
@@ -498,7 +498,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
             }
             else if( evt->IsAction( &COMMON_ACTIONS::flip ) )
             {
-                for( KIGFX::VIEW_GROUP::iter it = preview.Begin(), end = preview.End(); it != end; ++it )
+                for( KIGFX::VIEW_GROUP::const_iter it = preview.Begin(), end = preview.End(); it != end; ++it )
                     static_cast<BOARD_ITEM*>( *it )->Flip( wxPoint( cursorPos.x, cursorPos.y ) );
 
                 preview.ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
@@ -519,7 +519,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
                 m_frame->SaveCopyInUndoList( m_board->m_Modules, UR_MODEDIT );
                 m_board->m_Modules->SetLastEditTime();
 
-                for( KIGFX::VIEW_GROUP::iter it = preview.Begin(), end = preview.End(); it != end; ++it )
+                for( KIGFX::VIEW_GROUP::const_iter it = preview.Begin(), end = preview.End(); it != end; ++it )
                 {
                     BOARD_ITEM* item = static_cast<BOARD_ITEM*>( *it );
                     BOARD_ITEM* converted = NULL;
@@ -560,7 +560,7 @@ int DRAWING_TOOL::PlaceDXF( const TOOL_EVENT& aEvent )
             {
                 PICKED_ITEMS_LIST picklist;
 
-                for( KIGFX::VIEW_GROUP::iter it = preview.Begin(), end = preview.End(); it != end; ++it )
+                for( KIGFX::VIEW_GROUP::const_iter it = preview.Begin(), end = preview.End(); it != end; ++it )
                 {
                     BOARD_ITEM* item = static_cast<BOARD_ITEM*>( *it );
                     m_board->Add( item );
@@ -1125,6 +1125,7 @@ int DRAWING_TOOL::drawZone( bool aKeepout )
                         static_cast<PCB_EDIT_FRAME*>( m_frame )->Fill_Zone( zone );
 
                     zone->ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
+                    m_board->GetRatsnest()->Update( zone );
 
                     m_frame->OnModify();
                     m_frame->SaveCopyInUndoList( zone, UR_NEW );
@@ -1157,6 +1158,7 @@ int DRAWING_TOOL::drawZone( bool aKeepout )
                     // Get the current default settings for zones
                     ZONE_SETTINGS zoneInfo = m_frame->GetZoneSettings();
                     zoneInfo.m_CurrentZone_Layer = m_frame->GetScreen()->m_Active_Layer;
+                    zoneInfo.SetIsKeepout( aKeepout );
 
                     m_controls->SetAutoPan( true );
                     m_controls->CaptureCursor( true );

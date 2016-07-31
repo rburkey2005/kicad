@@ -85,8 +85,6 @@ CAIRO_GAL::CAIRO_GAL( wxWindow* aParent, wxEvtHandler* aMouseListener,
 
     // Allocate memory for pixel storage
     allocateBitmaps();
-
-    initSurface();
 }
 
 
@@ -252,38 +250,6 @@ void CAIRO_GAL::DrawRectangle( const VECTOR2D& aStartPoint, const VECTOR2D& aEnd
     cairo_line_to( currentContext, aEndPoint.x, aEndPoint.y );
     cairo_line_to( currentContext, diagonalPointB.x, diagonalPointB.y );
     cairo_close_path( currentContext );
-
-    isElementAdded = true;
-}
-
-
-void CAIRO_GAL::DrawPolyline( std::deque<VECTOR2D>& aPointList )
-{
-    // Iterate over the point list and draw the segments
-    std::deque<VECTOR2D>::const_iterator it = aPointList.begin();
-
-    cairo_move_to( currentContext, it->x, it->y );
-
-    for( ++it; it != aPointList.end(); ++it )
-    {
-        cairo_line_to( currentContext, it->x, it->y );
-    }
-
-    isElementAdded = true;
-}
-
-
-void CAIRO_GAL::DrawPolygon( const std::deque<VECTOR2D>& aPointList )
-{
-    // Iterate over the point list and draw the polygon
-    std::deque<VECTOR2D>::const_iterator it = aPointList.begin();
-
-    cairo_move_to( currentContext, it->x, it->y );
-
-    for( ++it; it != aPointList.end(); ++it )
-    {
-        cairo_line_to( currentContext, it->x, it->y );
-    }
 
     isElementAdded = true;
 }
@@ -1056,6 +1022,39 @@ void CAIRO_GAL::setCompositor()
     overlayBuffer = compositor->CreateBuffer();
 
     validCompositor = true;
+}
+
+
+void CAIRO_GAL::drawPoly( const std::deque<VECTOR2D>& aPointList )
+{
+    // Iterate over the point list and draw the segments
+    std::deque<VECTOR2D>::const_iterator it = aPointList.begin();
+
+    cairo_move_to( currentContext, it->x, it->y );
+
+    for( ++it; it != aPointList.end(); ++it )
+    {
+        cairo_line_to( currentContext, it->x, it->y );
+    }
+
+    isElementAdded = true;
+}
+
+
+void CAIRO_GAL::drawPoly( const VECTOR2D aPointList[], int aListSize )
+{
+    // Iterate over the point list and draw the segments
+    const VECTOR2D* ptr = aPointList;
+
+    cairo_move_to( currentContext, ptr->x, ptr->y );
+
+    for( int i = 0; i < aListSize; ++i )
+    {
+        ++ptr;
+        cairo_line_to( currentContext, ptr->x, ptr->y );
+    }
+
+    isElementAdded = true;
 }
 
 

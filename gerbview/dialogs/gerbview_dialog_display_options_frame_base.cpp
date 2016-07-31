@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// C++ code generated with wxFormBuilder (version Jun 17 2015)
+// C++ code generated with wxFormBuilder (version May 10 2016)
 // http://www.wxformbuilder.org/
 //
 // PLEASE DO "NOT" EDIT THIS FILE!
@@ -88,11 +88,10 @@ DIALOG_DISPLAY_OPTIONS_BASE::DIALOG_DISPLAY_OPTIONS_BASE( wxWindow* parent, wxWi
 	
 	bLeftBottomSizer->Add( m_OptZoomNoCenter, 0, wxLEFT|wxRIGHT|wxTOP, 5 );
 	
-	m_OptMiddleButtonPan = new wxCheckBox( bLeftBottomSizer->GetStaticBox(), wxID_ANY, _("Use middle mouse button to pan"), wxDefaultPosition, wxDefaultSize, 0 );
-	bLeftBottomSizer->Add( m_OptMiddleButtonPan, 0, wxLEFT|wxRIGHT|wxTOP, 5 );
+	m_OptMousewheelPan = new wxCheckBox( bLeftBottomSizer->GetStaticBox(), wxID_ANY, _("Use touchpad to pan"), wxDefaultPosition, wxDefaultSize, 0 );
+	m_OptMousewheelPan->SetToolTip( _("Use touchpad to pan canvas") );
 	
-	m_OptMiddleButtonPanLimited = new wxCheckBox( bLeftBottomSizer->GetStaticBox(), wxID_ANY, _("Limit panning to scroll size"), wxDefaultPosition, wxDefaultSize, 0 );
-	bLeftBottomSizer->Add( m_OptMiddleButtonPanLimited, 0, wxALL, 5 );
+	bLeftBottomSizer->Add( m_OptMousewheelPan, 0, wxALL, 5 );
 	
 	
 	bRightSizer->Add( bLeftBottomSizer, 0, wxBOTTOM|wxEXPAND|wxLEFT|wxRIGHT, 5 );
@@ -121,7 +120,6 @@ DIALOG_DISPLAY_OPTIONS_BASE::DIALOG_DISPLAY_OPTIONS_BASE( wxWindow* parent, wxWi
 	bDialogSizer->Fit( this );
 	
 	// Connect Events
-	m_OptMiddleButtonPan->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnMiddleBtnPanEnbl ), NULL, this );
 	m_sdbSizer1Cancel->Connect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnCancelButtonClick ), NULL, this );
 	m_sdbSizer1OK->Connect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnOKBUttonClick ), NULL, this );
 }
@@ -129,7 +127,6 @@ DIALOG_DISPLAY_OPTIONS_BASE::DIALOG_DISPLAY_OPTIONS_BASE( wxWindow* parent, wxWi
 DIALOG_DISPLAY_OPTIONS_BASE::~DIALOG_DISPLAY_OPTIONS_BASE()
 {
 	// Disconnect Events
-	m_OptMiddleButtonPan->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnMiddleBtnPanEnbl ), NULL, this );
 	m_sdbSizer1Cancel->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnCancelButtonClick ), NULL, this );
 	m_sdbSizer1OK->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( DIALOG_DISPLAY_OPTIONS_BASE::OnOKBUttonClick ), NULL, this );
 	

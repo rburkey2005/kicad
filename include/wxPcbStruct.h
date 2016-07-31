@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2010 Jean-Pierre Charras, jp.charras@wanadoo.fr
- * Copyright (C) 1992-2011 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -32,7 +32,6 @@
 
 #include <pcb_base_edit_frame.h>
 #include <config_params.h>
-#include <class_macros_record.h>
 #include <class_undoredo_container.h>
 #include <zones.h>
 
@@ -83,23 +82,9 @@ class PCB_EDIT_FRAME : public PCB_BASE_EDIT_FRAME
     void updateTraceWidthSelectBox();
     void updateViaSizeSelectBox();
 
-    int             m_RecordingMacros;
-    MACROS_RECORDED m_Macros[10];
-
     /// The auxiliary right vertical tool bar used to access the microwave tools.
     wxAuiToolBar* m_microWaveToolBar;
 
-    /**
-     * Function loadFootprints
-     * loads the footprints for each #COMPONENT in \a aNetlist from the list of libraries.
-     *
-     * @param aNetlist is the netlist of components to load the footprints into.
-     * @param aReporter is the #REPORTER object to report to.
-     * @throw IO_ERROR if an I/O error occurs or a #PARSE_ERROR if a file parsing error
-     *           occurs while reading footprint library files.
-     */
-    void loadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
-        throw( IO_ERROR, PARSE_ERROR );
 
 protected:
     PCB_LAYER_WIDGET* m_Layers;
@@ -225,6 +210,18 @@ public:
 
     virtual ~PCB_EDIT_FRAME();
 
+    /**
+     * Function loadFootprints
+     * loads the footprints for each #COMPONENT in \a aNetlist from the list of libraries.
+     *
+     * @param aNetlist is the netlist of components to load the footprints into.
+     * @param aReporter is the #REPORTER object to report to.
+     * @throw IO_ERROR if an I/O error occurs or a #PARSE_ERROR if a file parsing error
+     *           occurs while reading footprint library files.
+     */
+    void LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
+        throw( IO_ERROR, PARSE_ERROR );
+
     void OnQuit( wxCommandEvent& event );
 
     /**
@@ -262,7 +259,6 @@ public:
     void OnUpdateLayerSelectBox( wxUpdateUIEvent& aEvent );
     void OnUpdateDrcEnable( wxUpdateUIEvent& aEvent );
     void OnUpdateShowBoardRatsnest( wxUpdateUIEvent& aEvent );
-    void OnUpdateShowModuleRatsnest( wxUpdateUIEvent& aEvent );
     void OnUpdateAutoDeleteTrack( wxUpdateUIEvent& aEvent );
     void OnUpdateViaDrawMode( wxUpdateUIEvent& aEvent );
     void OnUpdateTraceDrawMode( wxUpdateUIEvent& aEvent );
@@ -280,27 +276,12 @@ public:
     void OnUpdateMuWaveToolbar( wxUpdateUIEvent& aEvent );
     void OnLayerColorChange( wxCommandEvent& aEvent );
     void OnConfigurePaths( wxCommandEvent& aEvent );
+    void OnUpdatePCBFromSch( wxCommandEvent& event );
 
     /**
-     * Function RecordMacros.
-     * records sequence of hotkeys and cursor positions to a macro.
-     * @param aDC = current device context
-     * @param aNumber The current number macros.
+     * called when the alt key is pressed during a mouse wheel action
      */
-    void RecordMacros( wxDC* aDC, int aNumber );
-
-    /**
-     * Function CallMacros
-     * play hotkeys and cursor position from a recorded macro.
-     * @param aDC = current device context
-     * @param aPosition The current cursor position in logical (drawing) units.
-     * @param aNumber The current number macros.
-     */
-    void CallMacros( wxDC* aDC, const wxPoint& aPosition, int aNumber );
-
-    void SaveMacros();
-
-    void ReadMacros();
+    void OnAltWheel( wxCommandEvent& event );
 
     /**
      * Function PrintPage , virtual
@@ -496,6 +477,16 @@ public:
     bool OnHotkeyRotateItem( int aIdCommand );
 
     /**
+     * Function OnHotkeyFlipItem
+     * Flip the item (text or footprint) found under the mouse cursor
+     * @note This command can be used with an item currently in edit.
+     *       Only some items can be rotated (footprints and texts).
+     * @param aIdCommand = the hotkey command id
+     * @return true if an item was moved
+     */
+    bool OnHotkeyFlipItem( int aIdCommand );
+
+    /**
      * Function OnHotkeyBeginRoute
      * If the current active layer is a copper layer,
      * and if no item currently edited, start a new track segmenton
@@ -610,7 +601,7 @@ public:
     ///> @copydoc EDA_DRAW_FRAME::UseGalCanvas()
     void UseGalCanvas( bool aEnable );
 
-    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     /**
      * Function ShowDesignRulesEditor
@@ -706,7 +697,7 @@ public:
      * @param aKey = the key modifiers (Alt, Shift ...)
      * @return the block command id (BLOCK_MOVE, BLOCK_COPY...)
      */
-    virtual int BlockCommand( int aKey );
+    virtual int BlockCommand( EDA_KEY aKey );
 
     /**
      * Function HandleBlockPlace()
@@ -801,11 +792,12 @@ public:
      * @param aSide = 0 to list footprints on BACK side,
      *                1 to list footprints on FRONT side
      *                2 to list footprints on both sides
+     * @param aFormatCSV = true to use a comma separated file (CSV) format; defautl = false
      * @return the number of footprints found on aSide side,
      *    or -1 if the file could not be created
      */
     int DoGenFootprintsPositionFile( const wxString& aFullFileName, bool aUnitsMM,
-                                      bool aForceSmdItems, int aSide );
+                                      bool aForceSmdItems, int aSide, bool aFormatCSV = false );
 
     /**
      * Function GenFootprintsReport
@@ -999,10 +991,24 @@ public:
                           double aXRef, double aYRef );
 
     /**
-     * Function ExportToIDF3
+     * Function OnExportIDF3
      * will export the current BOARD to a IDFv3 board and lib files.
      */
-    void ExportToIDF3( wxCommandEvent& event );
+    void OnExportIDF3( wxCommandEvent& event );
+
+    /**
+     * Function Export_IDF3
+     * Creates an IDF3 compliant BOARD (*.emn) and LIBRARY (*.emp) file.
+     *
+     * @param aPcb = a pointer to the board to be exported to IDF
+     * @param aFullFileName = the full filename of the export file
+     * @param aUseThou = set to true if the desired IDF unit is thou (mil)
+     * @param aXRef = the board Reference Point in mm, X value
+     * @param aYRef = the board Reference Point in mm, Y value
+     * @return true if OK
+     */
+    bool Export_IDF3( BOARD* aPcb, const wxString& aFullFileName,
+                      bool aUseThou, double aXRef, double aYRef );
 
     /**
      * Function ExporttoSPECCTRA
@@ -1105,9 +1111,8 @@ public:
      * The ratsnest and pad list are recalculated
      * @param aModule = footprint to delete
      * @param aDC = currentDevice Context. if NULL: do not redraw new ratsnest
-     * @param aAskBeforeDeleting : if true: ask for confirmation before deleting
      */
-    bool Delete_Module( MODULE* aModule, wxDC* aDC, bool aAskBeforeDeleting );
+    bool Delete_Module( MODULE* aModule, wxDC* aDC );
 
     /**
      * Function Change_Side_Module
@@ -1553,6 +1558,8 @@ public:
     // Autoplacement:
     void OnPlaceOrRouteFootprints( wxCommandEvent& event );
 
+#if defined( KICAD_SCRIPTING_WXPYTHON )
+
     /**
      * Function ScriptingConsoleEnableDisable
      * enables or disabled the scripting console
@@ -1560,6 +1567,8 @@ public:
     void ScriptingConsoleEnableDisable( wxCommandEvent& aEvent );
 
     void OnUpdateScriptingConsoleState( wxUpdateUIEvent& aEvent );
+
+#endif
 
     void OnSelectAutoPlaceMode( wxCommandEvent& aEvent );
 
@@ -1584,12 +1593,20 @@ public:
      * Function SpreadFootprints
      * Footprints (after loaded by reading a netlist for instance) are moved
      * to be in a small free area (outside the current board) without overlapping.
-     * @param aFootprintsOutsideBoardOnly: true to move only
-     * footprints outside the board outlines
-     * (they are outside if the position of a footprint is outside
-     * the board outlines bounding box
+     * @param aFootprints: a list of footprints to be spread out.
+     * @param aMoveFootprintsOutsideBoardOnly: true to move only
+     *        footprints outside the board outlines
+     *        (they are outside if the position of a footprint anchor is outside
+     *        the board outlines bounding box). It imply the board outlines exist
+     * @param aCheckForBoardEdges: true to try to place footprints outside of
+     *        board edges, if aSpreadAreaPosition is incorrectly chosen.
+     * @param aSpreadAreaPosition the position of the upper left corner of the
+     *        area used to spread footprints
      */
-    void SpreadFootprints( bool aFootprintsOutsideBoardOnly );
+    void SpreadFootprints( std::vector<MODULE*>* aFootprints,
+                           bool                  aMoveFootprintsOutsideBoardOnly,
+                           bool                  aCheckForBoardEdges,
+                           wxPoint               aSpreadAreaPosition );
 
     /**
      * Function AutoPlaceModule
@@ -1664,44 +1681,6 @@ public:
     MODULE* Create_MuWavePolygonShape();
 
     void Begin_Self( wxDC* DC );
-
-    /**
-     * Function Genre_Self
-     * creates a self-shaped coil for microwave applications.
-     * - Length Mself.lng
-     * - Extremities Mself.m_Start and Mself.m_End
-     *
-     * We must determine:
-     * Mself.nbrin = number of segments perpendicular to the direction
-     * (The coil nbrin will demicercles + 1 + 2 1 / 4 circle)
-     * Mself.lbrin = length of a strand
-     * Mself.radius = radius of rounded parts of the coil
-     * Mself.delta = segments extremities connection between him and the coil even
-     *
-     * The equations are
-     * Mself.m_Size.x = 2 * Mself.radius + Mself.lbrin
-     * Mself.m_Size.y * Mself.delta = 2 + 2 * Mself.nbrin * Mself.radius
-     * Mself.lng = 2 * Mself.delta / / connections to the coil
-     + (Mself.nbrin-2) * Mself.lbrin / / length of the strands except 1st and last
-     + (Mself.nbrin 1) * (PI * Mself.radius) / / length of rounded
-     * Mself.lbrin + / 2 - Melf.radius * 2) / / length of 1st and last bit
-     *
-     * The constraints are:
-     * Nbrin >= 2
-     * Mself.radius < Mself.m_Size.x
-     * Mself.m_Size.y = Mself.radius * 4 + 2 * Mself.raccord
-     * Mself.lbrin> Mself.radius * 2
-     *
-     * The calculation is conducted in the following way:
-     * Initially:
-     * Nbrin = 2
-     * Radius = 4 * m_Size.x (arbitrarily fixed value)
-     * Then:
-     * Increasing the number of segments to the desired length
-     * (Radius decreases if necessary)
-     *
-     */
-    MODULE* Genere_Self( wxDC* DC );
 
     void ShowChangedLanguage();         // override EDA_BASE_FRAME virtual
 

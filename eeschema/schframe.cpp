@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2013 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -59,6 +59,9 @@
 #include <wx/display.h>
 #include <build_version.h>
 #include <wildcards_and_files_ext.h>
+
+#include <netlist_exporter_kicad.h>
+#include <kiway.h>
 
 
 // non-member so it can be moved easily, and kept REALLY private.
@@ -237,7 +240,6 @@ BEGIN_EVENT_TABLE( SCH_EDIT_FRAME, EDA_DRAW_FRAME )
     EVT_MENU_RANGE( ID_PREFERENCES_HOTKEY_START, ID_PREFERENCES_HOTKEY_END,
                     SCH_EDIT_FRAME::Process_Config )
 
-    EVT_MENU( ID_COLORS_SETUP, SCH_EDIT_FRAME::OnColorConfig )
     EVT_TOOL( wxID_PREFERENCES, SCH_EDIT_FRAME::OnPreferencesOptions )
 
     EVT_TOOL( ID_RUN_LIBRARY, SCH_EDIT_FRAME::OnOpenLibraryEditor )
@@ -261,17 +263,20 @@ BEGIN_EVENT_TABLE( SCH_EDIT_FRAME, EDA_DRAW_FRAME )
     EVT_TOOL( wxID_PRINT, SCH_EDIT_FRAME::OnPrint )
     EVT_TOOL( ID_GET_ERC, SCH_EDIT_FRAME::OnErc )
     EVT_TOOL( ID_GET_NETLIST, SCH_EDIT_FRAME::OnCreateNetlist )
+    EVT_TOOL( ID_UPDATE_PCB_FROM_SCH, SCH_EDIT_FRAME::OnUpdatePCB )
     EVT_TOOL( ID_GET_TOOLS, SCH_EDIT_FRAME::OnCreateBillOfMaterials )
     EVT_TOOL( ID_FIND_ITEMS, SCH_EDIT_FRAME::OnFindItems )
     EVT_TOOL( wxID_REPLACE, SCH_EDIT_FRAME::OnFindItems )
     EVT_TOOL( ID_BACKANNO_ITEMS, SCH_EDIT_FRAME::OnLoadCmpToFootprintLinkFile )
     EVT_TOOL( ID_SCH_MOVE_ITEM, SCH_EDIT_FRAME::OnMoveItem )
+    EVT_TOOL( ID_AUTOPLACE_FIELDS, SCH_EDIT_FRAME::OnAutoplaceFields )
     EVT_MENU( wxID_HELP, EDA_DRAW_FRAME::GetKicadHelp )
     EVT_MENU( wxID_INDEX, EDA_DRAW_FRAME::GetKicadHelp )
     EVT_MENU( wxID_ABOUT, EDA_BASE_FRAME::GetKicadAbout )
 
     // Tools and buttons for vertical toolbar.
     EVT_TOOL( ID_NO_TOOL_SELECTED, SCH_EDIT_FRAME::OnSelectTool )
+    EVT_TOOL( ID_ZOOM_SELECTION, SCH_EDIT_FRAME::OnSelectTool )
     EVT_TOOL_RANGE( ID_SCHEMATIC_VERTICAL_TOOLBAR_START, ID_SCHEMATIC_VERTICAL_TOOLBAR_END,
                     SCH_EDIT_FRAME::OnSelectTool )
 
@@ -306,6 +311,7 @@ BEGIN_EVENT_TABLE( SCH_EDIT_FRAME, EDA_DRAW_FRAME )
     EVT_UPDATE_UI( ID_TB_OPTIONS_HIDDEN_PINS, SCH_EDIT_FRAME::OnUpdateHiddenPins )
     EVT_UPDATE_UI( ID_TB_OPTIONS_BUS_WIRES_ORIENT, SCH_EDIT_FRAME::OnUpdateBusOrientation )
     EVT_UPDATE_UI( ID_NO_TOOL_SELECTED, SCH_EDIT_FRAME::OnUpdateSelectTool )
+    EVT_UPDATE_UI( ID_ZOOM_SELECTION, SCH_EDIT_FRAME::OnUpdateSelectTool )
     EVT_UPDATE_UI_RANGE( ID_SCHEMATIC_VERTICAL_TOOLBAR_START, ID_SCHEMATIC_VERTICAL_TOOLBAR_END,
                          SCH_EDIT_FRAME::OnUpdateSelectTool )
     EVT_UPDATE_UI( ID_SAVE_PROJECT, SCH_EDIT_FRAME::OnUpdateSave )
@@ -416,6 +422,9 @@ SCH_EDIT_FRAME::SCH_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ):
     GetScreen()->SetZoom( BestZoom() );
 
     Zoom_Automatique( false );
+
+    // Net list generator
+    DefaultExecFlags();
 }
 
 
@@ -465,7 +474,7 @@ void SCH_EDIT_FRAME::SetRepeatItem( SCH_ITEM* aItem )
 
 void SCH_EDIT_FRAME::SetSheetNumberAndCount()
 {
-    SCH_SCREEN* screen = GetScreen();
+    SCH_SCREEN* screen;
     SCH_SCREENS s_list;
 
     /* Set the sheet count, and the sheet number (1 for root sheet)
@@ -473,15 +482,13 @@ void SCH_EDIT_FRAME::SetSheetNumberAndCount()
     int            sheet_count = g_RootSheet->CountSheets();
     int            SheetNumber = 1;
     wxString       current_sheetpath = m_CurrentSheet->Path();
-    SCH_SHEET_LIST sheetList;
+    SCH_SHEET_LIST sheetList( g_RootSheet );
 
     // Examine all sheets path to find the current sheets path,
     // and count them from root to the current sheet path:
-    SCH_SHEET_PATH* sheet;
-
-    for( sheet = sheetList.GetFirst(); sheet != NULL; sheet = sheetList.GetNext() )
+    for( unsigned i = 0; i < sheetList.size(); i++ )
     {
-        wxString sheetpath = sheet->Path();
+        wxString sheetpath = sheetList[i].Path();
 
         if( sheetpath == current_sheetpath )    // Current sheet path found
             break;
@@ -531,8 +538,8 @@ void SCH_EDIT_FRAME::CreateScreens()
 
     g_RootSheet->GetScreen()->SetFileName( m_DefaultSchematicFileName );
 
-    m_CurrentSheet->Clear();
-    m_CurrentSheet->Push( g_RootSheet );
+    m_CurrentSheet->clear();
+    m_CurrentSheet->push_back( g_RootSheet );
 
     if( GetScreen() == NULL )
     {
@@ -610,7 +617,7 @@ void SCH_EDIT_FRAME::OnCloseWindow( wxCloseEvent& aEvent )
             return;
     }
 
-    SCH_SHEET_LIST sheetList;
+    SCH_SHEET_LIST sheetList( g_RootSheet );
 
     if( sheetList.IsModified() )
     {
@@ -676,7 +683,7 @@ void SCH_EDIT_FRAME::OnCloseWindow( wxCloseEvent& aEvent )
     g_RootSheet->GetScreen()->Clear();
 
     // all sub sheets are deleted, only the main sheet is usable
-    m_CurrentSheet->Clear();
+    m_CurrentSheet->clear();
 
     Destroy();
 }
@@ -783,7 +790,7 @@ void SCH_EDIT_FRAME::OnUpdateHiddenPins( wxUpdateUIEvent& aEvent )
 
 void SCH_EDIT_FRAME::OnUpdateSave( wxUpdateUIEvent& aEvent )
 {
-    SCH_SHEET_LIST sheetList;
+    SCH_SHEET_LIST sheetList( g_RootSheet );
 
     aEvent.Enable( sheetList.IsModified() );
 }
@@ -820,6 +827,50 @@ void SCH_EDIT_FRAME::OnErc( wxCommandEvent& event )
         InvokeDialogERC( this );
 }
 
+void SCH_EDIT_FRAME::OnUpdatePCB( wxCommandEvent& event )
+{
+    wxFileName fn = Prj().AbsolutePath( g_RootSheet->GetScreen()->GetFileName() );
+
+    fn.SetExt( PcbFileExtension );
+
+    if( Kiface().IsSingle() )
+    {
+        DisplayError( this,  _( "Cannot update the PCB, because the Schematic Editor is"
+                                " opened in stand-alone mode. In order to create/update"
+                                " PCBs from schematics, you need to launch Kicad shell"
+                                " and create a PCB project." ) );
+        return;
+    } else {
+        KIWAY_PLAYER* frame = Kiway().Player( FRAME_PCB, true );
+
+        // a pcb frame can be already existing, but not yet used.
+        // this is the case when running the footprint editor, or the footprint viewer first
+        // if the frame is not visible, the board is not yet loaded
+        if( !frame->IsVisible() )
+        {
+            frame->OpenProjectFiles( std::vector<wxString>( 1, fn.GetFullPath() ) );
+            frame->Show( true );
+        }
+
+        // On Windows, Raise() does not bring the window on screen, when iconized
+        if( frame->IsIconized() )
+            frame->Iconize( false );
+
+        frame->Raise();
+    }
+
+    NETLIST_OBJECT_LIST* net_atoms = BuildNetListBase();
+    NETLIST_EXPORTER_KICAD exporter( net_atoms, Prj().SchLibs() );
+    STRING_FORMATTER formatter;
+
+    exporter.Format( &formatter, GNL_ALL );
+
+    Kiway().ExpressMail( FRAME_PCB,
+        MAIL_SCH_PCB_UPDATE,
+        formatter.GetString(),  // an abbreviated "kicad" (s-expr) netlist
+        this
+    );
+}
 
 void SCH_EDIT_FRAME::OnCreateNetlist( wxCommandEvent& event )
 {
@@ -1119,6 +1170,9 @@ void SCH_EDIT_FRAME::OnOpenLibraryEditor( wxCommandEvent& event )
             libeditFrame->LoadComponentAndSelectLib( entry, library );
         }
     }
+
+    GetScreen()->SchematicCleanUp();
+    m_canvas->Refresh();
 }
 
 
@@ -1181,7 +1235,7 @@ bool SCH_EDIT_FRAME::isAutoSaveRequired() const
 
     if( g_RootSheet != NULL )
     {
-        SCH_SHEET_LIST sheetList;
+        SCH_SHEET_LIST sheetList( g_RootSheet );
 
         return sheetList.IsAutoSaveRequired();
     }

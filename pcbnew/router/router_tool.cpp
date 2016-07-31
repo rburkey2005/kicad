@@ -20,9 +20,9 @@
 
 #include <wx/numdlg.h>
 
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
 
 #include "class_draw_panel_gal.h"
 #include "class_board.h"
@@ -46,6 +46,8 @@
 #include <tool/tool_settings.h>
 #include <tools/common_actions.h>
 #include <tools/size_menu.h>
+#include <tools/selection_tool.h>
+#include <tools/edit_tool.h>
 
 #include <ratsnest_data.h>
 
@@ -97,7 +99,7 @@ static TOOL_ACTION ACT_CustomTrackWidth( "pcbnew.InteractiveRouter.CustomTrackVi
 static TOOL_ACTION ACT_SwitchPosture( "pcbnew.InteractiveRouter.SwitchPosture", AS_CONTEXT,
     TOOL_ACTION::LegacyHotKey( HK_SWITCH_TRACK_POSTURE ),
     _( "Switch Track Posture" ),
-    _( "Switches posture of the currenly routed track." ),
+    _( "Switches posture of the currently routed track." ),
     change_entry_orient_xpm );
 
 static TOOL_ACTION ACT_SetDpDimensions( "pcbnew.InteractiveRouter.SetDpDimensions",
@@ -119,7 +121,7 @@ public:
     CONTEXT_TRACK_WIDTH_MENU()
         : CONTEXT_TRACK_VIA_SIZE_MENU( true, true ), m_board( NULL )
     {
-        SetMenuHandler( boost::bind( &CONTEXT_TRACK_WIDTH_MENU::EventHandler, this, _1 ) );
+        SetMenuHandler( std::bind( &CONTEXT_TRACK_WIDTH_MENU::EventHandler, this, _1 ) );
     }
 
     void SetBoard( BOARD* aBoard )
@@ -305,7 +307,7 @@ void ROUTER_TOOL::handleCommonEvents( const TOOL_EVENT& aEvent )
     {
         DIALOG_PNS_SETTINGS settingsDlg( m_frame, m_router->Settings() );
 
-        if( settingsDlg.ShowModal() )
+        if( settingsDlg.ShowModal() == wxID_OK )
         {
             // FIXME: do we need an explicit update?
         }
@@ -380,7 +382,7 @@ void ROUTER_TOOL::switchLayerOnViaPlacement()
 }
 
 
-bool ROUTER_TOOL::onViaCommand( VIATYPE_T aType )
+bool ROUTER_TOOL::onViaCommand( TOOL_EVENT& aEvent, VIATYPE_T aType )
 {
     BOARD_DESIGN_SETTINGS& bds = m_board->GetDesignSettings();
 
@@ -473,6 +475,8 @@ bool ROUTER_TOOL::onViaCommand( VIATYPE_T aType )
     m_router->UpdateSizes( sizes );
     m_router->ToggleViaPlacement();
 
+    updateEndItem( aEvent );
+
     m_router->Move( m_endSnapPoint, m_endItem );        // refresh
 
     return false;
@@ -528,9 +532,12 @@ bool ROUTER_TOOL::finishInteractive()
     m_router->StopRouting();
 
     // Save the recent changes in the undo buffer
-    m_frame->SaveCopyInUndoList( m_router->GetUndoBuffer(), UR_UNSPECIFIED );
-    m_router->ClearUndoBuffer();
-    m_frame->OnModify();
+    if( m_router->GetUndoBuffer().GetCount() > 0 )
+    {
+        m_frame->SaveCopyInUndoList( m_router->GetUndoBuffer(), UR_UNSPECIFIED );
+        m_router->ClearUndoBuffer();
+        m_frame->OnModify();
+    }
 
     m_ctls->SetAutoPan( false );
     m_ctls->ForceCursorPosition( false );
@@ -551,8 +558,8 @@ void ROUTER_TOOL::performRouting()
             break;
         else if( evt->IsMotion() )
         {
-            updateEndItem( *evt );
             m_router->SetOrthoMode( evt->Modifier( MD_CTRL ) );
+            updateEndItem( *evt );
             m_router->Move( m_endSnapPoint, m_endItem );
         }
         else if( evt->IsClick( BUT_LEFT ) )
@@ -568,36 +575,40 @@ void ROUTER_TOOL::performRouting()
 
             // Synchronize the indicated layer
             m_frame->SetActiveLayer( ToLAYER_ID( m_router->GetCurrentLayer() ) );
+            updateEndItem( *evt );
             m_router->Move( m_endSnapPoint, m_endItem );
             m_startItem = NULL;
         }
         else if( evt->IsAction( &ACT_PlaceThroughVia ) )
         {
-            onViaCommand( VIA_THROUGH );
+            onViaCommand( *evt, VIA_THROUGH );
         }
         else if( evt->IsAction( &ACT_PlaceBlindVia ) )
         {
-            onViaCommand( VIA_BLIND_BURIED );
+            onViaCommand( *evt, VIA_BLIND_BURIED );
         }
         else if( evt->IsAction( &ACT_PlaceMicroVia ) )
         {
-            onViaCommand( VIA_MICROVIA );
+            onViaCommand( *evt, VIA_MICROVIA );
         }
         else if( evt->IsAction( &ACT_SwitchPosture ) )
         {
             m_router->FlipPosture();
+            updateEndItem( *evt );
             m_router->Move( m_endSnapPoint, m_endItem );        // refresh
         }
         else if( evt->IsAction( &COMMON_ACTIONS::layerChanged ) )
         {
-            updateEndItem( *evt );
             m_router->SwitchLayer( m_frame->GetActiveLayer() );
+            updateEndItem( *evt );
             m_router->Move( m_endSnapPoint, m_endItem );        // refresh
         }
         else if( evt->IsAction( &ACT_EndTrack ) )
         {
-            if( m_router->FixRoute( m_endSnapPoint, m_endItem ) )
-                break;
+            bool still_routing = true;
+            while( still_routing )
+                still_routing = m_router->FixRoute( m_endSnapPoint, m_endItem );
+            break;
         }
 
         handleCommonEvents( *evt );
@@ -670,7 +681,7 @@ int ROUTER_TOOL::mainLoop( PNS_ROUTER_MODE aMode )
 
     m_startSnapPoint = getViewControls()->GetCursorPosition();
 
-    std::auto_ptr<ROUTER_TOOL_MENU> ctxMenu( new ROUTER_TOOL_MENU( board, aMode ) );
+    std::unique_ptr<ROUTER_TOOL_MENU> ctxMenu( new ROUTER_TOOL_MENU( board, aMode ) );
     SetContextMenu( ctxMenu.get() );
 
     // Main loop: keep receiving events
@@ -716,6 +727,9 @@ int ROUTER_TOOL::mainLoop( PNS_ROUTER_MODE aMode )
     m_savedSettings = m_router->Settings();
     m_savedSizes = m_router->Sizes();
 
+    // Disable the context menu before it is destroyed
+    SetContextMenu( NULL, CMENU_OFF );
+
     return 0;
 }
 
@@ -733,12 +747,13 @@ void ROUTER_TOOL::performDragging()
     if( m_startItem && m_startItem->Net() >= 0 )
         highlightNet( true, m_startItem->Net() );
 
-    ctls->ForceCursorPosition( false );
     ctls->SetAutoPan( true );
 
     while( OPT_TOOL_EVENT evt = Wait() )
     {
-        if( evt->IsCancel() || evt->IsActivate() )
+        ctls->ForceCursorPosition( false );
+
+       if( evt->IsCancel() || evt->IsActivate() )
             break;
         else if( evt->IsMotion() )
         {

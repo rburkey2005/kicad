@@ -36,7 +36,6 @@
 #include <sch_field.h>
 #include <transform.h>
 #include <general.h>
-#include <boost/weak_ptr.hpp>
 #include <vector>
 #include <lib_draw_item.h>
 
@@ -48,12 +47,16 @@ class NETLIST_OBJECT_LIST;
 class LIB_PART;
 class PART_LIBS;
 class SCH_COLLECTOR;
+class SCH_SCREEN;
 
 
 /// A container for several SCH_FIELD items
-typedef std::vector<SCH_FIELD>      SCH_FIELDS;
+typedef std::vector<SCH_FIELD>    SCH_FIELDS;
 
-typedef boost::weak_ptr<LIB_PART>   PART_REF;
+typedef std::weak_ptr<LIB_PART>   PART_REF;
+
+
+extern std::string toUTFTildaText( const wxString& txt );
 
 
 /**
@@ -63,6 +66,10 @@ typedef boost::weak_ptr<LIB_PART>   PART_REF;
 class SCH_COMPONENT : public SCH_ITEM
 {
     friend class DIALOG_EDIT_COMPONENT_IN_SCHEMATIC;
+
+public:
+    enum AUTOPLACED { AUTOPLACED_NO = 0, AUTOPLACED_AUTO, AUTOPLACED_MANUAL };
+private:
 
     wxPoint     m_Pos;
     wxString    m_part_name;    ///< Name to look for in the library, i.e. "74LS00".
@@ -82,6 +89,8 @@ class SCH_COMPONENT : public SCH_ITEM
 
     std::vector<bool> m_isDangling; ///< One isDangling per pin
 
+    AUTOPLACED  m_fieldsAutoplaced; ///< indicates status of field autoplacement
+
     /**
      * A temporary sheet path is required to generate the correct reference designator string
      * in complex heirarchies.  Hopefully this is only a temporary hack to decouple schematic
@@ -99,8 +108,6 @@ class SCH_COMPONENT : public SCH_ITEM
     wxArrayString m_PathsAndReferences;
 
     void Init( const wxPoint& pos = wxPoint( 0, 0 ) );
-
-    EDA_RECT GetBodyBoundingBox() const;
 
 public:
     SCH_COMPONENT( const wxPoint& pos = wxPoint( 0, 0 ), SCH_ITEM* aParent = NULL );
@@ -137,6 +144,8 @@ public:
     {
         return wxT( "SCH_COMPONENT" );
     }
+
+    const wxArrayString& GetPathsAndReferences() const { return m_PathsAndReferences; }
 
     /**
      * Virtual function IsMovableFromAnchorPoint
@@ -185,6 +194,8 @@ public:
     void SetConvert( int aConvert );
 
     wxString GetPrefix() const { return m_prefix; }
+
+    void SetPrefix( const wxString& aPrefix ) { m_prefix = aPrefix; }
 
     TRANSFORM& GetTransform() const { return const_cast< TRANSFORM& >( m_transform ); }
 
@@ -255,6 +266,13 @@ public:
 
     const EDA_RECT GetBoundingBox() const;    // Virtual
 
+    /**
+     * Function GetBodyBoundingBox
+     * Return a bounding box for the component body but not the fields.
+     */
+    EDA_RECT GetBodyBoundingBox() const;
+
+
     //-----<Fields>-----------------------------------------------------------
 
     /**
@@ -264,6 +282,14 @@ public:
      * @return SCH_FIELD* - the field value or NULL if does not exist
      */
     SCH_FIELD* GetField( int aFieldNdx ) const;
+
+    /**
+     * Function GetFields
+     * populates a std::vector with SCH_FIELDs.
+     * @param aVector - vector to populate.
+     * @param aVisibleOnly - if true, only get fields that are visible and contain text.
+     */
+    void GetFields( std::vector<SCH_FIELD*>& aVector, bool aVisibleOnly );
 
     /**
      * Function AddField
@@ -284,14 +310,51 @@ public:
     {
         m_Fields = aFields;     // vector copying, length is changed possibly
     }
-
-    //-----</Fields>----------------------------------------------------------
-
     /**
      * Function GetFieldCount
      * returns the number of fields in this component.
      */
-    int GetFieldCount() const { return (int) m_Fields.size(); }
+    int GetFieldCount() const { return (int)m_Fields.size(); }
+
+    /**
+     * Function GetFieldsAutoplaced
+     * returns whether the fields are autoplaced.
+     */
+    AUTOPLACED GetFieldsAutoplaced() const { return m_fieldsAutoplaced; }
+
+    /**
+     * Function ClearFieldsAutoplaced
+     * Set fields autoplaced flag false.
+     */
+    void ClearFieldsAutoplaced() { m_fieldsAutoplaced = AUTOPLACED_NO; }
+
+    /**
+     * Function AutoplaceFields
+     * Automatically orient all the fields in the component.
+     * @param aScreen - the SCH_SCREEN associated with the current instance of the
+     *  component. This can be NULL when aManual is false.
+     * @param aManual - True if the autoplace was manually initiated (e.g. by a hotkey
+     *  or a menu item). Some more 'intelligent' routines will be used that would be
+     *  annoying if done automatically during moves.
+     */
+    void AutoplaceFields( SCH_SCREEN* aScreen, bool aManual );
+
+    /**
+     * Function AutoAutoplaceFields
+     * Autoplace fields only if correct to do so automatically. That is, do not
+     * autoplace if fields have been moved by hand.
+     * @param aScreen - the SCH_SCREEN associated with the current instance of the
+     *  component.
+     */
+    void AutoAutoplaceFields( SCH_SCREEN* aScreen )
+    {
+        if( GetFieldsAutoplaced() )
+            AutoplaceFields( aScreen, GetFieldsAutoplaced() == AUTOPLACED_MANUAL );
+    }
+
+
+    //-----</Fields>----------------------------------------------------------
+
 
     /**
      * Function GetPin
@@ -301,6 +364,12 @@ public:
      * @return Pin object if found, otherwise NULL.
      */
     LIB_PIN* GetPin( const wxString& number );
+
+    /**
+     * Function GetPins
+     * populate a vector with all the pins.
+     */
+    void GetPins( std::vector<LIB_PIN*>& aPinsList );
 
     /**
      * Virtual function, from the base class SCH_ITEM::Draw
@@ -443,8 +512,7 @@ public:
 
     void GetConnectionPoints( std::vector<wxPoint>& aPoints ) const;
 
-    SEARCH_RESULT Visit( INSPECTOR* inspector, const void* testData,
-                                 const KICAD_T scanTypes[] );
+    SEARCH_RESULT Visit( INSPECTOR inspector, void* testData, const KICAD_T scanTypes[] ) override;
 
     /**
      * Function GetDrawItem().

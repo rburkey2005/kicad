@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// C++ code generated with wxFormBuilder (version Jun  5 2014)
+// C++ code generated with wxFormBuilder (version Mar 28 2015)
 // http://www.wxformbuilder.org/
 //
 // PLEASE DO "NOT" EDIT THIS FILE!
@@ -20,6 +20,9 @@ DIALOG_LIB_EDIT_PIN_TABLE_BASE::DIALOG_LIB_EDIT_PIN_TABLE_BASE( wxWindow* parent
 	m_Pins->SetMinSize( wxSize( 400,400 ) );
 	
 	top_sizer->Add( m_Pins, 1, wxALL|wxEXPAND, 5 );
+	
+	m_Summary = new wxTextCtrl( this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY|wxNO_BORDER );
+	top_sizer->Add( m_Summary, 0, wxALL|wxEXPAND, 5 );
 	
 	m_Buttons = new wxStdDialogButtonSizer();
 	m_ButtonsOK = new wxButton( this, wxID_OK );

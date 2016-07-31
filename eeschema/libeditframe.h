@@ -56,9 +56,6 @@ class LIB_EDIT_FRAME : public SCH_BASE_FRAME
     wxComboBox*     m_partSelectBox;        ///< a Box to select a part to edit (if any)
     wxComboBox*     m_aliasSelectBox;       ///< a box to select the alias to edit (if any)
 
-    wxString m_lastLibImportPath;
-    wxString m_lastLibExportPath;
-
     /** Convert of the item currently being drawn. */
     bool m_drawSpecificConvert;
 
@@ -193,7 +190,6 @@ public:
     static void EnsureActiveLibExists();
 
     void InstallConfigFrame( wxCommandEvent& event );
-    void OnColorConfig( wxCommandEvent& aEvent );
     void OnPreferencesOptions( wxCommandEvent& event );
     void Process_Config( wxCommandEvent& event );
 
@@ -333,7 +329,7 @@ public:
 
     bool OnHotKey( wxDC* aDC, int aHotKey, const wxPoint& aPosition, EDA_ITEM* aItem = NULL );
 
-    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     void LoadSettings( wxConfigBase* aCfg );
 
@@ -511,6 +507,12 @@ private:
     void OnRotateItem( wxCommandEvent& aEvent );
 
     /**
+     * Function OnOrient
+     * Handles the ID_LIBEDIT_MIRROR_X and ID_LIBEDIT_MIRROR_Y events.
+     */
+    void OnOrient( wxCommandEvent& aEvent );
+
+    /**
      * Function deleteItem
      * deletes the currently selected draw item.
      * @param aDC The device context to draw upon when removing item.
@@ -607,7 +609,7 @@ public:
      * returns the block command (BLOCK_MOVE, BLOCK_COPY...) corresponding to
      * the \a aKey (ALT, SHIFT ALT ..)
      */
-    virtual int BlockCommand( int aKey );
+    virtual int BlockCommand( EDA_KEY aKey );
 
     /**
      * Function HandleBlockPlace

@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2004 Jean-Pierre Charras, jean-pierre.charras@gipsa-lab.inpg.fr
- * Copyright (C) 2004-2011 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2016 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,7 +30,6 @@
 #include <fctsys.h>
 #include <gr_basic.h>
 #include <class_drawpanel.h>
-#include <confirm.h>
 #include <schframe.h>
 
 #include <lib_draw_item.h>
@@ -43,7 +42,6 @@
 #include <sch_text.h>
 #include <sch_component.h>
 #include <sch_sheet.h>
-#include <trigo.h>
 
 
 static void AbortCreateNewLine( EDA_DRAW_PANEL* aPanel, wxDC* aDC );
@@ -68,34 +66,45 @@ static DLIST< SCH_ITEM > s_wires;       // when creating a new set of wires,
  */
 static void RemoveBacktracks( DLIST<SCH_ITEM>& aWires )
 {
-    SCH_LINE* last_line = NULL;
-
     EDA_ITEM* first = aWires.GetFirst();
+    std::vector<SCH_LINE*> last_lines;
+
     for( EDA_ITEM* p = first; p; )
     {
-        SCH_LINE *line = dynamic_cast<SCH_LINE*>( p );
-        if( !line )
-        {
-            wxFAIL_MSG( "RemoveBacktracks() requires SCH_LINE items" );
-            break;
-        }
+        SCH_LINE *line = static_cast<SCH_LINE*>( p );
         p = line->Next();
 
-        if( last_line )
+        if( !last_lines.empty() )
         {
-            wxASSERT_MSG( last_line->GetEndPoint() == line->GetStartPoint(),
-                    "RemoveBacktracks() requires contiguous lines" );
-            if( IsPointOnSegment( last_line->GetStartPoint(), line->GetStartPoint(),
-                        line->GetEndPoint() ) )
+            SCH_LINE* last_line = last_lines[last_lines.size() - 1];
+            bool contiguous = ( last_line->GetEndPoint() == line->GetStartPoint() );
+            bool backtracks = IsPointOnSegment( last_line->GetStartPoint(),
+                    last_line->GetEndPoint(), line->GetEndPoint() );
+            bool total_backtrack = ( last_line->GetStartPoint() == line->GetEndPoint() );
+
+            if( contiguous && backtracks )
             {
-                last_line->SetEndPoint( line->GetEndPoint() );
-                delete s_wires.Remove( line );
+                if( total_backtrack )
+                {
+                    delete s_wires.Remove( last_line );
+                    delete s_wires.Remove( line );
+                    last_lines.pop_back();
+                }
+                else
+                {
+                    last_line->SetEndPoint( line->GetEndPoint() );
+                    delete s_wires.Remove( line );
+                }
             }
             else
-                last_line = line;
+            {
+                last_lines.push_back( line );
+            }
         }
         else
-            last_line = line;
+        {
+            last_lines.push_back( line );
+        }
     }
 }
 
@@ -208,7 +217,7 @@ void SCH_EDIT_FRAME::BeginSegment( wxDC* DC, int type )
     }
     else    // A segment is in progress: terminates the current segment and add a new segment.
     {
-        SCH_LINE* prevSegment = (SCH_LINE*) segment->Back();
+        SCH_LINE* prevSegment = segment->Back();
 
         // Be aware prevSegment can be null when the horizontal and vertical lines only switch is off
         // when we create the first segment.
@@ -316,7 +325,7 @@ void SCH_EDIT_FRAME::EndSegment( wxDC* DC )
     screen->Append( s_wires );
 
     // Correct and remove segments that need to be merged.
-    screen->SchematicCleanUp( NULL, DC );
+    screen->SchematicCleanUp();
 
     // A junction could be needed to connect the end point of the last created segment.
     if( screen->IsJunctionNeeded( endpoint ) )
@@ -431,7 +440,7 @@ SCH_NO_CONNECT* SCH_EDIT_FRAME::AddNoConnect( wxDC* aDC, const wxPoint& aPositio
 
     SetRepeatItem( no_connect );
     GetScreen()->Append( no_connect );
-    GetScreen()->SchematicCleanUp( m_canvas, aDC );
+    GetScreen()->SchematicCleanUp();
     OnModify();
     m_canvas->Refresh();
     SaveCopyInUndoList( no_connect, UR_NEW );
@@ -496,8 +505,17 @@ void SCH_EDIT_FRAME::RepeatDrawItem( wxDC* DC )
             ( (SCH_TEXT*) my_clone )->IncrementLabel( GetRepeatDeltaLabel() );
 
         GetScreen()->Append( my_clone );
-        GetScreen()->TestDanglingEnds();
-        my_clone->Draw( m_canvas, DC, wxPoint( 0, 0 ), GR_DEFAULT_DRAWMODE );
+
+        if( my_clone->IsConnectable() )
+        {
+            GetScreen()->TestDanglingEnds();
+            m_canvas->Refresh();
+        }
+        else
+        {
+            my_clone->Draw( m_canvas, DC, wxPoint( 0, 0 ), GR_DEFAULT_DRAWMODE );
+        }
+
         SaveCopyInUndoList( my_clone, UR_NEW );
         my_clone->ClearFlags();
     }

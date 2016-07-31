@@ -29,10 +29,12 @@
 #include <class_module.h>
 #include <class_edge_mod.h>
 #include <class_zone.h>
+#include <collectors.h>
 #include <wxPcbStruct.h>
 #include <kiway.h>
 #include <class_draw_panel_gal.h>
 #include <module_editor_frame.h>
+#include <array_creator.h>
 
 #include <tool/tool_manager.h>
 #include <view/view_controls.h>
@@ -41,8 +43,8 @@
 #include <confirm.h>
 
 #include <cassert>
-#include <boost/foreach.hpp>
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
 
 #include "common_actions.h"
 #include "selection_tool.h"
@@ -51,7 +53,6 @@
 
 #include <router/router_tool.h>
 
-#include <dialogs/dialog_create_array.h>
 #include <dialogs/dialog_move_exact.h>
 #include <dialogs/dialog_track_via_properties.h>
 
@@ -81,23 +82,20 @@ bool EDIT_TOOL::Init()
         return false;
     }
 
-    // Vector storing track & via types, used for specifying 'Properties' menu entry condition
-    m_tracksViasType.push_back( PCB_TRACE_T );
-    m_tracksViasType.push_back( PCB_VIA_T );
-
     // Add context menu entries that are displayed when selection tool is active
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::editActivate, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::rotate, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::flip, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::remove, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::properties, SELECTION_CONDITIONS::Count( 1 )
-                                            || SELECTION_CONDITIONS::OnlyTypes( m_tracksViasType ) );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::moveExact, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::duplicate, SELECTION_CONDITIONS::NotEmpty );
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::createArray, SELECTION_CONDITIONS::NotEmpty );
+    CONDITIONAL_MENU& menu = m_selectionTool->GetMenu();
+    menu.AddItem( COMMON_ACTIONS::editActivate, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::rotate, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::flip, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::remove, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::properties, SELECTION_CONDITIONS::Count( 1 )
+                      || SELECTION_CONDITIONS::OnlyTypes( GENERAL_COLLECTOR::Tracks ) );
+    menu.AddItem( COMMON_ACTIONS::moveExact, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::duplicate, SELECTION_CONDITIONS::NotEmpty );
+    menu.AddItem( COMMON_ACTIONS::createArray, SELECTION_CONDITIONS::NotEmpty );
 
     // Footprint actions
-    m_selectionTool->GetMenu().AddItem( COMMON_ACTIONS::editFootprintInFpEditor,
+    menu.AddItem( COMMON_ACTIONS::editFootprintInFpEditor,
                                         SELECTION_CONDITIONS::OnlyType( PCB_MODULE_T ) &&
                                         SELECTION_CONDITIONS::Count( 1 ) );
 
@@ -313,7 +311,7 @@ int EDIT_TOOL::Main( const TOOL_EVENT& aEvent )
 
             lockOverride = false;
         }
-    } while( evt = Wait() );
+    } while( ( evt = Wait() ) ); //Should be assignment not equality test
 
     if( m_dragging )
         decUndoInhibit();
@@ -360,7 +358,7 @@ int EDIT_TOOL::Properties( const TOOL_EVENT& aEvent )
         return 0;
 
     // Tracks & vias are treated in a special way:
-    if( ( SELECTION_CONDITIONS::OnlyTypes( m_tracksViasType ) )( selection ) )
+    if( ( SELECTION_CONDITIONS::OnlyTypes( GENERAL_COLLECTOR::Tracks ) )( selection ) )
     {
         DIALOG_TRACK_VIA_PROPERTIES dlg( editFrame, selection );
 
@@ -372,9 +370,10 @@ int EDIT_TOOL::Properties( const TOOL_EVENT& aEvent )
             editFrame->SaveCopyInUndoList( selection.items, UR_CHANGED );
             dlg.Apply();
 
-            selection.ForAll<KIGFX::VIEW_ITEM>( boost::bind( &KIGFX::VIEW_ITEM::ViewUpdate, _1,
-                                                             KIGFX::VIEW_ITEM::ALL ) );
-            selection.ForAll<BOARD_ITEM>( boost::bind( &RN_DATA::Update, ratsnest, _1 ) );
+            selection.ForAll<KIGFX::VIEW_ITEM>( std::bind( &KIGFX::VIEW_ITEM::ViewUpdate, 
+                                          std::placeholders::_1, KIGFX::VIEW_ITEM::ALL ) );
+            selection.ForAll<BOARD_ITEM>( std::bind( &RN_DATA::Update, ratsnest, 
+                                                                 std::placeholders::_1 ) );
             ratsnest->Recalculate();
         }
     }
@@ -429,7 +428,7 @@ int EDIT_TOOL::Rotate( const TOOL_EVENT& aEvent )
     // Shall the selection be cleared at the end?
     bool unselect = selection.Empty();
 
-    if( !hoverSelection( selection ) )
+    if( !hoverSelection( selection ) || m_selectionTool->CheckLock() == SELECTION_LOCKED )
         return 0;
 
     wxPoint rotatePoint = getModificationPoint( selection );
@@ -479,7 +478,7 @@ int EDIT_TOOL::Flip( const TOOL_EVENT& aEvent )
     // Shall the selection be cleared at the end?
     bool unselect = selection.Empty();
 
-    if( !hoverSelection( selection ) )
+    if( !hoverSelection( selection ) || m_selectionTool->CheckLock() == SELECTION_LOCKED )
         return 0;
 
     wxPoint flipPoint = getModificationPoint( selection );
@@ -524,7 +523,7 @@ int EDIT_TOOL::Remove( const TOOL_EVENT& aEvent )
 {
     const SELECTION& selection = m_selectionTool->GetSelection();
 
-    if( !hoverSelection( selection ) )
+    if( !hoverSelection( selection ) || m_selectionTool->CheckLock() == SELECTION_LOCKED )
         return 0;
 
     // Get a copy of the selected items set
@@ -561,7 +560,7 @@ void EDIT_TOOL::remove( BOARD_ITEM* aItem )
     {
         MODULE* module = static_cast<MODULE*>( aItem );
         module->ClearFlags();
-        module->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove, getView(), _1 ) );
+        module->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, getView(), std::placeholders::_1 ) );
 
         // Module itself is deleted after the switch scope is finished
         // list of pads is rebuild by BOARD::BuildListOfNets()
@@ -649,7 +648,7 @@ int EDIT_TOOL::MoveExact( const TOOL_EVENT& aEvent )
     // Shall the selection be cleared at the end?
     bool unselect = selection.Empty();
 
-    if( !hoverSelection( selection ) )
+    if( !hoverSelection( selection ) || m_selectionTool->CheckLock() == SELECTION_LOCKED )
         return 0;
 
     wxPoint translation;
@@ -702,6 +701,8 @@ int EDIT_TOOL::MoveExact( const TOOL_EVENT& aEvent )
 
 int EDIT_TOOL::Duplicate( const TOOL_EVENT& aEvent )
 {
+    // Note: original items are no more modified.
+
     bool increment = aEvent.IsAction( &COMMON_ACTIONS::duplicateIncrement );
 
     // first, check if we have a selection, or try to get one
@@ -756,15 +757,15 @@ int EDIT_TOOL::Duplicate( const TOOL_EVENT& aEvent )
             // so zones are not duplicated
             if( item->Type() != PCB_ZONE_AREA_T )
 #endif
-            new_item = editFrame->GetBoard()->DuplicateAndAddItem( item, increment );
+            new_item = editFrame->GetBoard()->DuplicateAndAddItem( item );
         }
 
         if( new_item )
         {
             if( new_item->Type() == PCB_MODULE_T )
             {
-                static_cast<MODULE*>( new_item )->RunOnChildren( boost::bind( &KIGFX::VIEW::Add,
-                        getView(), _1 ) );
+                static_cast<MODULE*>( new_item )->RunOnChildren( std::bind( &KIGFX::VIEW::Add,
+                        getView(), std::placeholders::_1 ) );
             }
 
             editFrame->GetGalCanvas()->GetView()->Add( new_item );
@@ -775,22 +776,98 @@ int EDIT_TOOL::Duplicate( const TOOL_EVENT& aEvent )
     }
 
     // record the new items as added
-    if( !m_editModules )
+    if( !m_editModules && !selection.Empty() )
+    {
         editFrame->SaveCopyInUndoList( selection.items, UR_NEW );
 
-    editFrame->DisplayToolMsg( wxString::Format( _( "Duplicated %d item(s)" ),
-            (int) old_items.size() ) );
+        editFrame->DisplayToolMsg( wxString::Format( _( "Duplicated %d item(s)" ),
+                (int) old_items.size() ) );
 
-    // pick up the selected item(s) and start moving
-    // this works well for "dropping" copies around
-    TOOL_EVENT evt = COMMON_ACTIONS::editActivate.MakeEvent();
-    Main( evt );
+        // If items were duplicated, pick them up
+        // this works well for "dropping" copies around
+        TOOL_EVENT evt = COMMON_ACTIONS::editActivate.MakeEvent();
+        Main( evt );
+    }
 
     // and re-enable undos
     decUndoInhibit();
 
     return 0;
-}
+};
+
+
+class GAL_ARRAY_CREATOR: public ARRAY_CREATOR
+{
+public:
+
+    GAL_ARRAY_CREATOR( PCB_BASE_FRAME& editFrame, bool editModules,
+                       RN_DATA* ratsnest,
+                       const SELECTION& selection ):
+        ARRAY_CREATOR( editFrame ),
+        m_editModules( editModules ),
+        m_ratsnest( ratsnest ),
+        m_selection( selection )
+    {}
+
+private:
+
+    int getNumberOfItemsToArray() const //override
+    {
+        // only handle single items
+        return m_selection.Size();
+    }
+
+    BOARD_ITEM* getNthItemToArray( int n ) const //override
+    {
+        return m_selection.Item<BOARD_ITEM>( n );
+    }
+
+    BOARD* getBoard() const //override
+    {
+        return m_parent.GetBoard();
+    }
+
+    MODULE* getModule() const //override
+    {
+        // Remember this is valid and used only in the module editor.
+        // in board editor, the parent of items is usually the board.
+        return m_editModules ? m_parent.GetBoard()->m_Modules.GetFirst() : NULL;
+    }
+
+    wxPoint getRotationCentre() const //override
+    {
+        const VECTOR2I rp = m_selection.GetCenter();
+        return wxPoint( rp.x, rp.y );
+    }
+
+    void prePushAction( BOARD_ITEM* new_item ) // override
+    {
+        m_parent.GetToolManager()->RunAction( COMMON_ACTIONS::unselectItem,
+                                              true, new_item );
+    }
+
+    void postPushAction( BOARD_ITEM* new_item ) //override
+    {
+        KIGFX::VIEW* view = m_parent.GetToolManager()->GetView();
+        if( new_item->Type() == PCB_MODULE_T)
+        {
+            static_cast<MODULE*>(new_item)->RunOnChildren(
+                std::bind(&KIGFX::VIEW::Add, view, std::placeholders::_1));
+        }
+
+        m_parent.GetGalCanvas()->GetView()->Add( new_item );
+        m_ratsnest->Update( new_item );
+    }
+
+    void finalise() // override
+    {
+        m_ratsnest->Recalculate();
+    }
+
+    bool m_editModules;
+    RN_DATA* m_ratsnest;
+    const SELECTION& m_selection;
+};
 
 
 int EDIT_TOOL::CreateArray( const TOOL_EVENT& aEvent )
@@ -799,168 +876,20 @@ int EDIT_TOOL::CreateArray( const TOOL_EVENT& aEvent )
     SELECTION_TOOL* selTool = m_toolMgr->GetTool<SELECTION_TOOL>();
     const SELECTION& selection = selTool->GetSelection();
 
-    // Be sure that there is at least one item that we can modify
+    // pick up items under the cursor if needed
     if( !hoverSelection( selection ) )
         return 0;
-
-    bool originalItemsModified = false;
 
     // we have a selection to work on now, so start the tool process
 
     PCB_BASE_FRAME* editFrame = getEditFrame<PCB_BASE_FRAME>();
     editFrame->OnModify();
 
-    if( m_editModules )
-    {
-        // Module editors do their undo point upfront for the whole module
-        editFrame->SaveCopyInUndoList( editFrame->GetBoard()->m_Modules, UR_MODEDIT );
-    }
-    else
-    {
-        // We may also change the original item
-        editFrame->SaveCopyInUndoList( selection.items, UR_CHANGED );
-    }
+    GAL_ARRAY_CREATOR array_creator( *editFrame, m_editModules,
+                                     getModel<BOARD>()->GetRatsnest(),
+                                     selection );
 
-    DIALOG_CREATE_ARRAY::ARRAY_OPTIONS* array_opts = NULL;
-
-    VECTOR2I rp = selection.GetCenter();
-    const wxPoint rotPoint( rp.x, rp.y );
-
-    DIALOG_CREATE_ARRAY dialog( editFrame, rotPoint, &array_opts );
-    int ret = dialog.ShowModal();
-
-    if( ret == wxID_OK && array_opts != NULL )
-    {
-        PICKED_ITEMS_LIST newItemList;
-
-        for( int i = 0; i < selection.Size(); ++i )
-        {
-            BOARD_ITEM* item = selection.Item<BOARD_ITEM>( i );
-
-            if( !item )
-                continue;
-
-            wxString cachedString;
-
-            if( item->Type() == PCB_MODULE_T )
-            {
-                cachedString = static_cast<MODULE*>( item )->GetReferencePrefix();
-            }
-            else if( EDA_TEXT* text = dynamic_cast<EDA_TEXT*>( item ) )
-            {
-                // Copy the text (not just take a reference
-                cachedString = text->GetText();
-            }
-
-            // iterate across the array, laying out the item at the
-            // correct position
-            const unsigned nPoints = array_opts->GetArraySize();
-
-            for( unsigned ptN = 0; ptN < nPoints; ++ptN )
-            {
-                BOARD_ITEM* newItem = NULL;
-
-                if( ptN == 0 )
-                    newItem = item;
-                else
-                {
-                    // if renumbering, no need to increment
-                    const bool increment = !array_opts->ShouldRenumberItems();
-
-                    // Some items cannot be duplicated
-                    // i.e. the ref and value fields of a footprint or zones
-                    // therefore newItem can be null
-
-                    if( m_editModules )
-                        newItem = editFrame->GetBoard()->m_Modules->DuplicateAndAddItem( item, increment );
-                    else
-                    {
-#if 0
-                        // @TODO: see if we allow zone duplication here
-                        // Duplicate zones is especially tricky (overlaping zones must be merged)
-                        // so zones are not duplicated
-                        if( item->Type() == PCB_ZONE_AREA_T )
-                            newItem = NULL;
-                        else
-#endif
-                            newItem = editFrame->GetBoard()->DuplicateAndAddItem( item, increment );
-                    }
-
-                    if( newItem )
-                    {
-                        array_opts->TransformItem( ptN, newItem, rotPoint );
-
-                        m_toolMgr->RunAction( COMMON_ACTIONS::unselectItem, true, newItem );
-
-                        newItemList.PushItem( newItem );
-
-                        if( newItem->Type() == PCB_MODULE_T)
-                        {
-                            static_cast<MODULE*>( newItem )->RunOnChildren( boost::bind( &KIGFX::VIEW::Add,
-                                    getView(), _1 ) );
-                        }
-
-                        editFrame->GetGalCanvas()->GetView()->Add( newItem );
-                        getModel<BOARD>()->GetRatsnest()->Update( newItem );
-                    }
-                }
-
-                // set the number if needed:
-                if( newItem && array_opts->ShouldRenumberItems() )
-                {
-                    switch( newItem->Type() )
-                    {
-                    case PCB_PAD_T:
-                    {
-                        const wxString padName = array_opts->GetItemNumber( ptN );
-                        static_cast<D_PAD*>( newItem )->SetPadName( padName );
-
-                        originalItemsModified = true;
-                        break;
-                    }
-                    case PCB_MODULE_T:
-                    {
-                        const wxString moduleName = array_opts->GetItemNumber( ptN );
-                        MODULE* module = static_cast<MODULE*>( newItem );
-                        module->SetReference( cachedString + moduleName );
-
-                        originalItemsModified = true;
-                        break;
-                    }
-                    case PCB_MODULE_TEXT_T:
-                    case PCB_TEXT_T:
-                    {
-                        EDA_TEXT* text = dynamic_cast<EDA_TEXT*>( newItem );
-                        if( text )
-                            text->SetText( array_opts->InterpolateNumberIntoString( ptN, cachedString ) );
-
-                        originalItemsModified = true;
-                        break;
-                    }
-                    default:
-                        // no renumbering of other items
-                        break;
-                    }
-                }
-            }
-        }
-
-        if( !m_editModules )
-        {
-            if( originalItemsModified )
-            {
-                // Update the appearance of the original items
-                selection.group->ItemsViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
-            }
-
-            // Add all items as a single undo point for PCB editors
-            // TODO: Can this be merged into the previous undo point (where
-            //       we saved the original items)
-            editFrame->SaveCopyInUndoList( newItemList, UR_NEW );
-        }
-    }
-
-    getModel<BOARD>()->GetRatsnest()->Recalculate();
+    array_creator.Invoke();
 
     return 0;
 }
@@ -1046,7 +975,7 @@ void EDIT_TOOL::processUndoBuffer( const PICKED_ITEMS_LIST* aLastChange )
     const std::vector<PICKED_ITEMS_LIST*>& undoList = editFrame->GetScreen()->m_UndoList.m_CommandsList;
     bool process = false;
 
-    BOOST_FOREACH( const PICKED_ITEMS_LIST* list, undoList )
+    for( const PICKED_ITEMS_LIST* list : undoList )
     {
         if( process )
             processPickedList( list );
@@ -1058,7 +987,7 @@ void EDIT_TOOL::processUndoBuffer( const PICKED_ITEMS_LIST* aLastChange )
     // then the undo list must have been completely altered, so process everything
     if( !process )
     {
-        BOOST_FOREACH( const PICKED_ITEMS_LIST* list, undoList )
+        for( const PICKED_ITEMS_LIST* list : undoList )
             processPickedList( list );
     }
 }
@@ -1086,8 +1015,8 @@ void EDIT_TOOL::processPickedList( const PICKED_ITEMS_LIST* aList )
 
         case UR_DELETED:
             if( updItem->Type() == PCB_MODULE_T )
-                static_cast<MODULE*>( updItem )->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove,
-                                                                             view, _1 ) );
+                static_cast<MODULE*>( updItem )->RunOnChildren( std::bind( &KIGFX::VIEW::Remove,
+                                                                 view, std::placeholders::_1 ) );
 
             view->Remove( updItem );
             //ratsnest->Remove( updItem );  // this is done in BOARD::Remove
@@ -1095,8 +1024,8 @@ void EDIT_TOOL::processPickedList( const PICKED_ITEMS_LIST* aList )
 
         case UR_NEW:
             if( updItem->Type() == PCB_MODULE_T )
-                static_cast<MODULE*>( updItem )->RunOnChildren( boost::bind( &KIGFX::VIEW::Add,
-                                                                             view, _1 ) );
+                static_cast<MODULE*>( updItem )->RunOnChildren( std::bind( &KIGFX::VIEW::Add,
+                                                                 view, std::placeholders::_1 ) );
 
             view->Add( updItem );
             //ratsnest->Add( updItem );     // this is done in BOARD::Add

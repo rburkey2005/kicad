@@ -29,6 +29,7 @@
 
 #include <fctsys.h>
 #include <confirm.h>
+#include <properties.h>
 #include <wxPcbStruct.h>
 #include <pcbnew.h>
 #include <io_mgr.h>
@@ -123,9 +124,9 @@ bool PCB_EDIT_FRAME::AppendBoardFile( const wxString& aFullFileName, int aCtl )
         if( bboxInit )
             bbox = track->GetBoundingBox();
         else
+            bbox.Merge( track->GetBoundingBox() );
 
         bboxInit = false;
-            bbox.Merge(track->GetBoundingBox() );
     }
 
     if( module )
@@ -143,7 +144,7 @@ bool PCB_EDIT_FRAME::AppendBoardFile( const wxString& aFullFileName, int aCtl )
         if( bboxInit )
             bbox = module->GetBoundingBox();
         else
-            bbox.Merge(module->GetBoundingBox() );
+            bbox.Merge( module->GetBoundingBox() );
 
         bboxInit = false;
     }
@@ -163,7 +164,7 @@ bool PCB_EDIT_FRAME::AppendBoardFile( const wxString& aFullFileName, int aCtl )
         if( bboxInit )
             bbox = drawing->GetBoundingBox();
         else
-            bbox.Merge(drawing->GetBoundingBox() );
+            bbox.Merge( drawing->GetBoundingBox() );
 
         bboxInit = false;
     }
@@ -180,7 +181,7 @@ bool PCB_EDIT_FRAME::AppendBoardFile( const wxString& aFullFileName, int aCtl )
         if( bboxInit )
             bbox = zone->GetBoundingBox();
         else
-            bbox.Merge(zone->GetBoundingBox() );
+            bbox.Merge( zone->GetBoundingBox() );
 
         bboxInit = false;
     }

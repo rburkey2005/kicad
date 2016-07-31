@@ -289,7 +289,7 @@ static DRAWSEGMENT* findPoint( const wxPoint& aPoint, ::PCB_TYPE_COLLECTOR* item
         DRAWSEGMENT*    graphic = (DRAWSEGMENT*) (*items)[i];
         unsigned        d;
 
-        wxASSERT( graphic->Type() == PCB_LINE_T );
+        wxASSERT( graphic->Type() == PCB_LINE_T || graphic->Type() == PCB_MODULE_EDGE_T );
 
         switch( graphic->GetShape() )
         {
@@ -348,7 +348,7 @@ static DRAWSEGMENT* findPoint( const wxPoint& aPoint, ::PCB_TYPE_COLLECTOR* item
 #if defined(DEBUG)
     if( items->GetCount() )
     {
-        printf( "Unable to find segment matching point (%.6g,%.6g) (seg count %d)\n",
+        printf( "Unable to find segment matching point (%.6g;%.6g) (seg count %d)\n",
                 IU2um( aPoint.x )/1000, IU2um( aPoint.y )/1000,
                 items->GetCount());
 
@@ -356,13 +356,22 @@ static DRAWSEGMENT* findPoint( const wxPoint& aPoint, ::PCB_TYPE_COLLECTOR* item
         {
             DRAWSEGMENT* graphic = (DRAWSEGMENT*) (*items)[i];
 
-            printf( "item %d, type=%s, start=%.6g %.6g  end=%.6g,%.6g\n",
-                    i + 1,
-                    TO_UTF8( BOARD_ITEM::ShowShape( (STROKE_T) graphic->GetShape() ) ),
-                    IU2um( graphic->GetStart().x )/1000,
-                    IU2um( graphic->GetStart().y )/1000,
-                    IU2um( graphic->GetEnd().x )/1000,
-                    IU2um( graphic->GetEnd().y )/1000 );
+            if( graphic->GetShape() == S_ARC )
+                printf( "item %d, type=%s, start=%.6g;%.6g  end=%.6g;%.6g\n",
+                        i + 1,
+                        TO_UTF8( BOARD_ITEM::ShowShape( graphic->GetShape() ) ),
+                        IU2um( graphic->GetArcStart().x )/1000,
+                        IU2um( graphic->GetArcStart().y )/1000,
+                        IU2um( graphic->GetArcEnd().x )/1000,
+                        IU2um( graphic->GetArcEnd().y )/1000 );
+            else
+                printf( "item %d, type=%s, start=%.6g;%.6g  end=%.6g;%.6g\n",
+                        i + 1,
+                        TO_UTF8( BOARD_ITEM::ShowShape( graphic->GetShape() ) ),
+                        IU2um( graphic->GetStart().x )/1000,
+                        IU2um( graphic->GetStart().y )/1000,
+                        IU2um( graphic->GetEnd().x )/1000,
+                        IU2um( graphic->GetEnd().y )/1000 );
         }
     }
 #endif
@@ -732,13 +741,9 @@ IMAGE* SPECCTRA_DB::makeIMAGE( BOARD* aBoard, MODULE* aModule )
 
             pin->padstack_id = padstack->padstack_id;
 
-            int angle = pad->GetOrientation() - aModule->GetOrientation();    // tenths of degrees
-
-            if( angle )
-            {
-                NORMALIZE_ANGLE_POS( angle );
-                pin->SetRotation( angle / 10.0 );
-            }
+            double angle = pad->GetOrientationDegrees() - aModule->GetOrientationDegrees();
+            NORMALIZE_ANGLE_DEGREES_POS( angle );
+            pin->SetRotation( angle );
 
             wxPoint pos( pad->GetPos0() );
 
@@ -816,7 +821,7 @@ IMAGE* SPECCTRA_DB::makeIMAGE( BOARD* aBoard, MODULE* aModule )
         case S_ARC:
         default:
             DBG( printf( "makeIMAGE(): unsupported shape %s\n",
-                       TO_UTF8( BOARD_ITEM::ShowShape( (STROKE_T) graphic->GetShape() ) ) ); )
+                       TO_UTF8( BOARD_ITEM::ShowShape( graphic->GetShape() ) ) ); )
             continue;
         }
     }
@@ -1023,9 +1028,9 @@ void SPECCTRA_DB::fillBOUNDARY( BOARD* aBoard, BOUNDARY* boundary )
             default:
                 {
                     wxString error = wxString::Format( _( "Unsupported DRAWSEGMENT type %s" ),
-                        GetChars( BOARD_ITEM::ShowShape( (STROKE_T) graphic->GetShape() ) ) );
+                        GetChars( BOARD_ITEM::ShowShape( graphic->GetShape() ) ) );
 
-                    ThrowIOError( error );
+                    THROW_IO_ERROR( error );
                 }
                 break;
             }
@@ -1130,9 +1135,9 @@ void SPECCTRA_DB::fillBOUNDARY( BOARD* aBoard, BOUNDARY* boundary )
                 default:
                     {
                         wxString error = wxString::Format( _( "Unsupported DRAWSEGMENT type %s" ),
-                            GetChars( BOARD_ITEM::ShowShape( (STROKE_T) graphic->GetShape() ) ) );
+                            GetChars( BOARD_ITEM::ShowShape( graphic->GetShape() ) ) );
 
-                        ThrowIOError( error );
+                        THROW_IO_ERROR( error );
                     }
                     break;
                 }
@@ -1159,7 +1164,7 @@ void SPECCTRA_DB::fillBOUNDARY( BOARD* aBoard, BOUNDARY* boundary )
                             GetChars( FROM_UTF8( BOARD_ITEM::FormatInternalUnits( prevPt.x ).c_str() ) ),
                             GetChars( FROM_UTF8( BOARD_ITEM::FormatInternalUnits( prevPt.y ).c_str() ) )
                         );
-                        ThrowIOError( error );
+                        THROW_IO_ERROR( error );
                     }
                     break;
                 }
@@ -1266,9 +1271,9 @@ void SPECCTRA_DB::fillBOUNDARY( BOARD* aBoard, BOUNDARY* boundary )
                         {
                             wxString error = wxString::Format(
                                 _( "Unsupported DRAWSEGMENT type %s" ),
-                                GetChars( BOARD_ITEM::ShowShape( (STROKE_T) graphic->GetShape() ) ) );
+                                GetChars( BOARD_ITEM::ShowShape( graphic->GetShape() ) ) );
 
-                            ThrowIOError( error );
+                            THROW_IO_ERROR( error );
                         }
                         break;
                     }
@@ -1296,7 +1301,7 @@ void SPECCTRA_DB::fillBOUNDARY( BOARD* aBoard, BOUNDARY* boundary )
                                 GetChars( FROM_UTF8( BOARD_ITEM::FormatInternalUnits( prevPt.y ).c_str() ) )
                             );
 
-                            ThrowIOError( error );
+                            THROW_IO_ERROR( error );
                         }
                         break;
                     }
@@ -1439,8 +1444,6 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
     // Unless they are unique, we cannot import the session file which comes
     // back to us later from the router.
     {
-        PCB_TYPE_COLLECTOR  padItems;
-
         items.Collect( aBoard, scanMODULEs );
 
         STRINGSET       refs;       // holds module reference designators
@@ -1451,16 +1454,16 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
 
             if( module->GetReference() == wxEmptyString )
             {
-                ThrowIOError( _( "Component with value of '%s' has empty reference id." ),
-                                GetChars( module->GetValue() ) );
+                THROW_IO_ERROR( wxString::Format( _( "Component with value of '%s' has empty reference id." ),
+                                                  GetChars( module->GetValue() ) ) );
             }
 
             // if we cannot insert OK, that means the reference has been seen before.
             STRINGSET_PAIR refpair = refs.insert( TO_UTF8( module->GetReference() ) );
             if( !refpair.second )      // insert failed
             {
-                ThrowIOError( _( "Multiple components have identical reference IDs of '%s'." ),
-                      GetChars( module->GetReference() ) );
+                THROW_IO_ERROR( wxString::Format( _( "Multiple components have identical reference IDs of '%s'." ),
+                                                  GetChars( module->GetReference() ) ) );
             }
         }
     }
@@ -1858,7 +1861,7 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
 
             comp->places.push_back( place );
 
-            place->SetRotation( module->GetOrientation()/10.0 );
+            place->SetRotation( module->GetOrientationDegrees() );
             place->SetVertex( mapPt( module->GetPosition() ) );
             place->component_id = componentId;
             place->part_number  = TO_UTF8( module->GetValue() );
@@ -1866,9 +1869,9 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
             // module is flipped from bottom side, set side to T_back
             if( module->GetFlag() )
             {
-                int angle = 1800 - module->GetOrientation();
-                NORMALIZE_ANGLE_POS( angle );
-                place->SetRotation( angle / 10.0 );
+                double angle = 180.0 - module->GetOrientationDegrees();
+                NORMALIZE_ANGLE_DEGREES_POS( angle );
+                place->SetRotation( angle );
 
                 place->side = T_back;
             }
@@ -2007,10 +2010,10 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
             if( netcode == 0 )
                 continue;
 
-            if( old_netcode != netcode
-            ||  old_width   != track->GetWidth()
-            ||  old_layer   != track->GetLayer()
-            ||  (path && path->points.back() != mapPt(track->GetStart()) )
+            if( old_netcode != netcode ||
+                old_width   != track->GetWidth() ||
+                old_layer   != track->GetLayer() ||
+                (path && path->points.back() != mapPt(track->GetStart()) )
               )
             {
                 old_width   = track->GetWidth();
@@ -2044,7 +2047,8 @@ void SPECCTRA_DB::FromBOARD( BOARD* aBoard )
                 path->AppendPoint( mapPt( track->GetStart() ) );
             }
 
-            path->AppendPoint( mapPt( track->GetEnd() ) );
+            if( path )  // Should not occur
+                path->AppendPoint( mapPt( track->GetEnd() ) );
         }
     }
 
@@ -2236,4 +2240,3 @@ void SPECCTRA_DB::RevertMODULEs( BOARD* aBoard )
 }
 
 }       // namespace DSN
-

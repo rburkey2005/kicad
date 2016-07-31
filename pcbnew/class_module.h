@@ -32,6 +32,7 @@
 #define MODULE_H_
 
 
+#include <list>
 #include <dlist.h>
 #include <layers_id_colors_and_visibility.h>       // ALL_LAYERS definition.
 #include <class_board_item.h>
@@ -40,12 +41,12 @@
 #include <class_text_mod.h>
 #include <PolyLine.h>
 #include "zones.h"
+#include <3d_cache/3d_info.h>
 
-#include <boost/function.hpp>
+#include <functional>
 
 class LINE_READER;
 class EDA_3D_CANVAS;
-class S3D_MASTER;
 class EDA_DRAW_PANEL;
 class D_PAD;
 class BOARD;
@@ -154,14 +155,17 @@ public:
     DLIST<BOARD_ITEM>& GraphicalItems()         { return m_Drawings; }
     const DLIST<BOARD_ITEM>& GraphicalItems() const { return m_Drawings; }
 
-    DLIST<S3D_MASTER>& Models()                 { return m_3D_Drawings; }
-    const DLIST<S3D_MASTER>& Models() const     { return m_3D_Drawings; }
+    std::list<S3D_INFO>& Models()             { return m_3D_Drawings; }
+    const std::list<S3D_INFO>& Models() const { return m_3D_Drawings; }
 
     void SetPosition( const wxPoint& aPos );                        // was overload
     const wxPoint& GetPosition() const          { return m_Pos; }   // was overload
 
     void SetOrientation( double newangle );
+    void SetOrientationDegrees( double aOrientation ) { SetOrientation( aOrientation*10.0 ); }
     double GetOrientation() const { return m_Orient; }
+    double GetOrientationDegrees() const   { return m_Orient/10.0; }
+    double GetOrientationRadians() const   { return m_Orient*M_PI/1800; }
 
     const FPID& GetFPID() const { return m_fpid; }
     void SetFPID( const FPID& aFPID ) { m_fpid = aFPID; }
@@ -235,9 +239,9 @@ public:
 #define MODULE_PADS_LOCKED  0x08        ///< In autoplace: module waiting for autoplace
 
 
-    bool IsLocked() const
+    bool IsLocked() const // override
     {
-        return (m_ModuleStatus & MODULE_is_LOCKED) != 0;
+        return ( m_ModuleStatus & MODULE_is_LOCKED ) != 0;
     }
 
     /**
@@ -245,7 +249,7 @@ public:
      * sets the MODULE_is_LOCKED bit in the m_ModuleStatus
      * @param isLocked When true means turn on locked status, else unlock
      */
-    void SetLocked( bool isLocked )
+    void SetLocked( bool isLocked ) // override
     {
         if( isLocked )
             m_ModuleStatus |= MODULE_is_LOCKED;
@@ -340,7 +344,7 @@ public:
                             int             aInflateValue,
                             int             aCircleToSegmentsCount,
                             double          aCorrectionFactor,
-                            bool            aSkipNPTHPadsWihNoCopper = false );
+                            bool            aSkipNPTHPadsWihNoCopper = false ) const;
 
     /**
      * function TransformGraphicShapesWithClearanceToPolygonSet
@@ -368,7 +372,26 @@ public:
                             int             aInflateValue,
                             int             aCircleToSegmentsCount,
                             double          aCorrectionFactor,
-                            int             aCircleToSegmentsCountForTexts = 0 );
+                            int             aCircleToSegmentsCountForTexts = 0 ) const;
+
+    /**
+     * @brief TransformGraphicTextWithClearanceToPolygonSet
+     * This function is the same as TransformGraphicShapesWithClearanceToPolygonSet
+     * but only generate text
+     * @param aLayer
+     * @param aCornerBuffer
+     * @param aInflateValue
+     * @param aCircleToSegmentsCount
+     * @param aCorrectionFactor
+     * @param aCircleToSegmentsCountForTexts
+     */
+    void TransformGraphicTextWithClearanceToPolygonSet(
+                            LAYER_ID aLayer,
+                            SHAPE_POLY_SET& aCornerBuffer,
+                            int             aInflateValue,
+                            int             aCircleToSegmentsCount,
+                            double          aCorrectionFactor,
+                            int             aCircleToSegmentsCountForTexts = 0 ) const;
 
     /**
      * Function DrawEdgesOnly
@@ -447,25 +470,6 @@ public:
     TEXTE_MODULE& Value() const       { return *m_Value; }
     TEXTE_MODULE& Reference() const   { return *m_Reference; }
 
-    /*!
-     * Function IncrementItemReference
-     * Implementation of the generic "reference" incrementing interface
-     * Increments the numeric suffix, filling any sequence gaps
-     */
-    bool IncrementItemReference(); //override
-
-    /**
-     * Function IncrementReference
-     * Increments the module's reference, if possible. A reference with
-     * a numerical suffix and an optional alphabetical prefix can be
-     * incremented: "A1" and "1" can be, "B" can't.
-     *
-     * @param aFillSequenceGaps if true, the next reference in a sequence
-     * like A1,A3,A4 will be A2. If false, it will be A5.
-     * @return true if the reference was incremented.
-     */
-    bool IncrementReference( bool aFillSequenceGaps );
-
     /**
      * Function FindPadByName
      * returns a D_PAD* with a matching name.  Note that names may not be
@@ -495,6 +499,20 @@ public:
      * @return the number of pads according to \a aIncludeNPTH.
      */
     unsigned GetPadCount( INCLUDE_NPTH_T aIncludeNPTH = INCLUDE_NPTH_T( INCLUDE_NPTH ) ) const;
+
+    /**
+     * GetUniquePadCount
+     * returns the number of unique pads.
+     * A complex pad can be built with many pads having the same pad name
+     * to create a complex shape or fragmented solder paste areas.
+     *
+     * GetUniquePadCount calculate the count of not blank pad names
+     *
+     * @param aIncludeNPTH includes non-plated through holes when true.  Does not include
+     *                     non-plated through holes when false.
+     * @return the number of unique pads according to \a aIncludeNPTH.
+     */
+    unsigned GetUniquePadCount( INCLUDE_NPTH_T aIncludeNPTH = INCLUDE_NPTH_T( INCLUDE_NPTH ) ) const;
 
     /**
      * Function GetNextPadName
@@ -529,12 +547,11 @@ public:
      * Function Add3DModel
      * adds \a a3DModel definition to the end of the 3D model list.
      *
-     * @param a3DModel A pointer to a #S3D_MASTER to add to the list.
+     * @param a3DModel A pointer to a #S3D_INFO to add to the list.
      */
-    void Add3DModel( S3D_MASTER* a3DModel );
+    void Add3DModel( S3D_INFO* a3DModel );
 
-    SEARCH_RESULT Visit( INSPECTOR* inspector, const void* testData,
-                         const KICAD_T scanTypes[] );
+    SEARCH_RESULT Visit( INSPECTOR inspector,  void* testData, const KICAD_T scanTypes[] ) override;
 
     wxString GetClass() const
     {
@@ -553,7 +570,7 @@ public:
      * Invokes a function on all BOARD_ITEMs that belong to the module (pads, drawings, texts).
      * @param aFunction is the function to be invoked.
      */
-    void RunOnChildren( boost::function<void (BOARD_ITEM*)> aFunction );
+    void RunOnChildren( std::function<void (BOARD_ITEM*)> aFunction );
 
     /// @copydoc VIEW_ITEM::ViewUpdate()
     void ViewUpdate( int aUpdateFlags = KIGFX::VIEW_ITEM::ALL );
@@ -570,15 +587,20 @@ public:
     /**
      * Function CopyNetlistSettings
      * copies the netlist settings to \a aModule.
+     * Used to copy some footprint parameters when replacing a footprint by an other
+     * footprint when reading a netlist, or in exchange footprint dialog
      *
      * The netlist settings are all of the #MODULE settings not define by a #MODULE in
-     * a netlist.  These setting include position, orientation, local clearances, ets.
+     * a netlist.  These setting include placement prms (position, orientation, side)
+     * and optionally local prms( clearances, zone connection type, etc).
      * The reference designator, value, path, and physical geometry settings are not
      * copied.
      *
      * @param aModule is the #MODULE to copy the settings to.
+     * @param aCopyLocalSettings = false to copy only module placement
+     *   true to also copy local prms
      */
-    void CopyNetlistSettings( MODULE* aModule );
+    void CopyNetlistSettings( MODULE* aModule, bool aCopyLocalSettings );
 
     /**
      * static function IsLibNameValid
@@ -638,7 +660,7 @@ public:
 private:
     DLIST<D_PAD>      m_Pads;           ///< Linked list of pads.
     DLIST<BOARD_ITEM> m_Drawings;       ///< Linked list of graphical items.
-    DLIST<S3D_MASTER> m_3D_Drawings;    ///< Linked list of 3D models.
+    std::list<S3D_INFO> m_3D_Drawings;  ///< Linked list of 3D models.
     double            m_Orient;         ///< Orientation in tenths of a degree, 900=90.0 degrees.
     wxPoint           m_Pos;            ///< Position of module on the board in internal units.
     TEXTE_MODULE*     m_Reference;      ///< Component reference designator value (U34, R18..)

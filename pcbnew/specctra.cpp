@@ -131,20 +131,6 @@ int SPECCTRA_DB::findLayerName( const std::string& aLayerName ) const
     return -1;
 }
 
-
-void SPECCTRA_DB::ThrowIOError( const wxString& fmt, ... ) throw( IO_ERROR )
-{
-    wxString    errText;
-    va_list     args;
-
-    va_start( args, fmt );
-    errText.PrintfV( fmt, args );
-    va_end( args );
-
-    THROW_IO_ERROR( errText );
-}
-
-
 void SPECCTRA_DB::readCOMPnPIN( std::string* component_id, std::string* pin_id ) throw( IO_ERROR )
 {
     T      tok;
@@ -254,11 +240,11 @@ void SPECCTRA_DB::readTIME( time_t* time_stamp ) throw( IO_ERROR )
 }
 
 
-void SPECCTRA_DB::LoadPCB( const wxString& filename ) throw( IO_ERROR, boost::bad_pointer )
+void SPECCTRA_DB::LoadPCB( const wxString& aFilename ) throw( IO_ERROR, boost::bad_pointer )
 {
-    FILE_LINE_READER    reader( filename );
+    FILE_LINE_READER curr_reader( aFilename );
 
-    PushReader( &reader );
+    PushReader( &curr_reader );
 
     if( NextTok() != T_LEFT )
         Expecting( T_LEFT );
@@ -273,11 +259,11 @@ void SPECCTRA_DB::LoadPCB( const wxString& filename ) throw( IO_ERROR, boost::ba
 }
 
 
-void SPECCTRA_DB::LoadSESSION( const wxString& filename ) throw( IO_ERROR, boost::bad_pointer )
+void SPECCTRA_DB::LoadSESSION( const wxString& aFilename ) throw( IO_ERROR, boost::bad_pointer )
 {
-    FILE_LINE_READER    reader( filename );
+    FILE_LINE_READER curr_reader( aFilename );
 
-    PushReader( &reader );
+    PushReader( &curr_reader );
 
     if( NextTok() != T_LEFT )
         Expecting( T_LEFT );
@@ -3444,25 +3430,25 @@ void SPECCTRA_DB::doSUPPLY_PIN( SUPPLY_PIN* growth ) throw( IO_ERROR )
 }
 
 
-void SPECCTRA_DB::ExportPCB( wxString filename, bool aNameChange ) throw( IO_ERROR )
+void SPECCTRA_DB::ExportPCB( wxString aFilename, bool aNameChange ) throw( IO_ERROR )
 {
     if( pcb )
     {
-        FILE_OUTPUTFORMATTER    formatter( filename, wxT( "wt" ), quote_char[0] );
+        FILE_OUTPUTFORMATTER    formatter( aFilename, wxT( "wt" ), quote_char[0] );
 
         if( aNameChange )
-            pcb->pcbname = TO_UTF8( filename );
+            pcb->pcbname = TO_UTF8( aFilename );
 
         pcb->Format( &formatter, 0 );
     }
 }
 
 
-void SPECCTRA_DB::ExportSESSION( wxString filename )
+void SPECCTRA_DB::ExportSESSION( wxString aFilename )
 {
     if( session )
     {
-        FILE_OUTPUTFORMATTER    formatter( filename, wxT( "wt" ), quote_char[0] );
+        FILE_OUTPUTFORMATTER formatter( aFilename, wxT( "wt" ), quote_char[0] );
 
         session->Format( &formatter, 0 );
     }

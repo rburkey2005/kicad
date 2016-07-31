@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2012-2015 Miguel Angel Ajo Pelayo <miguelangel@nbee.es>
- * Copyright (C) 2012-2015 Jean-Pierre Charras, jp.charras at  wanadoo.fr
+ * Copyright (C) 2012-2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
  * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
  *
@@ -32,7 +32,7 @@
 #include <kiface_i.h>
 #include <class_drawpanel.h>
 #include <wxPcbStruct.h>
-#include <3d_viewer.h>
+#include <3d_viewer/eda_3d_viewer.h>
 #include <msgpanel.h>
 #include <macros.h>
 
@@ -88,18 +88,29 @@ int FOOTPRINT_WIZARD_FRAME::m_columnPrmUnit = 2;
 
 #define FOOTPRINT_WIZARD_FRAME_NAME wxT( "FootprintWizard" )
 
+/* Note: our FOOTPRINT_WIZARD_FRAME is always modal.
+ * Note:
+ * On windows, when the frame with type wxFRAME_FLOAT_ON_PARENT is displayed
+ * its parent frame is sometimes brought to the foreground when closing the
+ * LIB_VIEW_FRAME frame.
+ * If it still happens, it could be better to use wxSTAY_ON_TOP
+ * instead of wxFRAME_FLOAT_ON_PARENT
+ */
+#ifdef __WINDOWS__
+#define MODAL_MODE_EXTRASTYLE wxFRAME_FLOAT_ON_PARENT   // could be wxSTAY_ON_TOP if issues
+#else
+#define MODAL_MODE_EXTRASTYLE wxFRAME_FLOAT_ON_PARENT
+#endif
+
 FOOTPRINT_WIZARD_FRAME::FOOTPRINT_WIZARD_FRAME( KIWAY* aKiway,
         wxWindow* aParent, FRAME_T aFrameType ) :
     PCB_BASE_FRAME( aKiway, aParent, aFrameType, _( "Footprint Wizard" ),
                 wxDefaultPosition, wxDefaultSize,
-#ifdef __WINDOWS__
-                KICAD_DEFAULT_DRAWFRAME_STYLE | wxSTAY_ON_TOP,
-#else
-                KICAD_DEFAULT_DRAWFRAME_STYLE | wxFRAME_FLOAT_ON_PARENT,
-#endif
+                aParent ? KICAD_DEFAULT_DRAWFRAME_STYLE | MODAL_MODE_EXTRASTYLE
+                          : KICAD_DEFAULT_DRAWFRAME_STYLE | wxSTAY_ON_TOP,
                 FOOTPRINT_WIZARD_FRAME_NAME )
 {
-    wxASSERT( aFrameType==FRAME_PCB_FOOTPRINT_WIZARD_MODAL );
+    wxASSERT( aFrameType == FRAME_PCB_FOOTPRINT_WIZARD_MODAL );
 
     // This frame is always show modal:
     SetModal( true );
@@ -203,15 +214,17 @@ FOOTPRINT_WIZARD_FRAME::FOOTPRINT_WIZARD_FRAME( KIWAY* aKiway,
     // Reason: the FOOTPRINT_WIZARD_FRAME is run as modal;
     // It means the call to FOOTPRINT_WIZARD_FRAME::ShowModal will change the
     // Event Loop Manager, and stop the one created by the dialog.
-    // It does not happen on all W.M., perhaps due to the way or the order events are called
+    // It does not happen on all W.M., perhaps due to the way the order events are called
 //    SelectFootprintWizard();
 }
 
 
 FOOTPRINT_WIZARD_FRAME::~FOOTPRINT_WIZARD_FRAME()
 {
-    if( m_Draw3DFrame )
-        m_Draw3DFrame->Destroy();
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame )
+        draw3DFrame->Destroy();
 }
 
 
@@ -449,7 +462,7 @@ void FOOTPRINT_WIZARD_FRAME::OnActivate( wxActivateEvent& event )
 }
 
 
-bool FOOTPRINT_WIZARD_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey )
+bool FOOTPRINT_WIZARD_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey )
 {
     bool eventHandled = true;
 
@@ -513,26 +526,28 @@ bool FOOTPRINT_WIZARD_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition
 
 void FOOTPRINT_WIZARD_FRAME::Show3D_Frame( wxCommandEvent& event )
 {
-    if( m_Draw3DFrame )
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame )
     {
         // Raising the window does not show the window on Windows if iconized.
         // This should work on any platform.
-        if( m_Draw3DFrame->IsIconized() )
-            m_Draw3DFrame->Iconize( false );
+        if( draw3DFrame->IsIconized() )
+            draw3DFrame->Iconize( false );
 
-        m_Draw3DFrame->Raise();
+        draw3DFrame->Raise();
 
         // Raising the window does not set the focus on Linux.  This should work on any platform.
-        if( wxWindow::FindFocus() != m_Draw3DFrame )
-            m_Draw3DFrame->SetFocus();
+        if( wxWindow::FindFocus() != draw3DFrame )
+            draw3DFrame->SetFocus();
 
         return;
     }
 
-    m_Draw3DFrame = new EDA_3D_FRAME( &Kiway(), this, wxEmptyString );
+    draw3DFrame = new EDA_3D_VIEWER( &Kiway(), this, wxEmptyString );
     Update3D_Frame( false );
-    m_Draw3DFrame->Raise();     // Needed with some Window Managers
-    m_Draw3DFrame->Show( true );
+    draw3DFrame->Raise();     // Needed with some Window Managers
+    draw3DFrame->Show( true );
 }
 
 
@@ -543,20 +558,22 @@ void FOOTPRINT_WIZARD_FRAME::Show3D_Frame( wxCommandEvent& event )
  */
 void FOOTPRINT_WIZARD_FRAME::Update3D_Frame( bool aForceReloadFootprint )
 {
-    if( m_Draw3DFrame == NULL )
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame == NULL )
         return;
 
     wxString frm3Dtitle;
     frm3Dtitle.Printf( _( "ModView: 3D Viewer [%s]" ), GetChars( m_wizardName ) );
-    m_Draw3DFrame->SetTitle( frm3Dtitle );
+    draw3DFrame->SetTitle( frm3Dtitle );
 
     if( aForceReloadFootprint )
     {
-        m_Draw3DFrame->ReloadRequest();
+        draw3DFrame->ReloadRequest();
 
         // Force 3D screen refresh immediately
         if( GetBoard()->m_Modules )
-            m_Draw3DFrame->NewDisplay();
+            draw3DFrame->NewDisplay();
     }
 }
 
@@ -637,6 +654,7 @@ FOOTPRINT_WIZARD_MESSAGES::FOOTPRINT_WIZARD_MESSAGES( FOOTPRINT_WIZARD_FRAME* aP
                      wxDefaultPosition, wxDefaultSize,
                      wxCAPTION | wxRESIZE_BORDER | wxFRAME_FLOAT_ON_PARENT )
 {
+    m_canClose = false;
 	wxBoxSizer* bSizer = new wxBoxSizer( wxVERTICAL );
 	SetSizer( bSizer );
 
@@ -661,6 +679,21 @@ FOOTPRINT_WIZARD_MESSAGES::FOOTPRINT_WIZARD_MESSAGES( FOOTPRINT_WIZARD_FRAME* aP
 FOOTPRINT_WIZARD_MESSAGES::~FOOTPRINT_WIZARD_MESSAGES()
 {
 }
+
+
+BEGIN_EVENT_TABLE( FOOTPRINT_WIZARD_MESSAGES, wxMiniFrame )
+    EVT_CLOSE( FOOTPRINT_WIZARD_MESSAGES::OnCloseMsgWindow )
+END_EVENT_TABLE()
+
+
+void FOOTPRINT_WIZARD_MESSAGES::OnCloseMsgWindow( wxCloseEvent& aEvent )
+{
+    if( !m_canClose )
+        aEvent.Veto();
+    else
+        aEvent.Skip();
+}
+
 
 void FOOTPRINT_WIZARD_MESSAGES::PrintMessage( const wxString& aMessage )
 {
@@ -691,6 +724,8 @@ void FOOTPRINT_WIZARD_MESSAGES::SaveSettings()
     m_config->Write( MESSAGE_BOX_POSY_KEY, m_position.y );
     m_config->Write( MESSAGE_BOX_SIZEX_KEY, m_size.x );
     m_config->Write( MESSAGE_BOX_SIZEY_KEY, m_size.y );
+
+    m_canClose = false;     // close event now allowed
 }
 
 

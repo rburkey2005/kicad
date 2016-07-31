@@ -1,5 +1,3 @@
-#ifndef UTF8_H_
-#define UTF8_H_
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
@@ -23,6 +21,9 @@
  * or you may write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
+
+#ifndef UTF8_H_
+#define UTF8_H_
 
 #include <string>
 #include <wx/string.h>
@@ -125,6 +126,7 @@ public:
      */
     static int uni_forward( const unsigned char* aSequence, unsigned* aResult = NULL );
 
+#ifndef SWIG
     /**
      * class uni_iter
      * is a non-muting iterator that walks through unicode code points in the UTF8 encoded
@@ -224,6 +226,7 @@ public:
     {
         return uni_iter( data() + size() );
     }
+#endif  // SWIG
 };
 
 #endif // UTF8_H_

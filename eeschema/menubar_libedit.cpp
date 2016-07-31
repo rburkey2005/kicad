@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2007 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
  * Copyright (C) 2009-2011 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2011 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,16 +27,16 @@
  * @file eeschema/menubar_libedit.cpp
  * @brief (Re)Create the main menubar for the component editor frame (LibEdit)
  */
-#include <fctsys.h>
+
+#include <menus_helpers.h>
 #include <pgm_base.h>
 
-#include <general.h>
-#include <libeditframe.h>
-#include <eeschema_id.h>
-#include <hotkeys.h>
+#include "eeschema_id.h"
+#include "general.h"
+#include "help_common_strings.h"
+#include "hotkeys.h"
+#include "libeditframe.h"
 
-#include <help_common_strings.h>
-#include <menus_helpers.h>
 
 /**
  * @brief (Re)Create the menubar for the component editor frame
@@ -238,13 +238,6 @@ void LIB_EDIT_FRAME::ReCreateMenuBar()
                  _( "Set Component Editor default values and options" ),
                  KiBitmap( preference_xpm ) );
 
-    // Colors
-    AddMenuItem( preferencesMenu,
-                 ID_COLORS_SETUP,
-                 _( "Set &Colors Scheme" ),
-                 _( "Set color preferences" ),
-                 KiBitmap( palette_xpm ) );
-
     // Language submenu
     Pgm().AddMenuLanguageList( preferencesMenu );
 
@@ -253,9 +246,6 @@ void LIB_EDIT_FRAME::ReCreateMenuBar()
 
     // Menu Help:
     wxMenu* helpMenu = new wxMenu;
-
-    // Version info
-    AddHelpVersionInfoMenuEntry( helpMenu );
 
     // Contents
     AddMenuItem( helpMenu,
@@ -269,6 +259,12 @@ void LIB_EDIT_FRAME::ReCreateMenuBar()
                  _( "&Getting Started in KiCad" ),
                  _( "Open the \"Getting Started in KiCad\" guide for beginners" ),
                  KiBitmap( help_xpm ) );
+
+    AddMenuItem( helpMenu,
+                 ID_PREFERENCES_HOTKEY_SHOW_CURRENT_LIST,
+                 _( "&List Hotkeys" ),
+                 _( "Displays the current hotkeys list and corresponding commands" ),
+                 KiBitmap( hotkeys_xpm ) );
 
     // About Eeschema
     helpMenu->AppendSeparator();

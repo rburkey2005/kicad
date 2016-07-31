@@ -67,7 +67,7 @@
             <event name="OnHibernate"></event>
             <event name="OnIconize"></event>
             <event name="OnIdle"></event>
-            <event name="OnInitDialog"></event>
+            <event name="OnInitDialog">OnInitDlg</event>
             <event name="OnKeyDown"></event>
             <event name="OnKeyUp"></event>
             <event name="OnKillFocus"></event>
@@ -112,6 +112,7 @@
                                 <property name="minimum_size"></property>
                                 <property name="name">optionsSizer</property>
                                 <property name="orient">wxVERTICAL</property>
+                                <property name="parent">1</property>
                                 <property name="permission">none</property>
                                 <event name="OnUpdateUI"></event>
                                 <object class="sizeritem" expanded="0">
@@ -740,6 +741,7 @@
                                         <property name="minimum_size"></property>
                                         <property name="name">sbSizerChipName</property>
                                         <property name="orient">wxVERTICAL</property>
+                                        <property name="parent">1</property>
                                         <property name="permission">none</property>
                                         <event name="OnUpdateUI"></event>
                                         <object class="sizeritem" expanded="0">
@@ -777,7 +779,7 @@
                                                 <property name="max_size"></property>
                                                 <property name="maximize_button">0</property>
                                                 <property name="maximum_size"></property>
-                                                <property name="maxlength">32</property>
+                                                <property name="maxlength">0</property>
                                                 <property name="min_size"></property>
                                                 <property name="minimize_button">0</property>
                                                 <property name="minimum_size"></property>
@@ -1140,7 +1142,7 @@
                                         <property name="max_size"></property>
                                         <property name="maximize_button">0</property>
                                         <property name="maximum_size"></property>
-                                        <property name="maxlength"></property>
+                                        <property name="maxlength">0</property>
                                         <property name="min_size"></property>
                                         <property name="minimize_button">0</property>
                                         <property name="minimum_size"></property>
@@ -1377,6 +1379,7 @@
                                 <property name="minimum_size"></property>
                                 <property name="name">fieldsSizer</property>
                                 <property name="orient">wxHORIZONTAL</property>
+                                <property name="parent">1</property>
                                 <property name="permission">none</property>
                                 <event name="OnUpdateUI"></event>
                                 <object class="sizeritem" expanded="1">
@@ -1389,6 +1392,7 @@
                                         <property name="minimum_size"></property>
                                         <property name="name">gridStaticBoxSizer</property>
                                         <property name="orient">wxVERTICAL</property>
+                                        <property name="parent">1</property>
                                         <property name="permission">none</property>
                                         <event name="OnUpdateUI"></event>
                                         <object class="sizeritem" expanded="0">
@@ -1981,6 +1985,7 @@
                                                         <property name="minimum_size"></property>
                                                         <property name="name">visibilitySizer</property>
                                                         <property name="orient">wxVERTICAL</property>
+                                                        <property name="parent">1</property>
                                                         <property name="permission">none</property>
                                                         <event name="OnUpdateUI"></event>
                                                         <object class="sizeritem" expanded="0">
@@ -2217,7 +2222,7 @@
                                                         <property name="style">wxRA_SPECIFY_COLS</property>
                                                         <property name="subclass"></property>
                                                         <property name="toolbar_pane">0</property>
-                                                        <property name="tooltip">The style of the currently selected field&apos;s text in the schemati</property>
+                                                        <property name="tooltip">The style of the currently selected field&apos;s text in the schematic</property>
                                                         <property name="validator_data_type"></property>
                                                         <property name="validator_style">wxFILTER_NONE</property>
                                                         <property name="validator_type">wxDefaultValidator</property>
@@ -2253,11 +2258,11 @@
                                                 </object>
                                             </object>
                                         </object>
-                                        <object class="sizeritem" expanded="0">
+                                        <object class="sizeritem" expanded="1">
                                             <property name="border">5</property>
                                             <property name="flag">wxBOTTOM|wxEXPAND</property>
                                             <property name="proportion">0</property>
-                                            <object class="wxBoxSizer" expanded="0">
+                                            <object class="wxBoxSizer" expanded="1">
                                                 <property name="minimum_size"></property>
                                                 <property name="name">fieldNameBoxSizer</property>
                                                 <property name="orient">wxVERTICAL</property>

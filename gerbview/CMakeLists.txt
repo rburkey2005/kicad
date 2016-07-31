@@ -1,11 +1,3 @@
-# the map generation creates on Windows/gcc a lot of useless warnings
-# so disable it on windows
-if( WIN32 AND NOT CMAKE_CROSSCOMPILING )
-    set( MAKE_LINK_MAPS false )
-else()
-    set( MAKE_LINK_MAPS true )
-endif()
-
 add_definitions(-DGERBVIEW)
 
 include_directories( BEFORE ${INC_BEFORE} )
@@ -36,11 +28,13 @@ set( GERBVIEW_SRCS
     class_DCodeSelectionbox.cpp
     class_gbr_screen.cpp
     class_gbr_layout.cpp
-    class_GERBER.cpp
+    class_gerber_file_image.cpp
+    class_gerber_file_image_list.cpp
     class_gerber_draw_item.cpp
     class_gerbview_layer_widget.cpp
     class_gbr_layer_box_selector.cpp
     class_X2_gerber_attributes.cpp
+    clear_gbr_drawlayers.cpp
     controle.cpp
     dcode.cpp
     draw_gerber_screen.cpp
@@ -51,12 +45,11 @@ set( GERBVIEW_SRCS
     gerbview_config.cpp
     gerbview_frame.cpp
     hotkeys.cpp
-    init_gbr_drawlayers.cpp
+    clear_gbr_drawlayers.cpp
     locate.cpp
     menubar.cpp
     onleftclick.cpp
     onrightclick.cpp
-    pcbplot.cpp
     printout_control.cpp
     readgerb.cpp
     rs274_read_XY_and_IJ_coordinates.cpp
@@ -78,6 +71,8 @@ set( GERBVIEW_EXTRA_SRCS
 if( MINGW )
     # GERBVIEW_RESOURCES variable is set by the macro.
     mingw_resource_compiler( gerbview )
+else()
+    set( GERBVIEW_RESOURCES gerbview.rc )
 endif()
 
 if( APPLE )
@@ -90,7 +85,7 @@ if( APPLE )
         MACOSX_PACKAGE_LOCATION Resources
         )
     set( MACOSX_BUNDLE_ICON_FILE gerbview.icns )
-    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-eda.kicad )
+    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-pcb.kicad )
     set( MACOSX_BUNDLE_NAME gerbview )
 endif()
 
@@ -131,6 +126,7 @@ target_link_libraries( gerbview_kiface
     common
     polygon
     bitmaps
+    gal
     ${wxWidgets_LIBRARIES}
     ${GDI_PLUS_LIBRARIES}
     )

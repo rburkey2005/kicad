@@ -5,7 +5,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2004-2009 Jean-Pierre Charras, jean-pierre.charras@gpisa-lab.inpg.fr
+ * Copyright (C) 2004-2009 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2009 Dick Hollenbeck, dick@softplc.com
  * Copyright (C) 2009-2015 KiCad Developers, see change_log.txt for contributors.
  *
@@ -46,8 +46,6 @@
 #include <dialog_design_rules.h>
 #include <wx/generic/gridctrl.h>
 #include <dialog_design_rules_aux_helper_class.h>
-
-#include <boost/make_shared.hpp>
 
 // Column labels for net lists
 #define NET_TITLE       _( "Net" )
@@ -175,19 +173,19 @@ DIALOG_DESIGN_RULES::DIALOG_DESIGN_RULES( PCB_EDIT_FRAME* parent ) :
     }
 
     InitDialogRules();
-    Layout();
-    GetSizer()->Fit( this );
-    GetSizer()->SetSizeHints( this );
     m_sdbSizer1OK->SetDefault();
 
-    // Allow tabbing out of grid controls.  Only available on wxWidgets 2.9.5 or later.
-#if wxCHECK_VERSION( 2, 9, 5 )
+    // Allow tabbing out of grid controls.
     m_grid->SetTabBehaviour( wxGrid::Tab_Leave );
     m_gridViaSizeList->SetTabBehaviour( wxGrid::Tab_Leave );
     m_gridTrackWidthList->SetTabBehaviour( wxGrid::Tab_Leave );
-#endif
 
-    Center();
+    Layout();
+
+    FixOSXCancelButtonIssue();
+
+    // Now all widgets have the size fixed, call FinishDialogSettings
+    FinishDialogSettings();
 }
 
 
@@ -278,11 +276,16 @@ void DIALOG_DESIGN_RULES::InitDimensionsLists()
     m_gridViaSizeList->AutoSizeColumns( true );
     m_gridTrackWidthList->SetColMinimalWidth( 0, 150 );
     m_gridTrackWidthList->AutoSizeColumns( true );
+    m_gridViaSizeList->SetColMinimalWidth( 1, 150 );
 
     // Fill cells with actual values:
     m_gridViaSizeList->SetCellValue( 0, 0, wxEmptyString );
     m_gridViaSizeList->SetCellValue( 0, 1, wxEmptyString );
     m_gridTrackWidthList->SetCellValue( 0, 0, wxEmptyString );
+
+    // Give a correct size to row labels column
+    m_gridViaSizeList->SetRowLabelSize( wxGRID_AUTOSIZE );
+    m_gridTrackWidthList->SetRowLabelSize( wxGRID_AUTOSIZE );
 
     for( unsigned ii = 0; ii < m_TracksWidthList.size(); ii++ )
     {
@@ -502,7 +505,7 @@ void DIALOG_DESIGN_RULES::CopyRulesListToBoard()
     // Copy other NetClasses :
     for( int row = 1; row < m_grid->GetNumberRows();  ++row )
     {
-        NETCLASSPTR nc = boost::make_shared<NETCLASS>( m_grid->GetRowLabelValue( row ) );
+        NETCLASSPTR nc = std::make_shared<NETCLASS>( m_grid->GetRowLabelValue( row ) );
 
         if( !m_BrdSettings->m_NetClasses.Add( nc ) )
         {
@@ -928,7 +931,7 @@ bool DIALOG_DESIGN_RULES::TestDataValidity( wxString* aErrorMsg )
         if( viadia < minViaDia )
         {
             result = false;
-            msg.Printf( _( "%s: <b>Via Diameter</b> &lt; <b>Minimun Via Diameter</b><br>" ),
+            msg.Printf( _( "%s: <b>Via Diameter</b> &lt; <b>Minimum Via Diameter</b><br>" ),
                         GetChars( m_grid->GetRowLabelValue( row ) ) );
             errorMsg += msg;
         }

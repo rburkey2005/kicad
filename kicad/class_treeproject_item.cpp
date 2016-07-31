@@ -1,10 +1,3 @@
-/**
- * @file class_treeproject_item.cpp
- *
- * @brief Class TREEPROJECT_ITEM is a derived  class from wxTreeItemData and
- * store info about a file or directory shown in the KiCad tree project files
- */
-
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
@@ -28,21 +21,24 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
+/**
+ * @file class_treeproject_item.cpp
+ *
+ * @brief Class TREEPROJECT_ITEM is a derived  class from wxTreeItemData and
+ * store info about a file or directory shown in the KiCad tree project files
+ */
 
-#include <fctsys.h>
-#include <gestfich.h>
-#include <macros.h>
-
-#include <kicad.h>
-#include <project.h>
-#include <pgm_base.h>
-#include <tree_project_frame.h>
-#include <class_treeprojectfiles.h>
-#include <class_treeproject_item.h>
-#include <wx/imaglist.h>
 
 #include <wx/regex.h>
-#include <wx/dir.h>
+
+#include <gestfich.h>
+
+#include "class_treeprojectfiles.h"
+#include "pgm_kicad.h"
+#include "tree_project_frame.h"
+
+#include "class_treeproject_item.h"
+
 
 TREEPROJECT_ITEM::TREEPROJECT_ITEM( enum TreeFileType type, const wxString& data,
                                     wxTreeCtrl* parent ) :
@@ -173,7 +169,8 @@ void TREEPROJECT_ITEM::Activate( TREE_PROJECT_FRAME* prjframe )
     wxString        fullFileName = GetFileName();
     wxTreeItemId    id = GetId();
 
-    KICAD_MANAGER_FRAME* frame = (KICAD_MANAGER_FRAME*) Pgm().App().GetTopWindow();
+    KICAD_MANAGER_FRAME* frame = prjframe->m_Parent;
+    wxASSERT( frame );
 
     switch( GetType() )
     {
@@ -188,7 +185,12 @@ void TREEPROJECT_ITEM::Activate( TREE_PROJECT_FRAME* prjframe )
         if( fullFileName == frame->SchFileName() )
         {
             // the project's schematic is opened using the *.kiface as part of this process.
-            frame->RunEeschema( fullFileName );
+            // We do not call frame->RunEeschema( fullFileName ),
+            // because after the double click, for some reason,
+            // the tree project frame is brought to the foreground after Eeschema is called from here.
+            // Instead, we post an event, equivalent to click on the eeschema tool in command frame
+            wxCommandEvent evt( wxEVT_COMMAND_TOOL_CLICKED, ID_TO_SCH );
+            wxPostEvent( frame, evt );
         }
         else
         {
@@ -202,7 +204,12 @@ void TREEPROJECT_ITEM::Activate( TREE_PROJECT_FRAME* prjframe )
         if( fullFileName == frame->PcbFileName() || fullFileName == frame->PcbLegacyFileName() )
         {
             // the project's BOARD is opened using the *.kiface as part of this process.
-            frame->RunPcbNew( fullFileName );
+            // We do not call frame->RunPcbNew( fullFileName ),
+            // because after the double click, for some reason,
+            // the tree project frame is brought to the foreground after PcbNew is called from here.
+            // Instead, we post an event, equivalent to simple click on the pcb editor tool in command frame
+            wxCommandEvent evt( wxEVT_COMMAND_TOOL_CLICKED, ID_TO_PCB );
+            wxPostEvent( frame, evt );
         }
         else
         {
@@ -223,12 +230,9 @@ void TREEPROJECT_ITEM::Activate( TREE_PROJECT_FRAME* prjframe )
         OpenPDF( fullFileName );
         break;
 
-/*  No, use a text editor.  Netlists can only be handled sanely now from within
-    eeschema's launcher for the *.kiface, NOT THE EXE which is now gone.
     case TREE_NET:
-        frame->Execute( m_parent, CVPCB_EXE, fullFileName );
+        // Nothing to do ( can be read only by Pcbnew, or by a text editor)
         break;
-*/
 
     case TREE_TXT:
         {

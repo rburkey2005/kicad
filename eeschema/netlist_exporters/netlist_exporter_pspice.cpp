@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1992-2013 jp.charras at wanadoo.fr
  * Copyright (C) 2013 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.TXT for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.TXT for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -57,7 +57,6 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
 
     if( ( f = wxFopen( aOutFileName, wxT( "wt" ) ) ) == NULL )
     {
-        wxString msg;
         msg.Printf( _( "Failed to create file '%s'" ),
                     GetChars( aOutFileName ) );
         DisplayError( NULL, msg );
@@ -79,11 +78,11 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
     // commands) and create text list starting by [+]pspice , or [+]gnucap
     // (simulator commands)
     bufnum[BUFYPOS_LEN] = 0;
-    SCH_SHEET_LIST sheetList;
+    SCH_SHEET_LIST sheetList( g_RootSheet );
 
-    for( SCH_SHEET_PATH* sheet = sheetList.GetFirst(); sheet; sheet = sheetList.GetNext() )
+    for( unsigned i = 0; i < sheetList.size(); i++ )
     {
-        for( EDA_ITEM* item = sheet->LastDrawList(); item; item = item->Next() )
+        for( EDA_ITEM* item = sheetList[i].LastDrawList(); item; item = item->Next() )
         {
             size_t l1, l2;
             wxChar ident;
@@ -162,13 +161,14 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
 
     m_ReferencesAlreadyFound.Clear();
 
-    for( SCH_SHEET_PATH* sheet = sheetList.GetFirst();  sheet;  sheet = sheetList.GetNext() )
+    for( unsigned sheet_idx = 0; sheet_idx < sheetList.size(); sheet_idx++ )
     {
-        ret |= fprintf( f, "* Sheet Name: %s\n", TO_UTF8( sheet->PathHumanReadable() ) );
+        ret |= fprintf( f, "* Sheet Name: %s\n",
+                        TO_UTF8( sheetList[sheet_idx].PathHumanReadable() ) );
 
-        for( EDA_ITEM* item = sheet->LastDrawList();  item;  item = item->Next() )
+        for( EDA_ITEM* item = sheetList[sheet_idx].LastDrawList(); item; item = item->Next() )
         {
-            SCH_COMPONENT* comp = findNextComponentAndCreatePinList( item, sheet );
+            SCH_COMPONENT* comp = findNextComponentAndCreatePinList( item, &sheetList[sheet_idx] );
 
             if( !comp )
                 break;
@@ -185,9 +185,6 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
             {
                 wxString netlistEnabled = netlistEnabledField->GetText();
 
-                if( netlistEnabled.IsEmpty() )
-                    break;
-
                 if( netlistEnabled.CmpNoCase( disableStr ) == 0 )
                     continue;
             }
@@ -201,42 +198,44 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
                 wxString nodeSeqIndexLineStr = spiceSeqField->GetText();
 
                 // Verify Field Exists and is not empty:
-                if( nodeSeqIndexLineStr.IsEmpty() )
-                    break;
-
-                // Create an Array of Standard Pin Names from part definition:
-                stdPinNameArray.Clear();
-
-                for( unsigned ii = 0; ii < m_SortedComponentPinList.size(); ii++ )
+                if( !nodeSeqIndexLineStr.IsEmpty() )
                 {
-                    NETLIST_OBJECT* pin = m_SortedComponentPinList[ii];
 
-                    if( !pin )
-                        continue;
+                    // Create an Array of Standard Pin Names from part definition:
+                    stdPinNameArray.Clear();
 
-                    stdPinNameArray.Add( pin->GetPinNumText() );
-                }
-
-                // Get Alt Pin Name Array From User:
-                wxStringTokenizer tkz( nodeSeqIndexLineStr, delimeters );
-
-                while( tkz.HasMoreTokens() )
-                {
-                    wxString    pinIndex = tkz.GetNextToken();
-                    int         seq;
-
-                    // Find PinName In Standard List assign Standard List Index to Name:
-                    seq = stdPinNameArray.Index(pinIndex);
-
-                    if( seq != wxNOT_FOUND )
+                    for( unsigned ii = 0; ii < m_SortedComponentPinList.size(); ii++ )
                     {
-                        pinSequence.push_back( seq );
+                        NETLIST_OBJECT* pin = m_SortedComponentPinList[ii];
+
+                        if( !pin )
+                            continue;
+
+                        stdPinNameArray.Add( pin->GetPinNumText() );
                     }
+
+                    // Get Alt Pin Name Array From User:
+                    wxStringTokenizer tkz( nodeSeqIndexLineStr, delimeters );
+
+                    while( tkz.HasMoreTokens() )
+                    {
+                        wxString    pinIndex = tkz.GetNextToken();
+                        int         seq;
+
+                        // Find PinName In Standard List assign Standard List Index to Name:
+                        seq = stdPinNameArray.Index(pinIndex);
+
+                        if( seq != wxNOT_FOUND )
+                        {
+                            pinSequence.push_back( seq );
+                        }
+                    }
+
                 }
             }
 
             //Get Standard Reference Designator:
-            wxString RefName = comp->GetRef( sheet );
+            wxString RefName = comp->GetRef( &sheetList[sheet_idx] );
 
             //Conditionally add Prefix only for devices that begin with U or IC:
             if( aUsePrefix )
@@ -315,14 +314,14 @@ bool NETLIST_EXPORTER_PSPICE::WriteNetlist( const wxString& aOutFileName, unsign
             ret |= fprintf( f, " %s\t\t",TO_UTF8( CompValue ) );
 
             // Show Seq Spec on same line as component using line-comment ";":
-            for( unsigned i = 0;  i < pinSequence.size();  ++i )
+            for( unsigned ii = 0; ii < pinSequence.size(); ++ii )
             {
-                if( i==0 )
+                if( ii == 0 )
                     ret |= fprintf( f, ";Node Sequence Spec.<" );
 
-                ret |= fprintf( f, "%s", TO_UTF8( stdPinNameArray.Item( pinSequence[i] ) ) );
+                ret |= fprintf( f, "%s", TO_UTF8( stdPinNameArray.Item( pinSequence[ii] ) ) );
 
-                if( i < pinSequence.size()-1 )
+                if( ii < pinSequence.size()-1 )
                     ret |= fprintf( f, "," );
                 else
                     ret |= fprintf( f, ">" );

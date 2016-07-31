@@ -28,7 +28,8 @@
  * @brief Footprints selection and loading functions.
  */
 
-#include <boost/bind.hpp>
+#include <functional>
+using namespace std::placeholders;
 
 #include <fctsys.h>
 #include <class_drawpanel.h>
@@ -99,7 +100,7 @@ bool FOOTPRINT_EDIT_FRAME::Load_Module_From_BOARD( MODULE* aModule )
     aModule = newModule;
 
     newModule->ClearFlags();
-    newModule->RunOnChildren( boost::bind( &clearModuleItemFlags, _1 ) );
+    newModule->RunOnChildren( std::bind( &clearModuleItemFlags, _1 ) );
 
     GetBoard()->Add( newModule );
 
@@ -136,20 +137,19 @@ wxString PCB_BASE_FRAME::SelectFootprintFromLibBrowser()
 {
     // Close the current non-modal Lib browser if opened, and open a new one, in "modal" mode:
     FOOTPRINT_VIEWER_FRAME* viewer;
-
     viewer = (FOOTPRINT_VIEWER_FRAME*) Kiway().Player( FRAME_PCB_MODULE_VIEWER, false );
 
     if( viewer )
         viewer->Destroy();
 
-    viewer = (FOOTPRINT_VIEWER_FRAME*) Kiway().Player( FRAME_PCB_MODULE_VIEWER_MODAL, true );
+    SetFocus();
+
+    // Creates the modal Lib browser:
+    viewer = (FOOTPRINT_VIEWER_FRAME*) Kiway().Player( FRAME_PCB_MODULE_VIEWER_MODAL, true, this );
 
     wxString    fpid;
-
     int ret = viewer->ShowModal( &fpid, this );
     (void) ret;     // make static analyser quiet
-
-    //DBG(printf("%s: fpid:'%s'\n", __func__, TO_UTF8( fpid ) );)
 
     viewer->Destroy();
 
@@ -196,13 +196,13 @@ MODULE* PCB_BASE_FRAME::LoadModuleFromLibrary( const wxString& aLibrary,
         return NULL;
     }
 
-    if( dlg.IsKeyword() )                          // Selection by keywords
+    if( dlg.IsKeyword() )       // Selection by keywords
     {
         allowWildSeach = false;
         keys = moduleName;
         moduleName = SelectFootprint( this, libName, wxEmptyString, keys, aTable );
 
-        if( moduleName.IsEmpty() )                 // Cancel command
+        if( moduleName.IsEmpty() )  // Cancel command
         {
             m_canvas->MoveCursorToCrossHair();
             return NULL;
@@ -253,8 +253,6 @@ MODULE* PCB_BASE_FRAME::LoadModuleFromLibrary( const wxString& aLibrary,
         }
         else
         {
-            FPID fpid;
-
             wxCHECK_MSG( fpid.Parse( moduleName ) < 0, NULL,
                          wxString::Format( wxT( "Could not parse FPID string '%s'." ),
                                            GetChars( moduleName ) ) );
@@ -493,11 +491,11 @@ MODULE* FOOTPRINT_EDIT_FRAME::SelectFootprint( BOARD* aPcb )
     for(  ; module;  module = module->Next() )
         listnames.Add( module->GetReference() );
 
-    msg.Printf( _( "Modules [%u items]" ), (unsigned) listnames.GetCount() );
+    msg.Printf( _( "Footprints [%u items]" ), (unsigned) listnames.GetCount() );
 
     wxArrayString headers;
 
-    headers.Add( _( "Module" ) );
+    headers.Add( _( "Footprint" ) );
 
     std::vector<wxArrayString> itemsToDisplay;
 
@@ -554,14 +552,14 @@ void FOOTPRINT_EDIT_FRAME::OnSaveLibraryAs( wxCommandEvent& aEvent )
 
         for( unsigned i = 0;  i < mods.size();  ++i )
         {
-            std::auto_ptr<MODULE> m( cur->FootprintLoad( curLibPath, mods[i] ) );
+            std::unique_ptr<MODULE> m( cur->FootprintLoad( curLibPath, mods[i] ) );
             dst->FootprintSave( dstLibPath, m.get() );
 
             msg = wxString::Format( _( "Footprint '%s' saved" ),
                                     GetChars( mods[i] ) );
             SetStatusText( msg );
 
-            // m is deleted here by auto_ptr.
+            // m is deleted here by unique_ptr.
         }
     }
     catch( const IO_ERROR& ioe )

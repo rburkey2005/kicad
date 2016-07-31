@@ -84,9 +84,6 @@ public:
     /// segments of the same net, on the same layer.
     bool IsLineCorner() const
     {
-        if( m_locked )
-            return false;
-
         if( m_linkedItems.Size() != 2 || m_linkedItems.Count( SEGMENT ) != 2 )
             return false;
 
@@ -103,6 +100,20 @@ public:
         int segs = m_linkedItems.Count( SEGMENT );
 
         return ( m_linkedItems.Size() == 3 && vias == 1 && segs == 2 );
+    }
+
+    bool IsTraceWidthChange() const
+    {
+        if( m_linkedItems.Size() != 2 )
+            return false;
+
+        if( m_linkedItems.Count( SEGMENT ) != 2)
+            return false;
+
+        PNS_SEGMENT* seg1 = static_cast<PNS_SEGMENT*>( m_linkedItems[0] );
+        PNS_SEGMENT* seg2 = static_cast<PNS_SEGMENT*>( m_linkedItems[1] );
+
+        return seg1->Width() != seg2->Width();
     }
 
     ///> Links the joint to a given board item (when it's added to the PNS_NODE)
@@ -134,7 +145,7 @@ public:
 
     PNS_VIA* Via()
     {
-        BOOST_FOREACH( PNS_ITEM* item, m_linkedItems.Items() )
+        for( PNS_ITEM* item : m_linkedItems.Items() )
         {
             if( item->OfKind( VIA ) )
                 return static_cast<PNS_VIA*>( item );
@@ -197,7 +208,7 @@ public:
         if( aJoint.IsLocked() )
             m_locked = true;
 
-        BOOST_FOREACH( PNS_ITEM* item, aJoint.LinkList() )
+        for( PNS_ITEM* item : aJoint.LinkList() )
         {
             m_linkedItems.Add( item );
         }

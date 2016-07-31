@@ -74,6 +74,9 @@ int PICKER_TOOL::Main( const TOOL_EVENT& aEvent )
 
         else if( evt->IsCancel() || evt->IsActivate() )
             break;
+
+        else
+            m_toolMgr->PassEvent();
     }
 
     reset();

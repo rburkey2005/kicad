@@ -21,28 +21,23 @@
  * or you may write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
-#include <cmath>
+
 #include <algorithm>    // std::max
-
-// For some unknown reasons, polygon.hpp should be included first
-#include <boost/polygon/polygon.hpp>
-
-#include <wx/wx.h>
-#include <stdio.h>
-#include <string.h>
-#include <errno.h>
-#include <stdlib.h>
 #include <cmath>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <vector>
-#include <layers_id_colors_and_visibility.h>
+
 #include <common.h>
-
-#include <bitmap2component.h>
 #include <geometry/shape_poly_set.h>
+#include <layers_id_colors_and_visibility.h>
 
-// include this after shape_poly_set.h to avoid redefinition of min, max ...
 #include <potracelib.h>
-#include <auxiliary.h>
+
+#include "bitmap2component.h"
+
 
 /* free a potrace bitmap */
 static void bm_free( potrace_bitmap_t* bm )
@@ -61,14 +56,14 @@ static void bm_free( potrace_bitmap_t* bm )
 class BITMAPCONV_INFO
 {
 public:
-    enum OUTPUT_FMT_ID m_Format; // File format
+    enum OUTPUT_FMT_ID m_Format;    // File format
     int m_PixmapWidth;
     int m_PixmapHeight;             // the bitmap size in pixels
     double             m_ScaleX;
     double             m_ScaleY;    // the conversion scale
     potrace_path_t*    m_Paths;     // the list of paths, from potrace (list of lines and bezier curves)
     FILE* m_Outfile;                // File to create
-    const char * m_CmpName;                 // The string used as cmp/footprint name
+    const char * m_CmpName;         // The string used as cmp/footprint name
 
 public:
     BITMAPCONV_INFO();
@@ -493,10 +488,10 @@ void BITMAPCONV_INFO::CreateOutputFile( BMP2CMP_MOD_LAYER aModLayer )
         if( paths->next == NULL || paths->next->sign == '+' )
         {
             // Substract holes to main polygon:
-            polyset_areas.Simplify();
-            polyset_holes.Simplify();
-            polyset_areas.BooleanSubtract( polyset_holes );
-            polyset_areas.Fracture();
+            polyset_areas.Simplify( SHAPE_POLY_SET::PM_FAST );
+            polyset_holes.Simplify( SHAPE_POLY_SET::PM_FAST );
+            polyset_areas.BooleanSubtract( polyset_holes, SHAPE_POLY_SET::PM_FAST );
+            polyset_areas.Fracture( SHAPE_POLY_SET::PM_STRICTLY_SIMPLE );
 
             // Output current resulting polygon(s)
             for( int ii = 0; ii < polyset_areas.OutlineCount(); ii++ )
@@ -515,6 +510,17 @@ void BITMAPCONV_INFO::CreateOutputFile( BMP2CMP_MOD_LAYER aModLayer )
     OuputFileEnd();
 }
 
+// a helper function to calculate a square value
+inline double square( double x )
+{
+    return x*x;
+}
+
+// a helper function to calculate a cube value
+inline double cube( double x )
+{
+    return x*x*x;
+}
 
 /* render a Bezier curve. */
 void BezierToPolyline( std::vector <potrace_dpoint_t>& aCornersBuffer,
@@ -536,23 +542,23 @@ void BezierToPolyline( std::vector <potrace_dpoint_t>& aCornersBuffer,
 
     /* let dd = maximal value of 2nd derivative over curve - this must
      *  occur at an endpoint. */
-    dd0     = sq( p1.x - 2 * p2.x + p3.x ) + sq( p1.y - 2 * p2.y + p3.y );
-    dd1     = sq( p2.x - 2 * p3.x + p4.x ) + sq( p2.y - 2 * p3.y + p4.y );
-    dd      = 6 * sqrt( max( dd0, dd1 ) );
+    dd0     = square( p1.x - 2 * p2.x + p3.x ) + square( p1.y - 2 * p2.y + p3.y );
+    dd1     = square( p2.x - 2 * p3.x + p4.x ) + square( p2.y - 2 * p3.y + p4.y );
+    dd      = 6 * sqrt( std::max( dd0, dd1 ) );
     e2      = 8 * delta <= dd ? 8 * delta / dd : 1;
     epsilon = sqrt( e2 ); /* necessary interval size */
 
     for( t = epsilon; t<1; t += epsilon )
     {
         potrace_dpoint_t intermediate_point;
-        intermediate_point.x = p1.x * cu( 1 - t ) +
-                               3* p2.x* sq( 1 - t ) * t +
-                               3 * p3.x * (1 - t) * sq( t ) +
-                               p4.x* cu( t );
+        intermediate_point.x = p1.x * cube( 1 - t ) +
+                               3* p2.x* square( 1 - t ) * t +
+                               3 * p3.x * (1 - t) * square( t ) +
+                               p4.x* cube( t );
 
-        intermediate_point.y = p1.y * cu( 1 - t ) +
-                               3* p2.y* sq( 1 - t ) * t +
-                               3 * p3.y * (1 - t) * sq( t ) + p4.y* cu( t );
+        intermediate_point.y = p1.y * cube( 1 - t ) +
+                               3* p2.y* square( 1 - t ) * t +
+                               3 * p3.y * (1 - t) * square( t ) + p4.y* cube( t );
 
         aCornersBuffer.push_back( intermediate_point );
     }

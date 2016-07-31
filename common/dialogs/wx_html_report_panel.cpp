@@ -22,7 +22,7 @@
 #include "wx_html_report_panel.h"
 
 #include <wildcards_and_files_ext.h>
-#include <boost/foreach.hpp>
+
 
 WX_HTML_REPORT_PANEL::WX_HTML_REPORT_PANEL( wxWindow*      parent,
                                             wxWindowID     id,
@@ -42,6 +42,13 @@ WX_HTML_REPORT_PANEL::WX_HTML_REPORT_PANEL( wxWindow*      parent,
 
 WX_HTML_REPORT_PANEL::~WX_HTML_REPORT_PANEL()
 {
+}
+
+
+void WX_HTML_REPORT_PANEL::MsgPanelSetMinSize( const wxSize& aMinSize )
+{
+    m_htmlView->SetMinSize( aMinSize );
+    GetSizer()->SetSizeHints( this );
 }
 
 
@@ -96,7 +103,7 @@ void WX_HTML_REPORT_PANEL::refreshView()
 {
     wxString html;
 
-    BOOST_FOREACH( REPORT_LINE l, m_report )
+    for( REPORT_LINE l : m_report )
     {
         html += generateHtml( l );
     }
@@ -253,7 +260,7 @@ void WX_HTML_REPORT_PANEL::onBtnSaveToFile( wxCommandEvent& event )
         return;
     }
 
-    BOOST_FOREACH( REPORT_LINE l, m_report )
+    for( REPORT_LINE l : m_report )
     {
         f.Write( generatePlainText( l ) );
     }

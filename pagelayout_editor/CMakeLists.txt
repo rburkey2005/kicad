@@ -1,11 +1,3 @@
-# the map generation creates on Windows/gcc a lot of useless warnings
-# so disable it on windows
-if( WIN32 AND NOT CMAKE_CROSSCOMPILING )
-    set( MAKE_LINK_MAPS false )
-else()
-    set( MAKE_LINK_MAPS true )
-endif()
-
 add_definitions(-DPL_EDITOR)
 
 include_directories(BEFORE ${INC_BEFORE})
@@ -36,6 +28,7 @@ set( PL_EDITOR_SRCS
     hotkeys.cpp
     menubar.cpp
     toolbars_pl_editor.cpp
+    block.cpp
     )
 
 set( PL_EDITOR_EXTRA_SRCS
@@ -50,6 +43,8 @@ set( PL_EDITOR_EXTRA_SRCS
 if( MINGW )
     # PL_EDITOR_RESOURCES variable is set by the macro.
     mingw_resource_compiler( pl_editor )
+else()
+    set( PL_EDITOR_RESOURCES pl_editor.rc )
 endif()
 
 
@@ -63,7 +58,7 @@ if( APPLE )
         MACOSX_PACKAGE_LOCATION Resources
         )
     set( MACOSX_BUNDLE_ICON_FILE pl_editor.icns )
-    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-eda.kicad )
+    set( MACOSX_BUNDLE_GUI_IDENTIFIER org.kicad-pcb.kicad )
     set( MACOSX_BUNDLE_NAME pl_editor )
 endif()
 
@@ -100,6 +95,7 @@ target_link_libraries( pl_editor_kiface
     common
     polygon
     bitmaps
+    gal
     ${wxWidgets_LIBRARIES}
     ${GDI_PLUS_LIBRARIES}
     )

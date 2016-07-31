@@ -10,7 +10,7 @@
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2011 Wayne Stambaugh <stambaughw@verizon.net>
  *
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -146,21 +146,6 @@ void BOARD::SetPosition( const wxPoint& aPos )
 
 void BOARD::Move( const wxPoint& aMoveVector )        // overload
 {
-    // Implement 'interface INSPECTOR' which is only INSPECTOR::Inspect(),
-    // here it does the moving.
-    struct MOVER : public INSPECTOR
-    {
-        SEARCH_RESULT Inspect( EDA_ITEM* item, const void* data )
-        {
-            BOARD_ITEM*     brd_item = (BOARD_ITEM*) item;
-            const wxPoint*  vector   = (const wxPoint*) data;
-
-            brd_item->Move( *vector );
-
-            return SEARCH_CONTINUE;
-        }
-    } inspector;
-
     // @todo : anything like this elsewhere?  maybe put into GENERAL_COLLECTOR class.
     static const KICAD_T top_level_board_stuff[] = {
         PCB_MARKER_T,
@@ -177,20 +162,231 @@ void BOARD::Move( const wxPoint& aMoveVector )        // overload
         EOT
     };
 
-    // visit this BOARD with the above inspector, which moves all items.
-    Visit( &inspector, &aMoveVector, top_level_board_stuff );
+    INSPECTOR_FUNC inspector = [&] ( EDA_ITEM* item, void* testData )
+    {
+        BOARD_ITEM* brd_item = (BOARD_ITEM*) item;
+
+        // aMoveVector was snapshotted, don't need "data".
+        brd_item->Move( aMoveVector );
+
+        return SEARCH_CONTINUE;
+    };
+
+    Visit( inspector, NULL, top_level_board_stuff );
 }
 
 
-void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerMask, TRACK_PTRS* aList )
+TRACKS BOARD::TracksInNet( int aNetCode )
 {
-    TRACK*  segment;            // The current segment being analyzed.
-    TRACK*  via;                // The via identified, eventually destroy
-    TRACK*  candidate;          // The end segment to destroy (or NULL = segment)
-    int     NbSegm;
-    LSET    layer_set = aLayerMask;
+    TRACKS ret;
 
-    if( !m_Track )
+    INSPECTOR_FUNC inspector = [aNetCode,&ret] ( EDA_ITEM* item, void* testData )
+    {
+        TRACK*  t = (TRACK*) item;
+
+        if( t->GetNetCode() == aNetCode )
+            ret.push_back( t );
+
+        return SEARCH_CONTINUE;
+    };
+
+    // visit this BOARD's TRACKs and VIAs with above TRACK INSPECTOR which
+    // appends all in aNetCode to ret.
+    Visit( inspector, NULL, GENERAL_COLLECTOR::Tracks  );
+
+    return ret;
+}
+
+
+/**
+ * Function removeTrack
+ * removes aOneToRemove from aList, which is a non-owning std::vector
+ */
+static void removeTrack( TRACKS* aList, TRACK* aOneToRemove )
+{
+    aList->erase( std::remove( aList->begin(), aList->end(), aOneToRemove ), aList->end() );
+}
+
+
+static void otherEnd( const TRACK& aTrack, const wxPoint& aNotThisEnd, wxPoint* aOtherEnd )
+{
+    if( aTrack.GetStart() == aNotThisEnd )
+    {
+        *aOtherEnd = aTrack.GetEnd();
+    }
+    else
+    {
+        wxASSERT( aTrack.GetEnd() == aNotThisEnd );
+        *aOtherEnd = aTrack.GetStart();
+    }
+}
+
+
+/**
+ * Function find_vias_and_tracks_at
+ * collects TRACKs and VIAs at aPos and returns true if any were VIAs.
+ */
+static int find_vias_and_tracks_at( TRACKS& at_next, TRACKS& in_net, LSET& lset, const wxPoint& next )
+{
+    // first find all vias (in this net) at 'next' location, and expand LSET with each
+    for( TRACKS::iterator it = in_net.begin(); it != in_net.end();  )
+    {
+        TRACK* t = *it;
+
+        if( t->Type() == PCB_VIA_T && (t->GetLayerSet() & lset).any() &&
+            ( t->GetStart() == next || t->GetEnd() == next ) )
+        {
+            lset |= t->GetLayerSet();
+            at_next.push_back( t );
+            in_net.erase( it );
+        }
+        else
+            ++it;
+    }
+
+    int track_count = 0;
+
+    // with expanded lset, find all tracks with an end on any of the layers in lset
+    for( TRACKS::iterator it = in_net.begin();  it != in_net.end();  )
+    {
+        TRACK* t = *it;
+
+        if( (t->GetLayerSet() & lset).any() &&
+            ( t->GetStart() == next || t->GetEnd() == next ) )
+        {
+            at_next.push_back( t );
+            in_net.erase( it );
+            ++track_count;
+        }
+        else
+            ++it;
+    }
+
+    return track_count;
+}
+
+
+/**
+ * Function checkConnectedTo
+ * returns if aTracksInNet contains a copper pathway to aGoal when starting with
+ * aFirstTrack.  aFirstTrack should have one end situated on aStart, and the
+ * traversal testing begins from the other end of aFirstTrack.
+ * <p>
+ * The function throws an exception instead of returning bool so that detailed
+ * information can be provided about a possible failure in the track layout.
+ *
+ * @throw IO_ERROR - if points are not connected, with text saying why.
+ */
+static void checkConnectedTo( BOARD* aBoard, TRACKS* aList, const TRACKS& aTracksInNet,
+        const wxPoint& aGoal, const wxPoint& aStart, TRACK* aFirstTrack )
+{
+    TRACKS  in_net = aTracksInNet;      // copy source list so the copy can be modified
+    wxPoint next;
+
+    otherEnd( *aFirstTrack, aStart, &next );
+
+    aList->push_back( aFirstTrack );
+    removeTrack( &in_net, aFirstTrack );
+
+    LSET lset( aFirstTrack->GetLayer() );
+
+    while( in_net.size() )
+    {
+        if( next == aGoal )
+            return;             // success
+
+        if( aBoard->GetPad( next, lset ) )
+        {
+            std::string m = StrPrintf(
+                "there is an intervening pad at:(xy %s) between start:(xy %s) and goal:(xy %s)",
+                BOARD_ITEM::FormatInternalUnits( next ).c_str(),
+                BOARD_ITEM::FormatInternalUnits( aStart ).c_str(),
+                BOARD_ITEM::FormatInternalUnits( aGoal ).c_str()
+                );
+            THROW_IO_ERROR( m );
+        }
+
+        int track_count = find_vias_and_tracks_at( *aList, in_net, lset, next );
+
+        if( track_count != 1 )
+        {
+            std::string m = StrPrintf(
+                "found %d tracks intersecting at (xy %s), exactly 2 would be acceptable.",
+                track_count,
+                BOARD_ITEM::FormatInternalUnits( next ).c_str()
+                );
+            THROW_IO_ERROR( m );
+        }
+
+        // reduce lset down to the layer that the only track at 'next' is on.
+        lset = aList->back()->GetLayerSet();
+
+        otherEnd( *aList->back(), next, &next );
+    }
+
+    std::string m = StrPrintf(
+        "not enough tracks connecting start:(xy %s) and goal:(xy %s).",
+        BOARD_ITEM::FormatInternalUnits( aStart ).c_str(),
+        BOARD_ITEM::FormatInternalUnits( aGoal ).c_str()
+        );
+    THROW_IO_ERROR( m );
+}
+
+
+TRACKS BOARD::TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint& aEndPos, int aNetCode )
+{
+    TRACKS  in_between_pts;
+    TRACKS  on_start_pad;
+    TRACKS  in_net = TracksInNet( aNetCode );   // a small subset of TRACKs and VIAs
+
+    for( auto t : in_net )
+    {
+        if( t->Type() == PCB_TRACE_T && ( t->GetStart() == aStartPos || t->GetEnd() == aStartPos )  )
+            on_start_pad.push_back( t );
+    }
+
+    IO_ERROR last_error;
+
+    for( auto t : on_start_pad )
+    {
+        // checkConnectedTo() fills in_between_pts on every attempt.  For failures
+        // this set needs to be cleared.
+        in_between_pts.clear();
+
+        try
+        {
+            checkConnectedTo( this, &in_between_pts, in_net, aEndPos, aStartPos, t );
+        }
+        catch( const IO_ERROR& ioe )    // means not connected
+        {
+            last_error = ioe;
+            continue;           // keep trying, there may be other paths leaving from aStartPos
+        }
+
+        // success, no exception means a valid connection,
+        // return this set of TRACKS without throwing.
+        return in_between_pts;
+    }
+
+    if( on_start_pad.size() == 1 )
+        throw last_error;
+    else
+    {
+        std::string m = StrPrintf(
+            "no path connecting start:(xy %s) with end:(xy %s)",
+            BOARD_ITEM::FormatInternalUnits( aStartPos ).c_str(),
+            BOARD_ITEM::FormatInternalUnits( aEndPos ).c_str()
+            );
+        THROW_IO_ERROR( m );
+    }
+}
+
+
+void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerSet, TRACKS* aList )
+{
+    LSET    layer_set = aLayerSet;
+
+    if( !m_Track )      // no tracks at all in board
         return;
 
     /* Set the BUSY flag of all connected segments, first search starting at
@@ -218,7 +414,7 @@ void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerMask, TRAC
          * is found we do not know at this time the number of connected items
          * and we do not know if this via is on the track or finish the track
          */
-        via = m_Track->GetVia( NULL, aPosition, layer_set );
+        TRACK* via = m_Track->GetVia( NULL, aPosition, layer_set );
 
         if( via )
         {
@@ -227,14 +423,15 @@ void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerMask, TRAC
             aList->push_back( via );
         }
 
-        /* Now we search all segments connected to point aPosition
-         *  if only 1 segment: this segment is candidate
+        int     seg_count = 0;
+        TRACK*  candidate = NULL;
+
+        /* Search all segments connected to point aPosition.
+         *  if only 1 segment at aPosition: then this segment is "candidate"
          *  if > 1 segment:
-         *      end of track (more than 2 segment connected at this location)
+         *      then end of "track" (because more than 2 segments are connected at aPosition)
          */
-        segment = m_Track;
-        candidate = NULL;
-        NbSegm  = 0;
+        TRACK*  segment = m_Track;
 
         while( ( segment = ::GetTrack( segment, NULL, aPosition, layer_set ) ) != NULL )
         {
@@ -244,20 +441,18 @@ void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerMask, TRAC
                 continue;
             }
 
-            if( segment == via ) // just previously found: skip it
+            if( segment == via )    // just previously found: skip it
             {
                 segment = segment->Next();
                 continue;
             }
 
-            NbSegm++;
-
-            if( NbSegm == 1 ) // First time we found a connected item: segment is candidate
+            if( ++seg_count == 1 )  // if first connected item: then segment is candidate
             {
                 candidate = segment;
                 segment = segment->Next();
             }
-            else // More than 1 segment connected -> this location is an end of the track
+            else        // More than 1 segment connected -> location is end of track
             {
                 return;
             }
@@ -502,15 +697,15 @@ LSET BOARD::GetVisibleLayers() const
 }
 
 
-void BOARD::SetEnabledLayers( LSET aLayerMask )
+void BOARD::SetEnabledLayers( LSET aLayerSet )
 {
-    m_designSettings.SetEnabledLayers( aLayerMask );
+    m_designSettings.SetEnabledLayers( aLayerSet );
 }
 
 
-void BOARD::SetVisibleLayers( LSET aLayerMask )
+void BOARD::SetVisibleLayers( LSET aLayerSet )
 {
-    m_designSettings.SetVisibleLayers( aLayerMask );
+    m_designSettings.SetVisibleLayers( aLayerSet );
 }
 
 
@@ -672,6 +867,10 @@ void BOARD::Add( BOARD_ITEM* aBoardItem, int aControl )
 
     switch( aBoardItem->Type() )
     {
+    case PCB_NETINFO_T:
+        aBoardItem->SetParent( this );
+        m_NetInfo.AppendNet( (NETINFO_ITEM*) aBoardItem );
+
     // this one uses a vector
     case PCB_MARKER_T:
         aBoardItem->SetParent( this );
@@ -759,6 +958,12 @@ BOARD_ITEM* BOARD::Remove( BOARD_ITEM* aBoardItem )
 
     switch( aBoardItem->Type() )
     {
+    case PCB_NETINFO_T:
+    {
+        NETINFO_ITEM* item = (NETINFO_ITEM*) aBoardItem;
+        m_NetInfo.RemoveNet( item );
+        break;
+    }
     case PCB_MARKER_T:
 
         // find the item in the vector, then remove it
@@ -783,7 +988,6 @@ BOARD_ITEM* BOARD::Remove( BOARD_ITEM* aBoardItem )
                 break;
             }
         }
-
         break;
 
     case PCB_MODULE_T:
@@ -980,8 +1184,7 @@ void BOARD::GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList )
 
 
 // virtual, see pcbstruct.h
-SEARCH_RESULT BOARD::Visit( INSPECTOR* inspector, const void* testData,
-                            const KICAD_T scanTypes[] )
+SEARCH_RESULT BOARD::Visit( INSPECTOR inspector, void* testData, const KICAD_T scanTypes[] )
 {
     KICAD_T        stype;
     SEARCH_RESULT  result = SEARCH_CONTINUE;
@@ -999,7 +1202,7 @@ SEARCH_RESULT BOARD::Visit( INSPECTOR* inspector, const void* testData,
         switch( stype )
         {
         case PCB_T:
-            result = inspector->Inspect( this, testData );  // inspect me
+            result = inspector( this, testData );  // inspect me
             // skip over any types handled in the above call.
             ++p;
             break;
@@ -1163,86 +1366,6 @@ SEARCH_RESULT BOARD::Visit( INSPECTOR* inspector, const void* testData,
 }
 
 
-/*  now using PcbGeneralLocateAndDisplay(), but this remains a useful example
- *   of how the INSPECTOR can be used in a lightweight way.
- *  // see pcbstruct.h
- *  BOARD_ITEM* BOARD::FindPadOrModule( const wxPoint& refPos, LAYER_NUM layer )
- *  {
- *   class PadOrModule : public INSPECTOR
- *   {
- *   public:
- *       BOARD_ITEM*         found;
- *       LAYER_NUM           layer;
- *       int                 layer_mask;
- *
- *       PadOrModule( LAYER_NUM alayer ) :
- *           found(0), layer(alayer), layer_mask( g_TabOneLayerMask[alayer] )
- *       {}
- *
- *       SEARCH_RESULT Inspect( EDA_ITEM* testItem, const void* testData
- * )
- *       {
- *           BOARD_ITEM*     item   = (BOARD_ITEM*) testItem;
- *           const wxPoint&  refPos = *(const wxPoint*) testData;
- *
- *           if( item->Type() == PCB_PAD_T )
- *           {
- *               D_PAD*  pad = (D_PAD*) item;
- *               if( pad->HitTest( refPos ) )
- *               {
- *                   if( layer_mask & pad->GetLayerSet() )
- *                   {
- *                       found = item;
- *                       return SEARCH_QUIT;
- *                   }
- *                   else if( !found )
- *                   {
- *                       MODULE* parent = (MODULE*) pad->m_Parent;
- *                       if( IsModuleLayerVisible( parent->GetLayer() ) )
- *                           found = item;
- *                   }
- *               }
- *           }
- *
- *           else if( item->Type() == PCB_MODULE_T )
- *           {
- *               MODULE* module = (MODULE*) item;
- *
- *               // consider only visible modules
- *               if( IsModuleLayerVisible( module->GetLayer() ) )
- *               {
- *                   if( module->HitTest( refPos ) )
- *                   {
- *                       if( layer == module->GetLayer() )
- *                       {
- *                           found = item;
- *                           return SEARCH_QUIT;
- *                       }
- *
- *                       // layer mismatch, save in case we don't find a
- *                       // future layer match hit.
- *                       if( !found )
- *                           found = item;
- *                   }
- *               }
- *           }
- *           return SEARCH_CONTINUE;
- *       }
- *   };
- *
- *   PadOrModule inspector( layer );
- *
- *   // search only for PADs first, then MODULES, and preferably a layer match
- *   static const KICAD_T scanTypes[] = { PCB_PAD_T, PCB_MODULE_T, EOT };
- *
- *   // visit this BOARD with the above inspector
- *   Visit( &inspector, &refPos, scanTypes );
- *
- *   return inspector.found;
- *  }
- */
-
-
 NETINFO_ITEM* BOARD::FindNet( int aNetcode ) const
 {
     // the first valid netcode is 1 and the last is m_NetInfo.GetCount()-1.
@@ -1252,7 +1375,7 @@ NETINFO_ITEM* BOARD::FindNet( int aNetcode ) const
     wxASSERT( m_NetInfo.GetNetCount() > 0 );    // net zero should exist
 
     if( aNetcode == NETINFO_LIST::UNCONNECTED && m_NetInfo.GetNetCount() == 0 )
-        return &NETINFO_LIST::ORPHANED;
+        return &NETINFO_LIST::ORPHANED_ITEM;
     else
         return m_NetInfo.GetNetItem( aNetcode );
 }
@@ -1266,36 +1389,29 @@ NETINFO_ITEM* BOARD::FindNet( const wxString& aNetname ) const
 
 MODULE* BOARD::FindModuleByReference( const wxString& aReference ) const
 {
-    struct FINDER : public INSPECTOR
-    {
-        MODULE* found;
-
-        FINDER() : found( 0 )  {}
-
-        // implement interface INSPECTOR
-        SEARCH_RESULT Inspect( EDA_ITEM* item, const void* data )
-        {
-            MODULE*         module = (MODULE*) item;
-            const wxString& ref    = *(const wxString*) data;
-
-            if( ref == module->GetReference() )
-            {
-                found = module;
-                return SEARCH_QUIT;
-            }
-
-            return SEARCH_CONTINUE;
-        }
-    } inspector;
+    MODULE* found = nullptr;
 
     // search only for MODULES
     static const KICAD_T scanTypes[] = { PCB_MODULE_T, EOT };
 
+    INSPECTOR_FUNC inspector = [&] ( EDA_ITEM* item, void* testData )
+    {
+        MODULE* module = (MODULE*) item;
+
+        if( aReference == module->GetReference() )
+        {
+            found = module;
+            return SEARCH_QUIT;
+        }
+
+        return SEARCH_CONTINUE;
+    };
+
     // visit this BOARD with the above inspector
     BOARD* nonconstMe = (BOARD*) this;
-    nonconstMe->Visit( &inspector, &aReference, scanTypes );
+    nonconstMe->Visit( inspector, NULL, scanTypes );
 
-    return inspector.found;
+    return found;
 }
 
 
@@ -1311,17 +1427,7 @@ MODULE* BOARD::FindModule( const wxString& aRefOrTimeStamp, bool aSearchByTimeSt
     }
     else
     {
-
-#if 0   // case independent compare, why?
-        for( MODULE* module = m_Modules;  module;  module = module->Next() )
-        {
-            if( aRefOrTimeStamp.CmpNoCase( module->GetReference() ) == 0 )
-                return module;
-        }
-#else
         return FindModuleByReference( aRefOrTimeStamp );
-#endif
-
     }
 
     return NULL;
@@ -1485,14 +1591,14 @@ VIA* BOARD::GetViaByPosition( const wxPoint& aPosition, LAYER_ID aLayer) const
 }
 
 
-D_PAD* BOARD::GetPad( const wxPoint& aPosition, LSET aLayerMask )
+D_PAD* BOARD::GetPad( const wxPoint& aPosition, LSET aLayerSet )
 {
-    if( !aLayerMask.any() )
-        aLayerMask = LSET::AllCuMask();
+    if( !aLayerSet.any() )
+        aLayerSet = LSET::AllCuMask();
 
     for( MODULE* module = m_Modules;  module;  module = module->Next() )
     {
-        D_PAD* pad = module->GetPad( aPosition, aLayerMask );
+        D_PAD* pad = module->GetPad( aPosition, aLayerSet );
 
         if( pad )
             return pad;
@@ -1506,11 +1612,11 @@ D_PAD* BOARD::GetPad( TRACK* aTrace, ENDPOINT_T aEndPoint )
 {
     const wxPoint& aPosition = aTrace->GetEndPoint( aEndPoint );
 
-    LSET aLayerMask( aTrace->GetLayer() );
+    LSET lset( aTrace->GetLayer() );
 
     for( MODULE* module = m_Modules;  module;  module = module->Next() )
     {
-        D_PAD*  pad = module->GetPad( aPosition, aLayerMask );
+        D_PAD*  pad = module->GetPad( aPosition, lset );
 
         if( pad )
             return pad;
@@ -1520,7 +1626,7 @@ D_PAD* BOARD::GetPad( TRACK* aTrace, ENDPOINT_T aEndPoint )
 }
 
 
-D_PAD* BOARD::GetPadFast( const wxPoint& aPosition, LSET aLayerMask )
+D_PAD* BOARD::GetPadFast( const wxPoint& aPosition, LSET aLayerSet )
 {
     for( unsigned i=0; i<GetPadCount();  ++i )
     {
@@ -1530,7 +1636,7 @@ D_PAD* BOARD::GetPadFast( const wxPoint& aPosition, LSET aLayerMask )
             continue;
 
         // Pad found, it must be on the correct layer
-        if( ( pad->GetLayerSet() & aLayerMask ).any() )
+        if( ( pad->GetLayerSet() & aLayerSet ).any() )
             return pad;
     }
 
@@ -1538,9 +1644,9 @@ D_PAD* BOARD::GetPadFast( const wxPoint& aPosition, LSET aLayerMask )
 }
 
 
-D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, LSET aLayerMask )
+D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, LSET aLayerSet )
 {
-    // Search the aPoint coordinates in aPadList
+    // Search aPadList for aPosition
     // aPadList is sorted by X then Y values, and a fast binary search is used
     int idxmax = aPadList.size()-1;
 
@@ -1562,7 +1668,7 @@ D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, L
         if( pad->GetPosition() == aPosition )       // candidate found
         {
             // The pad must match the layer mask:
-            if( ( aLayerMask & pad->GetLayerSet() ).any() )
+            if( ( aLayerSet & pad->GetLayerSet() ).any() )
                 return pad;
 
             // More than one pad can be at aPosition
@@ -1576,7 +1682,7 @@ D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, L
                 if( pad->GetPosition() != aPosition )
                     break;
 
-                if( (aLayerMask & pad->GetLayerSet()) != 0 )
+                if( ( aLayerSet & pad->GetLayerSet() ).any() )
                     return pad;
             }
             // search previous
@@ -1587,7 +1693,7 @@ D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, L
                 if( pad->GetPosition() != aPosition )
                     break;
 
-                if( (aLayerMask & pad->GetLayerSet()) != 0 )
+                if( ( aLayerSet & pad->GetLayerSet() ).any() )
                     return pad;
             }
 
@@ -1595,9 +1701,9 @@ D_PAD* BOARD::GetPad( std::vector<D_PAD*>& aPadList, const wxPoint& aPosition, L
             return 0;
         }
 
-        if( pad->GetPosition().x == aPosition.x )   // Must search considering Y coordinate
+        if( pad->GetPosition().x == aPosition.x )       // Must search considering Y coordinate
         {
-            if(pad->GetPosition().y < aPosition.y)  // Must search after this item
+            if( pad->GetPosition().y < aPosition.y )    // Must search after this item
             {
                 idx += delta;
 
@@ -1674,16 +1780,17 @@ void BOARD::PadDelete( D_PAD* aPad )
 }
 
 
-TRACK* BOARD::GetTrack( TRACK* aTrace, const wxPoint& aPosition,
-        LSET aLayerMask ) const
+TRACK* BOARD::GetVisibleTrack( TRACK* aStartingTrace, const wxPoint& aPosition,
+        LSET aLayerSet ) const
 {
-    for( TRACK* track = aTrace; track; track = track->Next() )
+    for( TRACK* track = aStartingTrace; track; track = track->Next() )
     {
         LAYER_ID layer = track->GetLayer();
 
         if( track->GetState( BUSY | IS_DELETED ) )
             continue;
 
+        // track's layer is not visible
         if( m_designSettings.IsLayerVisible( layer ) == false )
             continue;
 
@@ -1694,8 +1801,8 @@ TRACK* BOARD::GetTrack( TRACK* aTrace, const wxPoint& aPosition,
         }
         else
         {
-            if( !aLayerMask[layer] )
-                continue;   // Segments on different layers.
+            if( !aLayerSet[layer] )
+                continue;               // track's layer is not in aLayerSet
 
             if( track->HitTest( aPosition ) )
                 return track;
@@ -1707,7 +1814,7 @@ TRACK* BOARD::GetTrack( TRACK* aTrace, const wxPoint& aPosition,
 
 
 #if defined(DEBUG) && 0
-static void dump_tracks( const char* aName, const TRACK_PTRS& aList )
+static void dump_tracks( const char* aName, const TRACKS& aList )
 {
     printf( "%s: count=%zd\n", aName, aList.size() );
 
@@ -1727,12 +1834,13 @@ static void dump_tracks( const char* aName, const TRACK_PTRS& aList )
 #endif
 
 
+
+
 TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
                          double* aTraceLength, double* aPadToDieLength,
                          bool    aReorder )
 {
-    int        NbSegmBusy;
-    TRACK_PTRS trackList;
+    TRACKS trackList;
 
     if( aCount )
         *aCount = 0;
@@ -1802,8 +1910,8 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
     }
     else    // mark the chain using both ends of the initial segment
     {
-        TRACK_PTRS  from_start;
-        TRACK_PTRS  from_end;
+        TRACKS  from_start;
+        TRACKS  from_end;
 
         chainMarkedSegments( aTrace->GetStart(), layer_set, &from_start );
         chainMarkedSegments( aTrace->GetEnd(),   layer_set, &from_end );
@@ -1884,15 +1992,15 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
      * the NbSegmBusy-1 next items (NbSegmBusy when including firstTrack)
      * are the flagged segments
      */
-    NbSegmBusy = 0;
-    TRACK* firstTrack;
+    int     busy_count = 0;
+    TRACK*  firstTrack;
 
     for( firstTrack = m_Track; firstTrack; firstTrack = firstTrack->Next() )
     {
         // Search for the first flagged BUSY segments
         if( firstTrack->GetState( BUSY ) )
         {
-            NbSegmBusy = 1;
+            busy_count = 1;
             break;
         }
     }
@@ -1909,7 +2017,7 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
         wxASSERT( list );
 
         /* Rearrange the chain starting at firstTrack
-         * All others flagged items are moved from their position to the end
+         * All other BUSY flagged items are moved from their position to the end
          * of the flagged list
          */
         TRACK* next;
@@ -1920,7 +2028,7 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
 
             if( track->GetState( BUSY ) )   // move it!
             {
-                NbSegmBusy++;
+                busy_count++;
                 track->UnLink();
                 list->Insert( track, firstTrack->Next() );
 
@@ -1933,13 +2041,13 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
                     // that are on each end of the track, if any
                     if( track->GetState( BEGIN_ONPAD ) )
                     {
-                        D_PAD * pad = (D_PAD *) track->start;
+                        D_PAD* pad = (D_PAD *) track->start;
                         lenPadToDie += (double) pad->GetPadToDieLength();
                     }
 
                     if( track->GetState( END_ONPAD ) )
                     {
-                        D_PAD * pad = (D_PAD *) track->end;
+                        D_PAD* pad = (D_PAD *) track->end;
                         lenPadToDie += (double) pad->GetPadToDieLength();
                     }
                 }
@@ -1948,13 +2056,13 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
     }
     else if( aTraceLength )
     {
-        NbSegmBusy = 0;
+        busy_count = 0;
 
         for( TRACK* track = firstTrack; track; track = track->Next() )
         {
             if( track->GetState( BUSY ) )
             {
-                NbSegmBusy++;
+                busy_count++;
                 track->SetState( BUSY, false );
                 full_len += track->GetLength();
 
@@ -1963,19 +2071,19 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
                 // that are on each end of the track, if any
                 if( track->GetState( BEGIN_ONPAD ) )
                 {
-                    D_PAD * pad = (D_PAD *) track->start;
+                    D_PAD* pad = (D_PAD *) track->start;
                     lenPadToDie += (double) pad->GetPadToDieLength();
                 }
 
                 if( track->GetState( END_ONPAD ) )
                 {
-                    D_PAD * pad = (D_PAD *) track->end;
+                    D_PAD* pad = (D_PAD *) track->end;
                     lenPadToDie += (double) pad->GetPadToDieLength();
                 }
             }
         }
 
-        DBG( printf( "%s: NbSegmBusy:%d\n", __func__, NbSegmBusy ); )
+        DBG( printf( "%s: busy_count:%d\n", __func__, busy_count ); )
     }
 
     if( aTraceLength )
@@ -1985,7 +2093,7 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
         *aPadToDieLength = lenPadToDie;
 
     if( aCount )
-        *aCount = NbSegmBusy;
+        *aCount = busy_count;
 
     return firstTrack;
 }
@@ -2001,7 +2109,7 @@ MODULE* BOARD::GetFootprint( const wxPoint& aPosition, LAYER_ID aActiveLayer,
     int     alt_min_dim = 0x7FFFFFFF;
     bool    current_layer_back = IsBackLayer( aActiveLayer );
 
-    for( pt_module = m_Modules;  pt_module;  pt_module = (MODULE*) pt_module->Next() )
+    for( pt_module = m_Modules;  pt_module;  pt_module = pt_module->Next() )
     {
         // is the ref point within the module's bounds?
         if( !pt_module->HitTest( aPosition ) )
@@ -2060,21 +2168,21 @@ MODULE* BOARD::GetFootprint( const wxPoint& aPosition, LAYER_ID aActiveLayer,
 }
 
 
-BOARD_CONNECTED_ITEM* BOARD::GetLockPoint( const wxPoint& aPosition, LSET aLayerMask )
+BOARD_CONNECTED_ITEM* BOARD::GetLockPoint( const wxPoint& aPosition, LSET aLayerSet )
 {
     for( MODULE* module = m_Modules; module; module = module->Next() )
     {
-        D_PAD* pad = module->GetPad( aPosition, aLayerMask );
+        D_PAD* pad = module->GetPad( aPosition, aLayerSet );
 
         if( pad )
             return pad;
     }
 
     // No pad has been located so check for a segment of the trace.
-    TRACK* segment = ::GetTrack( m_Track, NULL, aPosition, aLayerMask );
+    TRACK* segment = ::GetTrack( m_Track, NULL, aPosition, aLayerSet );
 
-    if( segment == NULL )
-        segment = GetTrack( m_Track, aPosition, aLayerMask );
+    if( !segment )
+        segment = GetVisibleTrack( m_Track, aPosition, aLayerSet );
 
     return segment;
 }
@@ -2259,13 +2367,12 @@ bool BOARD::NormalizeAreaPolygon( PICKED_ITEMS_LIST * aNewZonesList, ZONE_CONTAI
 
 
 void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
-                            REPORTER* aReporter )
+                            std::vector<MODULE*>* aNewFootprints, REPORTER* aReporter )
 {
     unsigned       i;
     wxPoint        bestPosition;
     wxString       msg;
-    D_PAD*         pad;
-    MODULE*        footprint;
+    std::vector<MODULE*> newFootprints;
 
     if( !IsEmpty() )
     {
@@ -2292,6 +2399,7 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
     for( i = 0;  i < aNetlist.GetCount();  i++ )
     {
         COMPONENT* component = aNetlist.GetComponent( i );
+        MODULE* footprint;
 
         if( aReporter )
         {
@@ -2340,6 +2448,7 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
                 footprint->SetParent( this );
                 footprint->SetPosition( bestPosition );
                 footprint->SetTimeStamp( GetNewTimeStamp() );
+                newFootprints.push_back( footprint );
                 Add( footprint, ADD_APPEND );
             }
         }
@@ -2386,7 +2495,13 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
                         else
                             newFootprint->SetPath( footprint->GetPath() );
 
-                        footprint->CopyNetlistSettings( newFootprint );
+                        // Copy placement and pad net names.
+                        // optionally, copy or not local settings (like local clearances)
+                        // if the second parameter is "true", previous values will be used.
+                        // if "false", the default library values of the new footprint
+                        // will be used
+                        footprint->CopyNetlistSettings( newFootprint, false );
+
                         Remove( footprint );
                         Add( newFootprint, ADD_APPEND );
                         footprint = newFootprint;
@@ -2448,7 +2563,7 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
             continue;
 
         // At this point, the component footprint is updated.  Now update the nets.
-        for( pad = footprint->Pads();  pad;  pad = pad->Next() )
+        for( D_PAD* pad = footprint->Pads();  pad;  pad = pad->Next() )
         {
             COMPONENT_NET net = component->GetNet( pad->GetPadName() );
 
@@ -2546,9 +2661,9 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
         D_PAD*      pad = NULL;
         D_PAD*      previouspad = NULL;
 
-        for( unsigned ii = 0; ii < padlist.size(); ii++ )
+        for( unsigned kk = 0; kk < padlist.size(); kk++ )
         {
-            pad = padlist[ii];
+            pad = padlist[kk];
 
             if( pad->GetNetname().IsEmpty() )
                 continue;
@@ -2660,11 +2775,12 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
             }
         }
     }
+
+    std::swap( newFootprints, *aNewFootprints );
 }
 
 
-BOARD_ITEM* BOARD::DuplicateAndAddItem( const BOARD_ITEM* aItem,
-                                        bool aIncrementReferences )
+BOARD_ITEM* BOARD::DuplicateAndAddItem( const BOARD_ITEM* aItem )
 {
     BOARD_ITEM* new_item = NULL;
 
@@ -2688,57 +2804,14 @@ BOARD_ITEM* BOARD::DuplicateAndAddItem( const BOARD_ITEM* aItem,
 
     default:
         // Un-handled item for duplication
-        wxASSERT_MSG( false, "Duplication not supported for items of class "
-                      + aItem->GetClass() );
+        new_item = NULL;
         break;
     }
 
     if( new_item )
-    {
-        if( aIncrementReferences )
-            new_item->IncrementItemReference();
-
         Add( new_item );
-    }
 
     return new_item;
-}
-
-
-wxString BOARD::GetNextModuleReferenceWithPrefix( const wxString& aPrefix,
-                                                  bool aFillSequenceGaps )
-{
-    wxString nextRef;
-
-    std::set<int> usedNumbers;
-
-    for( MODULE* module = m_Modules; module; module = module->Next() )
-    {
-        const wxString ref = module->GetReference();
-        wxString remainder;
-
-        // ONly interested in modules with the right prefix
-        if( !ref.StartsWith( aPrefix, &remainder ) )
-            continue;
-
-        // the suffix must be a number
-        if( !remainder.IsNumber() )
-            continue;
-
-        long number;
-        if( remainder.ToCLong( &number ) )
-            usedNumbers.insert( number );
-    }
-
-    int nextNum = 1;
-
-    if( usedNumbers.size() )
-    {
-        nextNum = getNextNumberInSequence( usedNumbers, aFillSequenceGaps );
-        nextRef = wxString::Format( wxT( "%s%i" ), aPrefix, nextNum );
-    }
-
-    return nextRef;
 }
 
 

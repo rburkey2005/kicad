@@ -18,7 +18,6 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
 
 #include <colors.h>
@@ -87,9 +86,6 @@ bool PNS_LINE_PLACER::ToggleVia( bool aEnabled )
     if( !aEnabled )
         m_head.RemoveVia();
 
-    if( !m_idle )
-        Move( m_currentEnd, NULL );
-
     return true;
 }
 
@@ -124,7 +120,7 @@ bool PNS_LINE_PLACER::handleSelfIntersections()
 
     // if there is more than one intersection, find the one that is
     // closest to the beginning of the tail.
-    BOOST_FOREACH( SHAPE_LINE_CHAIN::INTERSECTION i, ips )
+    for( SHAPE_LINE_CHAIN::INTERSECTION i : ips )
     {
         if( i.our.Index() < n )
         {
@@ -453,6 +449,12 @@ bool PNS_LINE_PLACER::rhShoveOnly( const VECTOR2I& aP, PNS_LINE& aNewHead )
     PNS_LINE l( m_tail );
     l.Line().Append( l2.CLine() );
     l.Line().Simplify();
+
+    if( l.PointCount() == 0 || l2.PointCount() == 0 )
+    {
+        aNewHead = m_head;
+        return false;
+    }
 
     if( m_placingVia && viaOk )
     {
@@ -943,9 +945,10 @@ void PNS_LINE_PLACER::removeLoops( PNS_NODE* aNode, PNS_LINE& aLatest )
     if( !aLatest.SegmentCount() )
         return;
 
-    if ( aLatest.CLine().CPoint( 0 ) == aLatest.CLine().CPoint( -1 ) )
+    if( aLatest.CLine().CPoint( 0 ) == aLatest.CLine().CPoint( -1 ) )
         return;
 
+    std::set<PNS_SEGMENT *> toErase;
     aNode->Add( &aLatest, true );
 
     for( int s = 0; s < aLatest.LinkCount(); s++ )
@@ -967,19 +970,24 @@ void PNS_LINE_PLACER::removeLoops( PNS_NODE* aNode, PNS_LINE& aLatest )
         int removedCount = 0;
         int total = 0;
 
-        BOOST_FOREACH( PNS_LINE& line, lines )
+        for( PNS_LINE& line : lines )
         {
             total++;
 
             if( !( line.ContainsSegment( seg ) ) && line.SegmentCount() )
             {
-                aNode->Remove( &line );
+                for( PNS_SEGMENT *ss : *line.LinkedSegments() )
+                    toErase.insert( ss );
+
                 removedCount++;
             }
         }
 
         TRACE( 0, "total segs removed: %d/%d\n", removedCount % total );
     }
+
+    for( PNS_SEGMENT *s : toErase )
+        aNode->Remove( s );
 
     aNode->Remove( &aLatest );
 }
@@ -1009,7 +1017,6 @@ void PNS_LINE_PLACER::UpdateSizes( const PNS_SIZES_SETTINGS& aSizes )
     if( !m_idle )
     {
         initPlacement( m_splitSeg );
-        Move ( m_currentEnd, NULL );
     }
 }
 
@@ -1028,9 +1035,6 @@ void PNS_LINE_PLACER::updateLeadingRatLine()
 void PNS_LINE_PLACER::SetOrthoMode( bool aOrthoMode )
 {
     m_orthoMode = aOrthoMode;
-
-    if( !m_idle )
-        Move( m_currentEnd, NULL );
 }
 
 bool PNS_LINE_PLACER::buildInitialLine( const VECTOR2I& aP, PNS_LINE& aHead )

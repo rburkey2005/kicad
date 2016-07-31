@@ -86,8 +86,11 @@ public:
         tmpStr << m_YRef;
         m_VRML_Yref->SetValue( tmpStr );
         m_sdbSizer1OK->SetDefault();
-        GetSizer()->SetSizeHints( this );
-        Centre();
+
+        FixOSXCancelButtonIssue();
+
+        // Now all widgets have the size fixed, call FinishDialogSettings
+        FinishDialogSettings();
 
         Connect( ID_USE_ABS_PATH, wxEVT_UPDATE_UI,
                  wxUpdateUIEventHandler( DIALOG_EXPORT_3DFILE::OnUpdateUseRelativePath ) );
@@ -206,6 +209,9 @@ void PCB_EDIT_FRAME::OnExportVRML( wxCommandEvent& event )
     dlg.FilePicker()->SetPath( fn.GetFullPath() );
     dlg.SetSubdir( subDirFor3Dshapes );
 
+    if( dlg.ShowModal() != wxID_OK )
+        return;
+
     double aXRef = dlg.GetXRef();
     double aYRef = dlg.GetYRef();
 
@@ -220,9 +226,6 @@ void PCB_EDIT_FRAME::OnExportVRML( wxCommandEvent& event )
     bool export3DFiles = dlg.GetCopyFilesOption();
     bool useRelativePaths = dlg.GetUseRelativePathsOption();
     bool usePlainPCB = dlg.GetUsePlainPCBOption();
-
-    if( dlg.ShowModal() != wxID_OK )
-        return;
 
     last_vrmlName = dlg.FilePicker()->GetPath();
     wxFileName modelPath = last_vrmlName;

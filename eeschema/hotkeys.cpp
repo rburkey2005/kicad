@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2008-2011 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -208,6 +208,7 @@ static EDA_HOTKEY HkFindReplace( _HKI( "Find and Replace" ), HK_FIND_REPLACE,
                                  'F' + GR_KB_CTRL + GR_KB_ALT, wxID_REPLACE );
 static EDA_HOTKEY HkFindNextDrcMarker( _HKI( "Find Next DRC Marker" ), HK_FIND_NEXT_DRC_MARKER,
                                        WXK_F5 + GR_KB_SHIFT, EVT_COMMAND_FIND_DRC_MARKER );
+static EDA_HOTKEY HkZoomSelection( _HKI( "Zoom to Selection" ), HK_ZOOM_SELECTION, '@', ID_ZOOM_SELECTION );
 
 // Special keys for library editor:
 static EDA_HOTKEY HkCreatePin( _HKI( "Create Pin" ), HK_LIBEDIT_CREATE_PIN, 'P' );
@@ -219,6 +220,12 @@ static EDA_HOTKEY HkSaveLib( _HKI( "Save Library" ), HK_SAVE_LIB, 'S' + GR_KB_CT
 static EDA_HOTKEY HkSaveSchematic( _HKI( "Save Schematic" ), HK_SAVE_SCH, 'S' + GR_KB_CTRL );
 static EDA_HOTKEY HkLoadSchematic( _HKI( "Load Schematic" ), HK_LOAD_SCH, 'L' + GR_KB_CTRL );
 
+// Autoplace fields
+static EDA_HOTKEY HkAutoplaceFields( _HKI( "Autoplace Fields" ), HK_AUTOPLACE_FIELDS, 'O',
+                                        ID_AUTOPLACE_FIELDS );
+
+static EDA_HOTKEY HkUpdatePcbFromSch( _HKI( "Update PCB from Schematics" ), HK_UPDATE_PCB_FROM_SCH, WXK_F8 );
+
 // List of common hotkey descriptors
 static EDA_HOTKEY* common_Hotkey_List[] =
 {
@@ -228,6 +235,7 @@ static EDA_HOTKEY* common_Hotkey_List[] =
     &HkZoomRedraw,
     &HkZoomCenter,
     &HkZoomAuto,
+    &HkZoomSelection,
     &HkResetLocalCoord,
     &HkEdit,
     &HkDelete,
@@ -291,6 +299,8 @@ static EDA_HOTKEY* schematic_Hotkey_List[] =
     &HkAddBusEntry,
     &HkAddGraphicPolyLine,
     &HkAddGraphicText,
+    &HkUpdatePcbFromSch,
+    &HkAutoplaceFields,
     &HkLeaveSheet,
     &HkDeleteNode,
     NULL
@@ -303,6 +313,8 @@ static EDA_HOTKEY* libEdit_Hotkey_List[] =
     &HkCreatePin,
     &HkInsertPin,
     &HkMoveLibItem,
+    &HkMirrorX,
+    &HkMirrorY,
     NULL
 };
 
@@ -337,7 +349,7 @@ struct EDA_HOTKEY_CONFIG g_Eeschema_Hokeys_Descr[] =
 struct EDA_HOTKEY_CONFIG g_Schematic_Hokeys_Descr[] =
 {
     { &g_CommonSectionTag,    common_Hotkey_List,    &commonSectionTitle    },
-    { &schematicSectionTitle, schematic_Hotkey_List, &schematicSectionTitle },
+    { &schematicSectionTag,   schematic_Hotkey_List, &schematicSectionTitle },
     { NULL,                   NULL,                  NULL }
 };
 
@@ -444,6 +456,7 @@ bool SCH_EDIT_FRAME::OnHotKey( wxDC* aDC, int aHotKey, const wxPoint& aPosition,
     case HK_ZOOM_REDRAW:
     case HK_ZOOM_CENTER:
     case HK_ZOOM_AUTO:
+    case HK_ZOOM_SELECTION:
     case HK_LEAVE_SHEET:
     case HK_DELETE_NODE:
     case HK_MOVEBLOCK_TO_DRAGBLOCK:          // Switch to drag mode, when block moving
@@ -580,6 +593,7 @@ bool SCH_EDIT_FRAME::OnHotKey( wxDC* aDC, int aHotKey, const wxPoint& aPosition,
     case HK_ORIENT_NORMAL_COMPONENT:        // Orient 0, no mirror (Component)
     case HK_ROTATE:                         // Rotate schematic item.
     case HK_EDIT_COMPONENT_WITH_LIBEDIT:    // Call Libedit and load the current component
+    case HK_AUTOPLACE_FIELDS:               // Autoplace all fields around component
         {
             // force a new item search on hot keys at current position,
             // if there is no currently edited item,
@@ -772,6 +786,17 @@ bool LIB_EDIT_FRAME::OnHotKey( wxDC* aDC, int aHotKey, const wxPoint& aPosition,
                 Process_Special_Functions( cmd );
             }
         }
+        break;
+    case HK_MIRROR_Y:                       // Mirror Y
+        m_drawItem = LocateItemUsingCursor( aPosition );
+        cmd.SetId( ID_LIBEDIT_MIRROR_Y );
+        GetEventHandler()->ProcessEvent( cmd );
+        break;
+
+    case HK_MIRROR_X:                       // Mirror X
+        m_drawItem = LocateItemUsingCursor( aPosition );
+        cmd.SetId( ID_LIBEDIT_MIRROR_X );
+        GetEventHandler()->ProcessEvent( cmd );
         break;
     }
 

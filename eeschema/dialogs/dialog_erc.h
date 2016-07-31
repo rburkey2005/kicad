@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2007 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2014 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 1992-2014 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,22 +27,12 @@
 
 #include <wx/htmllbox.h>
 #include <vector>
-
+#include <lib_pin.h>        // For PINTYPE_COUNT definition
 
 #include <dialog_erc_base.h>
 #include "dialog_erc_listbox.h"
 
-/* Variable locales */
-extern int           DiagErc[PIN_NMAX][PIN_NMAX];
-extern bool          DiagErcTableInit; // go to true after DiagErc init
-extern int           DefaultDiagErc[PIN_NMAX][PIN_NMAX];
-
-/*  Control identifiers */
-#define ID_MATRIX_0 1800
-
-/*!
- * DIALOG_ERC class declaration
- */
+// DIALOG_ERC class declaration
 
 class DIALOG_ERC : public DIALOG_ERC_BASE
 {
@@ -50,10 +40,15 @@ class DIALOG_ERC : public DIALOG_ERC_BASE
 
 private:
     SCH_EDIT_FRAME* m_parent;
-    wxBitmapButton* m_buttonList[PIN_NMAX][PIN_NMAX];
+    wxBitmapButton* m_buttonList[PINTYPE_COUNT][PINTYPE_COUNT];
     bool            m_initialized;
     const SCH_MARKER* m_lastMarkerFound;
     static bool     m_writeErcFile;
+    static bool     m_diagErcTableInit; // go to true after DiagErc init
+    static bool     m_tstUniqueGlobalLabels;
+
+public:
+    static bool     m_TestSimilarLabels;
 
 public:
     DIALOG_ERC( SCH_EDIT_FRAME* parent );

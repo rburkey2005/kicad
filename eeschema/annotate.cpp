@@ -6,7 +6,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2004-2013 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2016 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -35,10 +35,6 @@
 
 #include <sch_reference_list.h>
 #include <class_library.h>
-#include <sch_component.h>
-#include <lib_pin.h>
-
-#include <boost/foreach.hpp>
 
 void SCH_EDIT_FRAME::DeleteAnnotation( bool aCurrentSheetOnly )
 {
@@ -56,6 +52,8 @@ void SCH_EDIT_FRAME::DeleteAnnotation( bool aCurrentSheetOnly )
 
     // Update the references for the sheet that is currently being displayed.
     m_CurrentSheet->UpdateAllScreenReferences();
+    GetCanvas()->Refresh();
+    OnModify();
 }
 
 
@@ -71,7 +69,7 @@ void SCH_EDIT_FRAME::AnnotateComponents( bool              aAnnotateSchematic,
     SCH_SCREENS screens;
 
     // Build the sheet list.
-    SCH_SHEET_LIST sheets;
+    SCH_SHEET_LIST sheets( g_RootSheet );
 
     // Map of locked components
     SCH_MULTI_UNIT_REFERENCE_MAP lockedComponents;
@@ -189,14 +187,14 @@ void SCH_EDIT_FRAME::AnnotateComponents( bool              aAnnotateSchematic,
 int SCH_EDIT_FRAME::CheckAnnotate( wxArrayString* aMessageList, bool aOneSheetOnly )
 {
     // build the screen list
-    SCH_SHEET_LIST SheetList;
-    SCH_REFERENCE_LIST ComponentsList;
+    SCH_SHEET_LIST      sheetList( g_RootSheet );
+    SCH_REFERENCE_LIST  componentsList;
 
     // Build the list of components
     if( !aOneSheetOnly )
-        SheetList.GetComponents( Prj().SchLibs(), ComponentsList );
+        sheetList.GetComponents( Prj().SchLibs(), componentsList );
     else
-        m_CurrentSheet->GetComponents( Prj().SchLibs(), ComponentsList );
+        m_CurrentSheet->GetComponents( Prj().SchLibs(), componentsList );
 
-    return ComponentsList.CheckAnnotation( aMessageList );
+    return componentsList.CheckAnnotation( aMessageList );
 }

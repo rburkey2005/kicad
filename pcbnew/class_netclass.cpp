@@ -23,8 +23,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
-#include <boost/make_shared.hpp>
-
 #include <fctsys.h>
 #include <common.h>
 #include <kicad_string.h>
@@ -41,7 +39,7 @@ const wxChar NETCLASS::Default[] = wxT( "Default" );
 
 // Initial values for netclass initialization
 const int NETCLASS::DEFAULT_CLEARANCE  = Millimeter2iu( 0.2 ); // track to track and track to pads clearance
-const int NETCLASS::DEFAULT_VIA_DIAMETER  = Millimeter2iu( 0.6 );
+const int NETCLASS::DEFAULT_VIA_DIAMETER  = Millimeter2iu( 0.8 );
 const int NETCLASS::DEFAULT_VIA_DRILL  = Millimeter2iu( 0.4 );
 const int NETCLASS::DEFAULT_UVIA_DIAMETER = Millimeter2iu( 0.3 );
 const int NETCLASS::DEFAULT_UVIA_DRILL = Millimeter2iu( 0.1 );
@@ -81,7 +79,7 @@ NETCLASS::~NETCLASS()
 
 NETCLASSES::NETCLASSES()
 {
-    m_Default = boost::make_shared<NETCLASS>( NETCLASS::Default );
+    m_Default = std::make_shared<NETCLASS>( NETCLASS::Default );
 }
 
 
@@ -121,11 +119,11 @@ bool NETCLASSES::Add( NETCLASSPTR aNetClass )
 
 NETCLASSPTR NETCLASSES::Remove( const wxString& aNetName )
 {
-    NETCLASSMAP::iterator found = m_NetClasses.find( aNetName );
+    NETCLASS_MAP::iterator found = m_NetClasses.find( aNetName );
 
     if( found != m_NetClasses.end() )
     {
-        boost::shared_ptr<NETCLASS> netclass = found->second;
+        std::shared_ptr<NETCLASS> netclass = found->second;
         m_NetClasses.erase( found );
         return netclass;
     }
@@ -139,7 +137,7 @@ NETCLASSPTR NETCLASSES::Find( const wxString& aName ) const
     if( aName == NETCLASS::Default )
         return m_Default;
 
-    NETCLASSMAP::const_iterator found = m_NetClasses.find( aName );
+    NETCLASS_MAP::const_iterator found = m_NetClasses.find( aName );
 
     if( found == m_NetClasses.end() )
         return NETCLASSPTR();

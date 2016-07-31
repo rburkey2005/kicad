@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2013 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,13 +31,13 @@
 #include <fctsys.h>
 
 #include <common.h>
-#include <macros.h>
 #include <gerbview.h>
 #include <gerbview_frame.h>
 #include <bitmaps.h>
 #include <gerbview_id.h>
 #include <hotkeys.h>
-#include <class_GERBER.h>
+#include <class_gerber_file_image.h>
+#include <class_gerber_file_image_list.h>
 #include <class_gbr_layer_box_selector.h>
 #include <class_DCodeSelectionbox.h>
 #include <dialog_helpers.h>
@@ -90,7 +90,7 @@ void GERBVIEW_FRAME::ReCreateHToolbar( void )
 
     m_SelLayerBox = new GBR_LAYER_BOX_SELECTOR( m_mainToolBar,
                                 ID_TOOLBARH_GERBVIEW_SELECT_ACTIVE_LAYER,
-                                wxDefaultPosition, wxSize( 150, -1 ), 0,NULL);
+                                wxDefaultPosition, wxDefaultSize, 0,NULL);
     m_SelLayerBox->Resync();
 
     m_mainToolBar->AddControl( m_SelLayerBox );
@@ -114,7 +114,7 @@ void GERBVIEW_FRAME::ReCreateHToolbar( void )
     m_mainToolBar->AddControl( m_DCodeSelector );
 
     m_TextInfo = new wxTextCtrl( m_mainToolBar, wxID_ANY, wxEmptyString, wxDefaultPosition,
-                                 wxSize(150,-1), wxTE_READONLY );
+                                 wxDefaultSize, wxTE_READONLY );
     m_mainToolBar->AddControl( m_TextInfo );
 
     // after adding the buttons to the toolbar, must call Realize() to reflect the changes
@@ -147,6 +147,17 @@ void GERBVIEW_FRAME::ReCreateOptToolbar( void )
     m_optionsToolBar = new wxAuiToolBar( this, ID_OPT_TOOLBAR, wxDefaultPosition, wxDefaultSize,
                                          wxAUI_TB_DEFAULT_STYLE | wxAUI_TB_VERTICAL );
 
+    // TODO: these can be moved to the 'proper' vertical toolbar if and when there are
+    // actual tools to put there. That, or I'll get around to implementing configurable
+    // toolbars.
+    m_optionsToolBar->AddTool( ID_NO_TOOL_SELECTED, wxEmptyString, KiBitmap( cursor_xpm ),
+                               wxEmptyString, wxITEM_CHECK );
+
+    m_optionsToolBar->AddTool( ID_ZOOM_SELECTION, wxEmptyString, KiBitmap( zoom_area_xpm ),
+                               _( "Zoom to selection" ), wxITEM_CHECK );
+
+    m_optionsToolBar->AddSeparator();
+
     m_optionsToolBar->AddTool( ID_TB_OPTIONS_SHOW_GRID, wxEmptyString, KiBitmap( grid_xpm ),
                                _( "Turn grid off" ), wxITEM_CHECK );
 
@@ -162,9 +173,11 @@ void GERBVIEW_FRAME::ReCreateOptToolbar( void )
                                KiBitmap( unit_mm_xpm ),
                                _( "Set units to millimeters" ), wxITEM_CHECK );
 
+#ifndef __APPLE__
     m_optionsToolBar->AddTool( ID_TB_OPTIONS_SELECT_CURSOR, wxEmptyString,
                                KiBitmap( cursor_shape_xpm ),
                                _( "Change cursor shape" ), wxITEM_CHECK );
+#endif // !__APPLE__
 
     m_optionsToolBar->AddSeparator();
     m_optionsToolBar->AddTool( ID_TB_OPTIONS_SHOW_FLASHED_ITEMS_SKETCH, wxEmptyString,
@@ -294,7 +307,7 @@ void GERBVIEW_FRAME::OnUpdateShowLayerManager( wxUpdateUIEvent& aEvent )
 void GERBVIEW_FRAME::OnUpdateSelectDCode( wxUpdateUIEvent& aEvent )
 {
     int layer = getActiveLayer();
-    GERBER_IMAGE* gerber = g_GERBER_List.GetGbrImage( layer );
+    GERBER_FILE_IMAGE* gerber = GetGbrImage( layer );
     int selected = ( gerber ) ? gerber->m_Selected_Tool : 0;
 
     if( m_DCodeSelector && m_DCodeSelector->GetSelectedDCodeId() != selected )
@@ -306,7 +319,7 @@ void GERBVIEW_FRAME::OnUpdateSelectDCode( wxUpdateUIEvent& aEvent )
 
 void GERBVIEW_FRAME::OnUpdateLayerSelectBox( wxUpdateUIEvent& aEvent )
 {
-    if(  m_SelLayerBox && (m_SelLayerBox->GetSelection() != getActiveLayer()) )
+    if( m_SelLayerBox->GetSelection() != getActiveLayer() )
     {
         m_SelLayerBox->SetSelection( getActiveLayer() );
     }

@@ -35,16 +35,22 @@
 %include "docstrings.i"
 #endif
 
+
 %include "kicad.i"
 
-// ignore a couple of items that generate warnings from swig built code
+%include <convert_to_biu.h>
+%include <fpid.h>
 
+// ignore a couple of items that generate warnings from swig built code
 %ignore BOARD_ITEM::ZeroOffset;
 %ignore D_PAD::m_PadSketchModePenSize;
 
+class BASE_SET {};
+%ignore BASE_SET;
+
+
 // rename the Add method of classes to Add native, so we will handle
 // the Add method in python
-
 %rename(AddNative) *::Add;
 
 // fix method names conflicts
@@ -84,16 +90,14 @@
   #include <wx_python_helpers.h>
   #include <class_board_item.h>
   #include <class_board_connected_item.h>
+  #include <class_netinfo.h>
   #include <class_board_design_settings.h>
-  #include <class_board.h>
   #include <class_module.h>
   #include <class_track.h>
   #include <class_zone.h>
   #include <zones.h>
   #include <layers_id_colors_and_visibility.h>
   #include <class_pad.h>
-  #include <pad_shapes.h>
-  #include <class_netinfo.h>
   #include <class_pcb_text.h>
   #include <class_dimension.h>
   #include <class_drawsegment.h>
@@ -101,16 +105,19 @@
   #include <class_mire.h>
   #include <class_text_mod.h>
   #include <class_edge_mod.h>
-  #include <dlist.h>
-  #include <class_zone_settings.h>
+
   #include <class_netclass.h>
-  #include <class_netinfo.h>
+  #include <colors.h>
+
+  //#include <dlist.h>
+  #include <class_zone_settings.h>
   #include <pcbnew_scripting_helpers.h>
 
   #include <plotcontroller.h>
   #include <pcb_plot_params.h>
   #include <exporters/gendrill_Excellon_writer.h>
-  #include <colors.h>
+
+  #include <class_board.h>
 
   BOARD *GetBoard(); /* get current editor board */
 %}
@@ -123,16 +130,14 @@
 
 %include <class_board_item.h>
 %include <class_board_connected_item.h>
-%include <class_board_design_settings.h>
-%include <class_board.h>
+%include <pad_shapes.h>
+%include <class_pad.h>
+%include <class_netinfo.h>
 %include <class_module.h>
 %include <class_track.h>
 %include <class_zone.h>
 %include <zones.h>
 %include <layers_id_colors_and_visibility.h>
-%include <class_pad.h>
-%include <pad_shapes.h>
-%include <class_netinfo.h>
 %include <class_pcb_text.h>
 %include <class_dimension.h>
 %include <class_drawsegment.h>
@@ -143,13 +148,15 @@
 %include <dlist.h>
 %include <class_zone_settings.h>
 %include <class_netclass.h>
-%include <class_netinfo.h>
 
+%include <class_board_design_settings.h>
 %include <plotcontroller.h>
 %include <pcb_plot_params.h>
 %include <plot_common.h>
 %include <exporters/gendrill_Excellon_writer.h>
 %include <colors.h>
+
+%include <class_board.h>
 
 %include "board_item.i"
 
@@ -166,4 +173,30 @@
 %include "plugins.i"
 %include "units.i"
 
+
+
+// Extend LSET by 2 methods to add or remove layers from the layer list
+// Mainly used to add or remove layers of a pad layer list
+%extend LSET
+{
+    LSET addLayer( LAYER_ID aLayer)    { return self->set(aLayer); }
+    LSET removeLayer( LAYER_ID aLayer) { return self->reset(aLayer); }
+    LSET addLayerSet( LSET aLayerSet)    { return *self |= aLayerSet; }
+    LSET removeLayerSet( LSET aLayerSet) { return *self &= ~aLayerSet; }
+
+    %pythoncode
+    %{
+    def AddLayer(self, layer):
+        return self.addLayer( layer )
+
+    def AddLayerSet(self, layers):
+        return self.addLayerSet( layers )
+
+    def RemoveLayer(self, layer):
+        return self.removeLayer( layer )
+
+    def RemoveLayerSet(self, layers):
+        return self.removeLayerSet( layers )
+    %}
+}
 

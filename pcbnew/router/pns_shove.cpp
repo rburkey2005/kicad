@@ -23,8 +23,6 @@
 #include <deque>
 #include <cassert>
 
-#include <boost/foreach.hpp>
-
 #include "trace.h"
 #include "range.h"
 
@@ -95,7 +93,7 @@ PNS_SHOVE::~PNS_SHOVE()
 
 PNS_LINE PNS_SHOVE::assembleLine( const PNS_SEGMENT* aSeg, int* aIndex )
 {
-    return m_currentNode->AssembleLine( const_cast<PNS_SEGMENT*>( aSeg ), aIndex );
+    return m_currentNode->AssembleLine( const_cast<PNS_SEGMENT*>( aSeg ), aIndex, true );
 }
 
 // A dumb function that checks if the shoved line is shoved the right way, e.g.
@@ -223,7 +221,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::processHullSet( PNS_LINE& aCurrent, PNS_LINE&
         {
             PNS_JOINT* jtStart = m_currentNode->FindJoint( aCurrent.CPoint( 0 ), &aCurrent );
 
-            BOOST_FOREACH( PNS_ITEM* item, jtStart->LinkList() )
+            for( PNS_ITEM* item : jtStart->LinkList() )
             {
                 if( m_currentNode->CheckColliding( item, &l ) )
                     colliding = true;
@@ -254,7 +252,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::ProcessSingleLine( PNS_LINE& aCurrent, PNS_LI
 
     if( aObstacle.LinkedSegments() )
     {
-        BOOST_FOREACH( PNS_SEGMENT* s, *aObstacle.LinkedSegments() )
+        for( PNS_SEGMENT* s : *aObstacle.LinkedSegments() )
 
         if( s->Marker() & MK_HEAD )
         {
@@ -411,7 +409,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::onCollidingSolid( PNS_LINE& aCurrent, PNS_ITE
         if( !jtStart )
             return SH_INCOMPLETE;
 
-        BOOST_FOREACH( PNS_ITEM* item, jtStart->LinkList() )
+        for( PNS_ITEM* item : jtStart->LinkList() )
         {
             if( item->OfKind( PNS_ITEM::VIA ) )
             {
@@ -430,7 +428,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::onCollidingSolid( PNS_LINE& aCurrent, PNS_ITE
 
 #ifdef DEBUG
     m_logger.NewGroup( "on-colliding-solid-cluster", m_iter );
-    BOOST_FOREACH( PNS_ITEM* item, cluster )
+    for( PNS_ITEM* item : cluster )
     {
         m_logger.Log( item, 0, "cluster-entry" );
     }
@@ -601,7 +599,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::pushVia( PNS_VIA* aVia, const VECTOR2I& aForc
         m_draggedViaHeadSet.Clear();
     }
 
-    BOOST_FOREACH( PNS_ITEM* item, jt->LinkList() )
+    for( PNS_ITEM* item : jt->LinkList() )
     {
         if( PNS_SEGMENT* seg = dyn_cast<PNS_SEGMENT*>( item ) )
         {
@@ -643,7 +641,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::pushVia( PNS_VIA* aVia, const VECTOR2I& aForc
     m_logger.Log( pushedVia, 1, "pushed-via" );
 #endif
 
-    BOOST_FOREACH( LINE_PAIR lp, draggedLines )
+    for( LINE_PAIR lp : draggedLines )
     {
         if( lp.first.Marker() & MK_HEAD )
         {
@@ -742,7 +740,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::onReverseCollidingVia( PNS_LINE& aCurrent, PN
     cur.RemoveVia();
     unwindStack( &aCurrent );
 
-    BOOST_FOREACH( PNS_ITEM* item, jt->LinkList() )
+    for( PNS_ITEM* item : jt->LinkList() )
     {
         if( item->OfKind( PNS_ITEM::SEGMENT ) && item->LayersOverlap( &aCurrent ) )
         {
@@ -803,7 +801,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::onReverseCollidingVia( PNS_LINE& aCurrent, PN
     int currentRank = aCurrent.Rank();
     replaceItems( &aCurrent, &shoved );
 
-    if ( !pushLine( shoved ) )
+    if( !pushLine( shoved ) )
         return SH_INCOMPLETE;
 
     shoved.SetRank( currentRank );
@@ -843,7 +841,7 @@ void PNS_SHOVE::unwindStack( PNS_ITEM* aItem )
         if( !l->LinkedSegments() )
             return;
 
-        BOOST_FOREACH( PNS_SEGMENT* seg, *l->LinkedSegments() )
+        for( PNS_SEGMENT* seg : *l->LinkedSegments() )
             unwindStack( seg );
     }
 }
@@ -879,7 +877,7 @@ void PNS_SHOVE::popLine( )
         if( !l.LinkedSegments() )
             continue;
 
-        BOOST_FOREACH( PNS_SEGMENT *s, *l.LinkedSegments() )
+        for( PNS_SEGMENT *s : *l.LinkedSegments() )
         {
             if( i->ContainsSegment( s ) )
             {
@@ -952,7 +950,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::shoveIteration( int aIter )
 
             popLine();
             st = onCollidingLine( revLine, currentLine );
-            if ( !pushLine( revLine ) )
+            if( !pushLine( revLine ) )
                 return SH_INCOMPLETE;
 
             break;
@@ -1036,7 +1034,7 @@ OPT_BOX2I PNS_SHOVE::totalAffectedArea() const
 
     if( area )
     {
-        if ( m_affectedAreaSum )
+        if( m_affectedAreaSum )
             area->Merge ( *m_affectedAreaSum );
     } else
         area = m_affectedAreaSum;
@@ -1124,7 +1122,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::ShoveLines( const PNS_LINE& aCurrentHead )
 
     if( st == SH_OK || st == SH_HEAD_MODIFIED )
     {
-        pushSpringback( m_currentNode, headSet, PNS_COST_ESTIMATOR(), m_affectedAreaSum);
+        pushSpringback( m_currentNode, headSet, PNS_COST_ESTIMATOR(), m_affectedAreaSum );
     }
     else
     {
@@ -1132,6 +1130,13 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::ShoveLines( const PNS_LINE& aCurrentHead )
 
         m_currentNode = parent;
         m_newHead = OPT_LINE();
+    }
+
+    if( m_newHead && head.EndsWithVia() )
+    {
+        PNS_VIA v = head.Via();
+        v.SetPos( m_newHead->CPoint( -1 ) );
+        m_newHead->AppendVia(v);
     }
 
     return st;
@@ -1146,7 +1151,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::ShoveMultiLines( const PNS_ITEMSET& aHeadSet 
 
     PNS_ITEMSET headSet;
 
-    BOOST_FOREACH( const PNS_ITEM* item, aHeadSet.CItems() )
+    for( const PNS_ITEM* item : aHeadSet.CItems() )
     {
         const PNS_LINE* headOrig = static_cast<const PNS_LINE*>( item );
 
@@ -1169,7 +1174,7 @@ PNS_SHOVE::SHOVE_STATUS PNS_SHOVE::ShoveMultiLines( const PNS_ITEMSET& aHeadSet 
     m_currentNode->ClearRanks();
     int n = 0;
 
-    BOOST_FOREACH( const PNS_ITEM* item, aHeadSet.CItems() )
+    for( const PNS_ITEM* item : aHeadSet.CItems() )
     {
         const PNS_LINE* headOrig = static_cast<const PNS_LINE*>( item );
         PNS_LINE head( *headOrig );

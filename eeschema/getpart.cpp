@@ -49,8 +49,6 @@
 #include <component_tree_search_container.h>
 #include <dialog_get_component.h>
 
-#include <boost/foreach.hpp>
-
 
 wxString SCH_BASE_FRAME::SelectComponentFromLibBrowser( const SCHLIB_FILTER* aFilter,
                                                         LIB_ALIAS* aPreselectedAlias,
@@ -62,7 +60,7 @@ wxString SCH_BASE_FRAME::SelectComponentFromLibBrowser( const SCHLIB_FILTER* aFi
     if( viewlibFrame )
         viewlibFrame->Destroy();
 
-    viewlibFrame = (LIB_VIEW_FRAME*) Kiway().Player( FRAME_SCH_VIEWER_MODAL, true );
+    viewlibFrame = (LIB_VIEW_FRAME*) Kiway().Player( FRAME_SCH_VIEWER_MODAL, true, this );
 
     if( aFilter )
         viewlibFrame->SetFilter( aFilter );
@@ -133,7 +131,7 @@ wxString SCH_BASE_FRAME::SelectComponentFromLibrary( const SCHLIB_FILTER* aFilte
 
     if( !loaded )
     {
-        BOOST_FOREACH( PART_LIB& lib, *libs )
+        for( PART_LIB& lib : *libs )
         {
             search_container.AddLibrary( lib );
         }
@@ -242,6 +240,10 @@ SCH_COMPONENT* SCH_EDIT_FRAME::Load_Component( wxDC*           aDC,
     SetMsgPanel( items );
     component->Draw( m_canvas, aDC, wxPoint( 0, 0 ), g_XorMode );
     component->SetFlags( IS_NEW );
+
+    if( m_autoplaceFields )
+        component->AutoplaceFields( /* aScreen */ NULL, /* aManual */ false );
+
     PrepareMoveItem( (SCH_ITEM*) component, aDC );
 
     return component;
@@ -268,29 +270,13 @@ void SCH_EDIT_FRAME::OrientComponent( COMPONENT_ORIENTATION_T aOrientation )
 
     INSTALL_UNBUFFERED_DC( dc, m_canvas );
 
-    // Erase the previous component in it's current orientation.
-
-    m_canvas->CrossHairOff( &dc );
-
-    if( component->GetFlags() )
-        component->Draw( m_canvas, &dc, wxPoint( 0, 0 ), g_XorMode );
-    else
-    {
-        component->SetFlags( IS_MOVED );    // do not redraw the component
-        m_canvas->RefreshDrawingRect( component->GetBoundingBox() );
-        component->ClearFlags( IS_MOVED );
-    }
-
     component->SetOrientation( aOrientation );
 
-    /* Redraw the component in the new position. */
-    if( component->GetFlags() )
-        component->Draw( m_canvas, &dc, wxPoint( 0, 0 ), g_XorMode );
-    else
-        component->Draw( m_canvas, &dc, wxPoint( 0, 0 ), GR_DEFAULT_DRAWMODE );
-
     m_canvas->CrossHairOn( &dc );
-    GetScreen()->TestDanglingEnds( m_canvas, &dc );
+
+    if( GetScreen()->TestDanglingEnds() )
+        m_canvas->Refresh();
+
     OnModify();
 }
 
@@ -344,13 +330,12 @@ void SCH_EDIT_FRAME::OnSelectUnit( wxCommandEvent& aEvent )
         component->ClearFlags();
         component->SetFlags( flags );   // Restore m_Flag modified by SetUnit()
 
-        /* Redraw the component in the new position. */
-        if( flags )
-            component->Draw( m_canvas, &dc, wxPoint( 0, 0 ), g_XorMode, g_GhostColor );
-        else
-            component->Draw( m_canvas, &dc, wxPoint( 0, 0 ), GR_DEFAULT_DRAWMODE );
+        if( m_autoplaceFields )
+            component->AutoAutoplaceFields( GetScreen() );
 
-        screen->TestDanglingEnds( m_canvas, &dc );
+        if( screen->TestDanglingEnds() )
+            m_canvas->Refresh();
+
         OnModify();
     }
 }
@@ -387,6 +372,9 @@ void SCH_EDIT_FRAME::ConvertPart( SCH_COMPONENT* DrawComponent, wxDC* DC )
         if( DrawComponent->GetConvert() > 2 )
             DrawComponent->SetConvert( 1 );
 
+        // The alternate symbol may cause a change in the connection status so test the
+        // connections so the connection indicators are drawn correctly.
+        GetScreen()->TestDanglingEnds();
         DrawComponent->ClearFlags();
         DrawComponent->SetFlags( flags );   // Restore m_Flag (modified by SetConvert())
 
@@ -396,7 +384,6 @@ void SCH_EDIT_FRAME::ConvertPart( SCH_COMPONENT* DrawComponent, wxDC* DC )
         else
             DrawComponent->Draw( m_canvas, DC, wxPoint( 0, 0 ), GR_DEFAULT_DRAWMODE );
 
-        GetScreen()->TestDanglingEnds( m_canvas, DC );
         OnModify();
     }
 }

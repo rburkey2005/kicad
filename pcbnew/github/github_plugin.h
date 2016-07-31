@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2013 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2013 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -213,11 +213,11 @@ protected:
     static bool repoURL_zipURL( const wxString& aRepoURL, std::string* aZipURL );
 
     /**
-     * Function remote_get_zip
+     * Function remoteGetZip
      * fetches a zip file image from a github repo synchronously.  The byte image
      * is received into the m_input_stream.
      */
-    void remote_get_zip( const wxString& aRepoURL ) throw( IO_ERROR );
+    void remoteGetZip( const wxString& aRepoURL ) throw( IO_ERROR );
 
     wxString    m_lib_path;     ///< from aLibraryPath, something like https://github.com/liftoff-sr/pretty_footprints
     std::string m_zip_image;    ///< byte image of the zip file in its entirety.

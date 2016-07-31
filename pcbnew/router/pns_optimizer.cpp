@@ -18,11 +18,11 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <boost/foreach.hpp>
-
 #include <geometry/shape_line_chain.h>
 #include <geometry/shape_rect.h>
 #include <geometry/shape_convex.h>
+
+#include <cmath>
 
 #include "pns_line.h"
 #include "pns_diff_pair.h"
@@ -269,7 +269,7 @@ int LINE_RESTRICTIONS::allowedAngles( PNS_NODE* aWorld, const PNS_LINE* aLine, c
 
     int n_dirs = 0;
 
-    BOOST_FOREACH( const PNS_ITEM* item, jt->Links().CItems() )
+    for( const PNS_ITEM* item : jt->Links().CItems() )
     {
         if( item->OfKind( PNS_ITEM::VIA ) || item->OfKind( PNS_ITEM::SOLID ) )
             return 0xff;
@@ -313,7 +313,7 @@ void LINE_RESTRICTIONS::Build( PNS_NODE* aWorld, PNS_LINE* aOriginLine, const SH
 
     for( int i = 0; i < n; i++ )
     {
-        const VECTOR2I &v = l.CPoint( i ), v_next;
+        const VECTOR2I &v = l.CPoint( i );
         RVERTEX r( false, 0xff );
 
         if( aRestrictedAreaEnable )
@@ -386,6 +386,7 @@ bool PNS_OPTIMIZER::checkColliding( PNS_ITEM* aItem, bool aUpdateCache )
 
     return static_cast<bool>( m_world->CheckColliding( aItem ) );
 
+#if 0
     // something is wrong with the cache, need to investigate.
     m_cache.Query( aItem->Shape(), m_world->GetMaxClearance(), v, false );
 
@@ -408,6 +409,7 @@ bool PNS_OPTIMIZER::checkColliding( PNS_ITEM* aItem, bool aUpdateCache )
     }
 
     return false;
+#endif
 }
 
 
@@ -810,7 +812,7 @@ PNS_ITEM* PNS_OPTIMIZER::findPadOrVia( int aLayer, int aNet, const VECTOR2I& aP 
     if( !jt )
         return NULL;
 
-    BOOST_FOREACH( PNS_ITEM* item, jt->LinkList() )
+    for( PNS_ITEM* item : jt->LinkList() )
     {
         if( item->OfKind( PNS_ITEM::VIA | PNS_ITEM::SOLID ) )
             return item;
@@ -848,7 +850,7 @@ int PNS_OPTIMIZER::smartPadsSingle( PNS_LINE* aLine, PNS_ITEM* aPad, bool aEnd, 
 
     for( int p = 1; p <= p_end; p++ )
     {
-        BOOST_FOREACH( SHAPE_LINE_CHAIN & l, breakouts ) {
+        for( SHAPE_LINE_CHAIN & l : breakouts ) {
 
             for( int diag = 0; diag < 2; diag++ )
             {
@@ -896,7 +898,7 @@ int PNS_OPTIMIZER::smartPadsSingle( PNS_LINE* aLine, PNS_ITEM* aPad, bool aEnd, 
     bool found = false;
     int p_best = -1;
 
-    BOOST_FOREACH( RtVariant& vp, variants )
+    for( RtVariant& vp : variants )
     {
         PNS_LINE tmp( *aLine, vp.second );
         int cost = PNS_COST_ESTIMATOR::CornerCost( vp.second );

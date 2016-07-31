@@ -1,9 +1,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2013 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
+ * Copyright (C) 2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2013 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -38,6 +38,7 @@
 #include <class_gbr_layout.h>
 #include <class_gbr_screen.h>
 #include <class_page_info.h>
+#include <class_gbr_display_options.h>
 
 #define NO_AVAILABLE_LAYERS UNDEFINED_LAYER
 
@@ -45,35 +46,8 @@ class DCODE_SELECTION_BOX;
 class GERBER_LAYER_WIDGET;
 class GBR_LAYER_BOX_SELECTOR;
 class GERBER_DRAW_ITEM;
-
-
-/**
- * Class GBR_DISPLAY_OPTIONS
- * A helper class to handle display options.
- */
-class GBR_DISPLAY_OPTIONS
-{
-public:
-    bool    m_DisplayFlashedItemsFill;
-    bool    m_DisplayLinesFill;
-    bool    m_DisplayPolygonsFill;
-    bool    m_DisplayPolarCood;
-    bool    m_DisplayDCodes;
-    bool    m_DisplayNegativeObjects;
-    bool    m_IsPrinting;
-
-public:
-    GBR_DISPLAY_OPTIONS()
-    {
-        m_DisplayFlashedItemsFill = true;
-        m_DisplayLinesFill      = true;
-        m_DisplayPolygonsFill   = true;
-        m_DisplayPolarCood      = false;
-        m_DisplayDCodes = true;
-        m_IsPrinting = false;
-        m_DisplayNegativeObjects = false;
-    }
-};
+class GERBER_FILE_IMAGE;
+class GERBER_FILE_IMAGE_LIST;
 
 
 /**
@@ -111,15 +85,17 @@ public:
     }
 
     /**
-     * Function GetItemsList
-     * @return the first GERBER_DRAW_ITEM * item of the items list
+     * Accessors to GERBER_FILE_IMAGE_LIST and GERBER_FILE_IMAGE data
      */
-    GERBER_DRAW_ITEM* GetItemsList()
+    GERBER_FILE_IMAGE_LIST* GetImagesList() const
     {
-        GERBER_DRAW_ITEM* item = GetGerberLayout()->m_Drawings;
-
-        return (GERBER_DRAW_ITEM*) item;
+        return m_gerberLayout->GetImagesList();
     }
+
+    GERBER_FILE_IMAGE* GetGbrImage( int aIdx ) const;
+
+    unsigned ImagesMaxCount() const;    ///< The max number of file images
+
 
     /**
      * Function GetGerberLayoutBoundingBox
@@ -203,7 +179,7 @@ private:
 
     bool            m_show_layer_manager_tools;
 
-    // An array sting to store warning messages when reaging a gerber file.
+    // An array sting to store warning messages when reading a gerber file.
     wxArrayString   m_Messages;
 
 public:
@@ -235,6 +211,7 @@ public:
     void    OnLeftClick( wxDC* DC, const wxPoint& MousePos );
     void    OnLeftDClick( wxDC* DC, const wxPoint& MousePos );
     bool    OnRightClick( const wxPoint& MousePos, wxMenu* PopMenu );
+    void    OnUpdateSelectTool( wxUpdateUIEvent& aEvent );
     double  BestZoom();
     void    UpdateStatusBar();
 
@@ -438,9 +415,11 @@ public:
      * Function syncLayerBox
      * updates the currently "selected" layer within m_SelLayerBox
      * The currently active layer, as defined by the return value of
-     * getActiveLayer().  And updates the colored icon in the toolbar.
+     * getActiveLayer().
+     * @param aRebuildLayerBox = true to rebuild the layer box
+     *  false to just updates the selection.
      */
-    void                syncLayerBox();
+    void                syncLayerBox( bool aRebuildLayerBox = false );
 
     /**
      * Function UpdateTitleAndInfo
@@ -523,10 +502,8 @@ public:
      */
     bool OnHotKey( wxDC* aDC, int aHotkeyCode, const wxPoint& aPosition, EDA_ITEM* aItem = NULL );
 
-    GERBER_DRAW_ITEM*   GerberGeneralLocateAndDisplay();
     GERBER_DRAW_ITEM*   Locate( const wxPoint& aPosition, int typeloc );
 
-    void                Process_Settings( wxCommandEvent& event );
     void                Process_Config( wxCommandEvent& event );
     void                InstallGerberOptionsDialog( wxCommandEvent& event );
 
@@ -546,7 +523,7 @@ public:
      * returns the block command (BLOCK_MOVE, BLOCK_COPY...) corresponding to
      * the \a aKey (ALT, SHIFT ALT ..)
      */
-    virtual int         BlockCommand( int key );
+    virtual int         BlockCommand( EDA_KEY key );
 
     /**
      * Function HandleBlockPlace
@@ -572,18 +549,8 @@ public:
      * moves all tracks and segments within the selected block.
      * New location is determined by the current offset from the selected
      * block's original location.
-     * Defined separately in Pcbnew and GerbView
-     *
-     * @param DC A device context to draw on.
      */
-    void                Block_Move( wxDC* DC );
-
-    /**
-     * Function ToPlotter
-     * Open a dialog frame to create plot and drill files
-     * relative to the current board
-     */
-    void                ToPlotter( wxCommandEvent& event );
+    void                Block_Move();
 
     /**
      * Function ToPrinter
@@ -616,12 +583,10 @@ public:
      * @return true if file was opened successfully.
      */
     bool                LoadGerberFiles( const wxString& aFileName );
-    int                 ReadGerberFile( FILE* File, bool Append );
-    bool                Read_GERBER_File( const wxString&   GERBER_FullFileName,
-                                          const wxString&   D_Code_FullFileName );
+    bool                Read_GERBER_File( const wxString&   GERBER_FullFileName );
 
     /**
-     * function LoadDrllFiles
+     * function Read_EXCELLON_File
      * Load a drill (EXCELLON) file or many files.
      * @param aFileName - void string or file name with full path to open or empty string to
      *                    open a new file. In this case one one file is loaded
@@ -631,12 +596,11 @@ public:
     bool                LoadExcellonFiles( const wxString& aFileName );
     bool                Read_EXCELLON_File( const wxString& aFullFileName );
 
-    bool                GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey = 0 );
+    bool                GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 );
 
     /**
      * Set Size Items (Lines, Flashes) from DCodes List
      */
-    void                CopyDCodesSizeToItems();
     void                Liste_D_Codes();
 
     // PCB handling
@@ -678,15 +642,6 @@ public:
      */
     virtual void    PrintPage( wxDC* aDC, LSET aPrintMasklayer, bool aPrintMirrorMode,
                                void* aData = NULL );
-
-    /**
-     * Function DrawItemsDCodeID
-     * Draw the DCode value (if exists) corresponding to gerber item
-     * (polygons do not have a DCode)
-     * @param aDC = the current device context
-     * @param aDrawMode = GR_COPY, GR_OR ...
-     */
-    void            DrawItemsDCodeID( wxDC* aDC, GR_DRAWMODE aDrawMode );
 
     DECLARE_EVENT_TABLE()
 };

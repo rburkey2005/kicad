@@ -48,9 +48,9 @@
 #include <cvpcb_mainframe.h>
 #include <class_DisplayFootprintsFrame.h>
 #include <cvpcb_id.h>
-#include <cvstruct.h>
+#include <listview_classes.h>
 
-#include <3d_viewer.h>
+#include <3d_viewer/eda_3d_viewer.h>
 
 
 BEGIN_EVENT_TABLE( DISPLAY_FOOTPRINTS_FRAME, PCB_BASE_FRAME )
@@ -149,8 +149,10 @@ DISPLAY_FOOTPRINTS_FRAME::~DISPLAY_FOOTPRINTS_FRAME()
 
 void DISPLAY_FOOTPRINTS_FRAME::OnCloseWindow( wxCloseEvent& event )
 {
-    if( m_Draw3DFrame )
-        m_Draw3DFrame->Close( true );
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame )
+        draw3DFrame->Close( true );
 
     Destroy();
 }
@@ -187,9 +189,11 @@ void DISPLAY_FOOTPRINTS_FRAME::ReCreateOptToolbar()
                                KiBitmap( unit_mm_xpm ),
                                _( "Units in millimeters" ), wxITEM_CHECK );
 
+#ifndef __APPLE__
     m_optionsToolBar->AddTool( ID_TB_OPTIONS_SELECT_CURSOR, wxEmptyString,
                                KiBitmap( cursor_shape_xpm ),
                                _( "Change cursor shape" ), wxITEM_CHECK  );
+#endif // !__APPLE__
 
     m_optionsToolBar->AddSeparator();
     m_optionsToolBar->AddTool( ID_TB_OPTIONS_SHOW_PADS_SKETCH, wxEmptyString,
@@ -313,7 +317,8 @@ void DISPLAY_FOOTPRINTS_FRAME::OnSelectOptionToolbar( wxCommandEvent& event )
 }
 
 
-bool DISPLAY_FOOTPRINTS_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey )
+bool DISPLAY_FOOTPRINTS_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition,
+        EDA_KEY aHotKey )
 {
     bool eventHandled = true;
 
@@ -382,25 +387,27 @@ bool DISPLAY_FOOTPRINTS_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPositi
 
 void DISPLAY_FOOTPRINTS_FRAME::Show3D_Frame( wxCommandEvent& event )
 {
-    if( m_Draw3DFrame )
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame )
     {
         // Raising the window does not show the window on Windows if iconized.
         // This should work on any platform.
-        if( m_Draw3DFrame->IsIconized() )
-             m_Draw3DFrame->Iconize( false );
+        if( draw3DFrame->IsIconized() )
+             draw3DFrame->Iconize( false );
 
-        m_Draw3DFrame->Raise();
+        draw3DFrame->Raise();
 
         // Raising the window does not set the focus on Linux.  This should work on any platform.
-        if( wxWindow::FindFocus() != m_Draw3DFrame )
-            m_Draw3DFrame->SetFocus();
+        if( wxWindow::FindFocus() != draw3DFrame )
+            draw3DFrame->SetFocus();
 
         return;
     }
 
-    m_Draw3DFrame = new EDA_3D_FRAME( &Kiway(), this, _( "3D Viewer" ) );
-    m_Draw3DFrame->Raise();     // Needed with some Window Managers
-    m_Draw3DFrame->Show( true );
+    draw3DFrame = new EDA_3D_VIEWER( &Kiway(), this, _( "3D Viewer" ) );
+    draw3DFrame->Raise();     // Needed with some Window Managers
+    draw3DFrame->Show( true );
 }
 
 
@@ -482,14 +489,15 @@ void DISPLAY_FOOTPRINTS_FRAME::InitDisplay()
 
     CVPCB_MAINFRAME* parentframe = (CVPCB_MAINFRAME *) GetParent();
 
-    wxString footprintName = parentframe->m_footprintListBox->GetSelectedFootprint();
+    wxString footprintName = parentframe->GetSelectedFootprint();
 
     if( !footprintName.IsEmpty() )
     {
         msg.Printf( _( "Footprint: %s" ), GetChars( footprintName ) );
 
         SetTitle( msg );
-        const FOOTPRINT_INFO* module_info = parentframe->m_footprints.GetModuleInfo( footprintName );
+        const FOOTPRINT_INFO* module_info =
+                parentframe->m_FootprintsList.GetModuleInfo( footprintName );
 
         const wxChar* libname;
 
@@ -530,8 +538,10 @@ void DISPLAY_FOOTPRINTS_FRAME::InitDisplay()
 
     GetCanvas()->Refresh();
 
-    if( m_Draw3DFrame )
-        m_Draw3DFrame->NewDisplay();
+    EDA_3D_VIEWER* draw3DFrame = Get3DViewerFrame();
+
+    if( draw3DFrame )
+        draw3DFrame->NewDisplay();
 }
 
 

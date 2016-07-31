@@ -55,9 +55,9 @@ static void DrawMovePin( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aPosi
 
 static wxPoint OldPos;
 static wxPoint PinPreviousPos;
-static int     LastPinType          = PIN_INPUT;
+static ELECTRICAL_PINTYPE LastPinType   = PIN_INPUT;
 static int     LastPinOrient        = PIN_RIGHT;
-static int     LastPinShape         = NONE;
+static GRAPHIC_PINSHAPE LastPinShape = PINSHAPE_LINE;
 static bool    LastPinCommonConvert = false;
 static bool    LastPinCommonUnit    = false;
 static bool    LastPinVisible       = true;
@@ -104,10 +104,7 @@ void LIB_EDIT_FRAME::OnEditPin( wxCommandEvent& event )
     wxString units = GetUnitsLabel( g_UserUnit );
     dlg.SetOrientationList( LIB_PIN::GetOrientationNames(), LIB_PIN::GetOrientationSymbols() );
     dlg.SetOrientation( LIB_PIN::GetOrientationCodeIndex( pin->GetOrientation() ) );
-    dlg.SetStyleList( LIB_PIN::GetStyleNames(), LIB_PIN::GetStyleSymbols() );
-    dlg.SetStyle( LIB_PIN::GetStyleCodeIndex( pin->GetShape() ) );
-    dlg.SetElectricalTypeList( LIB_PIN::GetElectricalTypeNames(),
-                               LIB_PIN::GetElectricalTypeSymbols() );
+    dlg.SetStyle( pin->GetShape() );
     dlg.SetElectricalType( pin->GetType() );
     dlg.SetPinName( pin->GetName() );
     dlg.SetPinNameTextSize( StringFromValue( g_UserUnit, pin->GetNameTextSize() ) );
@@ -147,7 +144,7 @@ void LIB_EDIT_FRAME::OnEditPin( wxCommandEvent& event )
     LastPinNumSize = ValueFromString( g_UserUnit, dlg.GetPadNameTextSize() );
     LastPinOrient = LIB_PIN::GetOrientationCode( dlg.GetOrientation() );
     LastPinLength = ValueFromString( g_UserUnit, dlg.GetLength() );
-    LastPinShape = LIB_PIN::GetStyleCode( dlg.GetStyle() );
+    LastPinShape = dlg.GetStyle();
     LastPinType = dlg.GetElectricalType();
     LastPinCommonConvert = dlg.GetAddToAllBodyStyles();
     LastPinCommonUnit = dlg.GetAddToAllParts();
@@ -480,6 +477,12 @@ void LIB_EDIT_FRAME::CreateImagePins( LIB_PIN* aPin, int aUnit, int aConvert, bo
 
         NewPin = (LIB_PIN*) aPin->Clone();
 
+        // To avoid mistakes, gives this pin a new pin number because
+        // it does no have the save pin number as the master pin
+        // Because we do not know the actual number, give it '??'
+        wxString unknownNum( wxT( "??" ) );
+        NewPin->SetPinNumFromString( unknownNum );
+
         if( aConvert != 0 )
             NewPin->SetConvert( 1 );
 
@@ -491,6 +494,9 @@ void LIB_EDIT_FRAME::CreateImagePins( LIB_PIN* aPin, int aUnit, int aConvert, bo
 
         NewPin = (LIB_PIN*) aPin->Clone();
         NewPin->SetConvert( 2 );
+        // Gives this pin a new pin number
+        // Because we do not know the actual number, give it '??'
+        NewPin->SetPinNumFromString( unknownNum );
 
         if( aPin->GetUnit() != 0 )
             NewPin->SetUnit( ii );

@@ -27,13 +27,11 @@
  */
 
 #include <fctsys.h>
-#include <common.h>
 #include <class_drawpanel.h>
-#include <gerbview.h>
 #include <gerbview_frame.h>
 
 
-bool GERBVIEW_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition, int aHotKey )
+bool GERBVIEW_FRAME::GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey )
 {
     bool eventHandled = true;
 

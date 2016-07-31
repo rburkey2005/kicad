@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2012 Torsten Hueter, torstenhtr <at> gmx.de
  * Copyright (C) 2013-2015 CERN
+ * Copyright (C) 2012-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ *
  * @author Tomasz Wlostowski <tomasz.wlostowski@cern.ch>
  * @author Maciej Suminski <maciej.suminski@cern.ch>
  *
@@ -40,7 +42,7 @@ WX_VIEW_CONTROLS::WX_VIEW_CONTROLS( VIEW* aView, wxScrolledCanvas* aParentPanel 
 {
     m_parentPanel->Connect( wxEVT_MOTION,
                             wxMouseEventHandler( WX_VIEW_CONTROLS::onMotion ), NULL, this );
-#ifdef USE_OSX_MAGNIFY_EVENT
+#if wxCHECK_VERSION( 3, 1, 0 ) || defined( USE_OSX_MAGNIFY_EVENT )
     m_parentPanel->Connect( wxEVT_MAGNIFY,
                             wxMouseEventHandler( WX_VIEW_CONTROLS::onMagnify ), NULL, this );
 #endif
@@ -96,20 +98,31 @@ void WX_VIEW_CONTROLS::onWheel( wxMouseEvent& aEvent )
 {
     const double wheelPanSpeed = 0.001;
 
-    if( aEvent.ControlDown() || aEvent.ShiftDown() )
+    if( aEvent.ControlDown() || aEvent.ShiftDown() || m_enableMousewheelPan )
     {
         // Scrolling
         VECTOR2D scrollVec = m_view->ToWorld( m_view->GetScreenPixelSize(), false ) *
                              ( (double) aEvent.GetWheelRotation() * wheelPanSpeed );
-        double   scrollSpeed;
+        int axis = aEvent.GetWheelAxis();
+        double scrollX = 0.0;
+        double scrollY = 0.0;
 
-        if( std::abs( scrollVec.x ) > std::abs( scrollVec.y ) )
-            scrollSpeed = scrollVec.x;
+        if ( m_enableMousewheelPan )
+        {
+            if ( axis == wxMOUSE_WHEEL_HORIZONTAL )
+                scrollX = scrollVec.x;
+            else
+                scrollY = -scrollVec.y;
+        }
         else
-            scrollSpeed = scrollVec.y;
+        {
+            if ( aEvent.ControlDown() )
+                scrollX = -scrollVec.x;
+            else
+                scrollY = -scrollVec.y;
+        }
 
-        VECTOR2D delta( aEvent.ControlDown() ? -scrollSpeed : 0.0,
-                        aEvent.ShiftDown() ? -scrollSpeed : 0.0 );
+        VECTOR2D delta( scrollX, scrollY );
 
         m_view->SetCenter( m_view->GetCenter() + delta );
     }
@@ -121,7 +134,7 @@ void WX_VIEW_CONTROLS::onWheel( wxMouseEvent& aEvent )
         int         rotation    = aEvent.GetWheelRotation();
         double      zoomScale;
 
-#ifdef __APPLE__
+#ifdef __WXMAC__
         // The following is to support Apple pointer devices (MagicMouse &
         // Macbook touchpad), which send events more frequently, but with smaller
         // wheel rotation.
@@ -167,7 +180,7 @@ void WX_VIEW_CONTROLS::onWheel( wxMouseEvent& aEvent )
 }
 
 
-#ifdef USE_OSX_MAGNIFY_EVENT
+#if wxCHECK_VERSION( 3, 1, 0 ) || defined( USE_OSX_MAGNIFY_EVENT )
 void WX_VIEW_CONTROLS::onMagnify( wxMouseEvent& aEvent )
 {
     // Scale based on the magnification from our underlying magnification event.
@@ -438,7 +451,7 @@ bool WX_VIEW_CONTROLS::handleAutoPanning( const wxMouseEvent& aEvent )
         if( borderHit )
         {
             m_state = AUTO_PANNING;
-            m_panTimer.Start( (int) ( 1000.0 / 60.0 ) );
+            m_panTimer.Start( (int) ( 250.0 / 60.0 ) );
 
             return true;
         }

@@ -84,7 +84,7 @@ void PCB_EDIT_FRAME::InstallNetlistFrame( wxDC* DC )
     if( configChanged && !GetBoard()->GetFileName().IsEmpty()
       && IsOK( NULL, _( "The project configuration has changed.  Do you want to save it?" ) ) )
     {
-        wxFileName fn = Prj().AbsolutePath( GetBoard()->GetFileName() );
+        fn = Prj().AbsolutePath( GetBoard()->GetFileName() );
         fn.SetExt( ProjectFileExtension );
 
         wxString pro_name = fn.GetFullPath();
@@ -112,6 +112,8 @@ DIALOG_NETLIST::DIALOG_NETLIST( PCB_EDIT_FRAME* aParent, wxDC * aDC,
     int severities = m_config->Read( NETLIST_FILTER_MESSAGES_KEY, -1l );
     m_MessageWindow->SetVisibleSeverities( severities );
 
+    // Update sizes and sizers:
+    m_MessageWindow->MsgPanelSetMinSize( wxSize( -1, 150 ) );
     GetSizer()->SetSizeHints( this );
 }
 
@@ -422,7 +424,7 @@ bool DIALOG_NETLIST::verifyFootprints( const wxString&         aNetlistFilename,
             return false;
         }
 
-        std::auto_ptr< NETLIST_READER > nlr( netlistReader );
+        std::unique_ptr< NETLIST_READER > nlr( netlistReader );
         netlistReader->LoadNetlist();
     }
     catch( const IO_ERROR& ioe )
