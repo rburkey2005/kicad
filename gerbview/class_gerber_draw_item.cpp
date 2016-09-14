@@ -36,6 +36,7 @@
 
 #include <class_gerber_draw_item.h>
 #include <class_gerber_file_image.h>
+#include <class_gerber_file_image_list.h>
 
 
 GERBER_DRAW_ITEM::GERBER_DRAW_ITEM( GERBER_FILE_IMAGE* aGerberImageFile ) :
@@ -52,6 +53,7 @@ GERBER_DRAW_ITEM::GERBER_DRAW_ITEM( GERBER_FILE_IMAGE* aGerberImageFile ) :
     m_mirrorB       = false;
     m_drawScale.x   = m_drawScale.y = 1.0;
     m_lyrRotation   = 0;
+
     if( m_GerberImageFile )
         SetLayerParameters();
 }
@@ -59,6 +61,19 @@ GERBER_DRAW_ITEM::GERBER_DRAW_ITEM( GERBER_FILE_IMAGE* aGerberImageFile ) :
 
 GERBER_DRAW_ITEM::~GERBER_DRAW_ITEM()
 {
+}
+
+
+void GERBER_DRAW_ITEM::SetNetAttributes( const GBR_NETLIST_METADATA& aNetAttributes )
+{
+    m_netAttributes = aNetAttributes;
+
+    if( ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_CMP ) ||
+        ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_PAD ) )
+        m_GerberImageFile->m_ComponentsList.insert( std::make_pair( m_netAttributes.m_Cmpref, 0 ) );
+
+    if( ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_NET ) )
+        m_GerberImageFile->m_NetnamesList.insert( std::make_pair( m_netAttributes.m_Netname, 0 ) );
 }
 
 
@@ -424,8 +439,8 @@ void GERBER_DRAW_ITEM::ConvertSegmentToPolygon( )
 
     // Now create the full polygon.
     // Due to previous changes, the shape is always something like
-    //          3 4
-    // 2          5
+    // 3 4
+    // 2 5
     // 1 6
     wxPoint corner;
     corner.x -= m_Size.x/2;
@@ -484,16 +499,24 @@ void GERBER_DRAW_ITEM::DrawGbrPoly( EDA_RECT*      aClipBox,
 void GERBER_DRAW_ITEM::GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList )
 {
     wxString msg;
+    wxString text;
 
     msg = ShowGBRShape();
     aList.push_back( MSG_PANEL_ITEM( _( "Type" ), msg, DARKCYAN ) );
 
     // Display D_Code value:
-    msg.Printf( wxT( "%d" ), m_DCode );
-    aList.push_back( MSG_PANEL_ITEM( _( "D Code" ), msg, RED ) );
+    msg.Printf( _( "D Code %d" ), m_DCode );
+    D_CODE* apertDescr = GetDcodeDescr();
+
+    if( apertDescr->m_AperFunction.IsEmpty() )
+        text = _( "No attribute" );
+    else
+        text = apertDescr->m_AperFunction;
+
+    aList.push_back( MSG_PANEL_ITEM( msg, text, RED ) );
 
     // Display graphic layer number
-    msg.Printf( wxT( "%d" ), GetLayer() + 1 );
+    msg = GERBER_FILE_IMAGE_LIST::GetImagesList().GetDisplayName( GetLayer(), true );
     aList.push_back( MSG_PANEL_ITEM( _( "Graphic Layer" ), msg, BROWN ) );
 
     // Display item rotation
@@ -518,33 +541,34 @@ void GERBER_DRAW_ITEM::GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList )
     aList.push_back( MSG_PANEL_ITEM( _( "AB axis" ), msg, DARKRED ) );
 
     // Display net info, if exists
-    switch( m_NetAttribute.m_TypeNetAttribute )
+    if( m_netAttributes.m_NetAttribType == GBR_NETLIST_METADATA::GBR_NETINFO_UNSPECIFIED )
+        return;
+
+    // Build full net info:
+    wxString net_msg;
+    wxString cmp_pad_msg;
+
+    if( ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_NET ) )
     {
-        default:
-        case 0:
-            break;
-
-        case 1:     // .CN attribute
-        {
-            msg = _( "Net:" );
-            msg << " " << m_NetAttribute.m_NetAttrNetname;
-            wxString text;
-            text.Printf( _( "Pad: '%s' (Cmp: '%s')" ), GetChars( m_NetAttribute.m_NetAttrPadname ),
-                         GetChars( m_NetAttribute.m_NetAttrCmpReference ) );
-            aList.push_back( MSG_PANEL_ITEM( msg, text, CYAN ) );
-        }
-            break;
-
-        case 2:     // .N attribute
-            aList.push_back( MSG_PANEL_ITEM( _( "Net name:" ),
-                             m_NetAttribute.m_NetAttrNetname, CYAN ) );
-            break;
-
-        case 3:     // .C attribute
-            aList.push_back( MSG_PANEL_ITEM( _( "Cmp reference:" ),
-                             m_NetAttribute.m_NetAttrCmpReference, CYAN ) );
-            break;
+        net_msg = _( "Net:" );
+        net_msg << " " << m_netAttributes.m_Netname;
     }
+
+    if( ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_PAD ) )
+    {
+        cmp_pad_msg.Printf( _( "Cmp: %s;  Pad: %s" ),
+                                GetChars( m_netAttributes.m_Cmpref ),
+                                GetChars( m_netAttributes.m_Padname ) );
+    }
+
+    else if( ( m_netAttributes.m_NetAttribType & GBR_NETLIST_METADATA::GBR_NETINFO_CMP ) )
+    {
+        cmp_pad_msg = _( "Cmp:" );
+        cmp_pad_msg << " " << m_netAttributes.m_Cmpref;
+    }
+
+
+    aList.push_back( MSG_PANEL_ITEM( net_msg, cmp_pad_msg, CYAN ) );
 }
 
 

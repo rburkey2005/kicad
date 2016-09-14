@@ -110,7 +110,7 @@ private:
     unsigned long int m_stats_start_rendering_time;
 
     /// Save the number of blocks progress of the render
-    unsigned int m_nrBlocksRenderProgress;
+    long m_nrBlocksRenderProgress;
 
     CPOSTSHADER_SSAO m_postshader_ssao;
 

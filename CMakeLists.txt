@@ -1,3 +1,25 @@
+#
+#  This program source code file is part of KICAD, a free EDA CAD application.
+#
+#  Copyright (C) 2007-2016 Kicad Developers, see AUTHORS.txt for contributors.
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, you may find one here:
+#  http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+#  or you may search the http://www.gnu.org website for the version 2 license,
+#  or you may write to the Free Software Foundation, Inc.,
+#  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+#
 
 # Default to CMAKE_BUILD_TYPE = Release unless overridden on command line
 # http://www.cmake.org/pipermail/cmake/2008-September/023808.html
@@ -18,9 +40,9 @@ set( CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules )
 #
 # KiCad build options should be added below.
 #
-# If you add a new build option, please add it's state to the CopyVersionInfoToClipboard()
-# function in common/basicframe.cpp so that build option settings can be included in bug
-# reports.
+# If you add a new build option, please add it's state to the
+# OnCopyVersionInfo() function in common/dialog_about/dialog_about.cpp
+# so that build option settings can be included in bug reports.
 #
 
 option( USE_WX_GRAPHICS_CONTEXT
@@ -41,8 +63,12 @@ option( KICAD_SCRIPTING_WXPYTHON
     "Build wxPython implementation for wx interface building in Python and py.shell (default OFF)."
     )
 
-option( USE_SCH_IO_MANAGER
+option( KICAD_USE_SCH_IO_MANAGER
     "Build Eeschema with the I/O manager for handling schematic and symbol library I/O. (default OFF)"
+    )
+
+option( KICAD_USE_OCE
+    "Build tools and plugins related to OpenCascade Community Edition (default OFF)"
     )
 
 # when option KICAD_SCRIPTING OR KICAD_SCRIPTING_MODULES is enabled:
@@ -59,9 +85,10 @@ endif()
 
 option( BUILD_GITHUB_PLUGIN "Build the GITHUB_PLUGIN for pcbnew." ON )
 
+option( KICAD_SPICE "Build Kicad with internal Spice simulator." OFF )
 
 # This can be set to a custom name to brag about a particular branch in the "About" dialog:
-set( KICAD_REPO_NAME "product" CACHE STRING "Name of the tree from which this build came." )
+set( KICAD_REPO_NAME "unknown" CACHE STRING "Name of the tree from which this build came." )
 
 
 # Global setting: exports are explicit
@@ -248,6 +275,18 @@ endif()
 
 if( KICAD_SCRIPTING_WXPYTHON )
     add_definitions( -DKICAD_SCRIPTING_WXPYTHON )
+endif()
+
+if( KICAD_SPICE )
+    add_definitions( -DKICAD_SPICE )
+endif()
+
+if( KICAD_USE_SCH_IO_MANAGER )
+    add_definitions( -DKICAD_USE_SCH_IO_MANAGER )
+endif()
+
+if( KICAD_USE_OCE )
+    add_definitions( -DKICAD_USE_OCE )
 endif()
 
 if( USE_WX_GRAPHICS_CONTEXT OR APPLE )
@@ -495,6 +534,18 @@ include( MinGWResourceCompiler )
 if( MINGW AND USE_WX_GRAPHICS_CONTEXT )
     find_package( GdiPlus )
     check_find_package_result( GDI_PLUS_FOUND "GDI+" )
+endif()
+
+# Find ngspice library, required for integrated circuit simulator
+if( KICAD_SPICE )
+    find_package( ngspice REQUIRED )
+endif()
+
+# Find OpenCascade Community Edition, required for STEP plugin and tools
+if( KICAD_USE_OCE )
+    set( LIBS_OCE TKBinXCAF TKPCAF TKSTEP TKXDESTEP TKIGES TKXDEIGES )
+
+    find_package( OCE 0.16 REQUIRED ${LIBS_OCE} )
 endif()
 
 # Assist with header file searching optimization:

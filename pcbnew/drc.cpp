@@ -320,6 +320,8 @@ void DRC::updatePointers()
     {
         m_drcDialog->m_ClearanceListBox->SetList( new DRC_LIST_MARKERS( m_pcb ) );
         m_drcDialog->m_UnconnectedListBox->SetList( new DRC_LIST_UNCONNECTED( &m_unconnected ) );
+
+        m_drcDialog->UpdateDisplayedCounts();
     }
 }
 
@@ -514,7 +516,7 @@ void DRC::testTracks( wxWindow *aActiveWindow, bool aShowProgressBar )
     int ii = 0;
     count = 0;
 
-    for( TRACK* segm = m_pcb->m_Track; segm && segm->Next(); segm = segm->Next() )
+    for( TRACK* segm = m_pcb->m_Track; segm; segm = segm->Next() )
     {
         if ( ii++ > delta )
         {

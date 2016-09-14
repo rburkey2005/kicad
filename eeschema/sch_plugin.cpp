@@ -58,17 +58,24 @@ void SCH_PLUGIN::Save( const wxString& aFileName, SCH_SCREEN* aSchematic, KIWAY*
 }
 
 
-wxArrayString SCH_PLUGIN::SymbolEnumerate( const wxString& aLibraryPath,
-                                           const PROPERTIES* aProperties )
+void SCH_PLUGIN::EnumerateSymbolLib( wxArrayString&    aAliasNameList,
+                                     const wxString&   aLibraryPath,
+                                     const PROPERTIES* aProperties )
 {
     // not pure virtual so that plugins only have to implement subset of the SCH_PLUGIN interface.
     not_implemented( this, __FUNCTION__ );
-    return wxArrayString();
 }
 
 
-LIB_PART* SCH_PLUGIN::SymbolLoad( const wxString& aLibraryPath, const wxString& aSymbolName,
-                                  const PROPERTIES* aProperties )
+void SCH_PLUGIN::TransferCache( PART_LIB& aTarget )
+{
+    // not pure virtual so that plugins only have to implement subset of the SCH_PLUGIN interface.
+    not_implemented( this, __FUNCTION__ );
+}
+
+
+LIB_ALIAS* SCH_PLUGIN::LoadSymbol( const wxString& aLibraryPath, const wxString& aSymbolName,
+                                   const PROPERTIES* aProperties )
 {
     // not pure virtual so that plugins only have to implement subset of the SCH_PLUGIN interface.
     not_implemented( this, __FUNCTION__ );

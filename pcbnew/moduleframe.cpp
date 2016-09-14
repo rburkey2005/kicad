@@ -350,6 +350,12 @@ FOOTPRINT_EDIT_FRAME::~FOOTPRINT_EDIT_FRAME()
 }
 
 
+BOARD_ITEM_CONTAINER* FOOTPRINT_EDIT_FRAME::GetModel() const
+{
+    return GetBoard()->m_Modules;
+}
+
+
 const wxString FOOTPRINT_EDIT_FRAME::getLibPath()
 {
     try
@@ -777,6 +783,16 @@ void FOOTPRINT_EDIT_FRAME::updateTitle()
             // of libary selection UI.
             goto L_none;
         }
+
+        // Now, add the full path, for info
+        if( nickname.size() )
+        {
+            FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
+            const FP_LIB_TABLE::ROW* row = libtable->FindRow( nickname );
+
+            if( row )
+                title << " (" << row->GetFullURI( true ) << ")";
+        }
     }
 
     SetTitle( title );
@@ -938,13 +954,12 @@ void FOOTPRINT_EDIT_FRAME::setupTools()
     m_toolManager->RegisterTool( new PLACEMENT_TOOL );
     m_toolManager->RegisterTool( new PICKER_TOOL );
 
-    m_toolManager->GetTool<SELECTION_TOOL>()->EditModules( true );
-    m_toolManager->GetTool<EDIT_TOOL>()->EditModules( true );
-    m_toolManager->GetTool<DRAWING_TOOL>()->EditModules( true );
+    m_toolManager->GetTool<SELECTION_TOOL>()->SetEditModules( true );
+    m_toolManager->GetTool<EDIT_TOOL>()->SetEditModules( true );
+    m_toolManager->GetTool<DRAWING_TOOL>()->SetEditModules( true );
 
     m_toolManager->ResetTools( TOOL_BASE::RUN );
     m_toolManager->InvokeTool( "pcbnew.InteractiveSelection" );
-
 }
 
 

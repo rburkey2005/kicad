@@ -169,6 +169,7 @@ set( COMMON_DLG_SRCS
     )
 
 set( COMMON_WIDGET_SRCS
+    widgets/mathplot.cpp
     widgets/widget_hotkey_list.cpp
     )
 
@@ -202,6 +203,7 @@ set( COMMON_SRCS
     class_plotter.cpp
     class_undoredo_container.cpp
     colors.cpp
+    commit.cpp
     common.cpp
     common_plot_functions.cpp
     common_plotHPGL_functions.cpp

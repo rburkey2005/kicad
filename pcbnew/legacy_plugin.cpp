@@ -203,10 +203,10 @@ static bool inline isSpace( int c ) { return strchr( delims, c ) != 0; }
 //-----<BOARD Load Functions>---------------------------------------------------
 
 /// C string compare test for a specific length of characters.
-#define TESTLINE( x )   ( !strnicmp( line, x, SZ( x ) ) && isSpace( line[SZ( x )] ) )
+#define TESTLINE( x )   ( !strncasecmp( line, x, SZ( x ) ) && isSpace( line[SZ( x )] ) )
 
 /// C sub-string compare test for a specific length of characters.
-#define TESTSUBSTR( x ) ( !strnicmp( line, x, SZ( x ) ) )
+#define TESTSUBSTR( x ) ( !strncasecmp( line, x, SZ( x ) ) )
 
 
 #if 1
@@ -2080,7 +2080,7 @@ void LEGACY_PLUGIN::loadNETINFO_ITEM()
             // if it is not the net 0, or if the net 0 does not exists.
             if( net && ( net->GetNet() > 0 || m_board->FindNet( 0 ) == NULL ) )
             {
-                m_board->AppendNet( net );
+                m_board->Add( net );
 
                 // Be sure we have room to store the net in m_netCodes
                 if( (int)m_netCodes.size() <= netCode )

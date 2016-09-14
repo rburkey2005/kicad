@@ -1,5 +1,9 @@
 add_definitions( -DEESCHEMA )
 
+if( KICAD_SPICE )
+    set( INC_AFTER ${INC_AFTER} ${NGSPICE_INCLUDE_DIR} )
+endif()
+
 include_directories( BEFORE ${INC_BEFORE} )
 include_directories(
     ./dialogs
@@ -194,6 +198,29 @@ set( EESCHEMA_COMMON_SRCS
     )
 
 
+if( KICAD_SPICE )
+    set( EESCHEMA_SRCS
+        ${EESCHEMA_SRCS}
+        sim/simulate.cpp
+        sim/sim_plot_frame_base.cpp
+        sim/sim_plot_frame.cpp
+        sim/sim_plot_panel.cpp
+        sim/spice_simulator.cpp
+        sim/spice_value.cpp
+        sim/ngspice.cpp
+        sim/netlist_exporter_pspice_sim.cpp
+        dialogs/dialog_signal_list.cpp
+        dialogs/dialog_signal_list_base.cpp
+        dialogs/dialog_sim_settings.cpp
+        dialogs/dialog_sim_settings_base.cpp
+        dialogs/dialog_spice_model.cpp
+        dialogs/dialog_spice_model_base.cpp
+        widgets/tuner_slider.cpp
+        widgets/tuner_slider_base.cpp
+    )
+endif()
+
+
 if( MINGW )
     # EESCHEMA_RESOURCES variable is set by the macro.
     mingw_resource_compiler( eeschema )
@@ -261,6 +288,7 @@ target_link_libraries( eeschema_kiface
     gal
     ${wxWidgets_LIBRARIES}
     ${GDI_PLUS_LIBRARIES}
+    ${NGSPICE_LIBRARY}
     )
 set_target_properties( eeschema_kiface PROPERTIES
     # Decorate OUTPUT_NAME with PREFIX and SUFFIX, creating something like

@@ -2,6 +2,7 @@
  * KiRouter - a push-and-(sometimes-)shove PCB router
  *
  * Copyright (C) 2013-2015  CERN
+ * Copyright (C) 2016 KiCad Developers, see AUTHORS.txt for contributors.
  * Author: Tomasz Wlostowski <tomasz.wlostowski@cern.ch>
  *
  * This program is free software: you can redistribute it and/or modify it
@@ -41,8 +42,6 @@
 
 #include "length_tuner_tool.h"
 
-#include "trace.h"
-
 using namespace KIGFX;
 using boost::optional;
 
@@ -69,7 +68,7 @@ static TOOL_ACTION ACT_AmplDecrease( "pcbnew.LengthTuner.AmplDecrease", AS_CONTE
 
 
 LENGTH_TUNER_TOOL::LENGTH_TUNER_TOOL() :
-    PNS_TOOL_BASE( "pcbnew.LengthTuner" )
+    TOOL_BASE( "pcbnew.LengthTuner" )
 {
 }
 
@@ -102,7 +101,7 @@ LENGTH_TUNER_TOOL::~LENGTH_TUNER_TOOL()
 
 void LENGTH_TUNER_TOOL::Reset( RESET_REASON aReason )
 {
-    PNS_TOOL_BASE::Reset( aReason );
+    TOOL_BASE::Reset( aReason );
 
     Go( &LENGTH_TUNER_TOOL::TuneSingleTrace, COMMON_ACTIONS::routerActivateTuneSingleTrace.MakeEvent() );
     Go( &LENGTH_TUNER_TOOL::TuneDiffPair, COMMON_ACTIONS::routerActivateTuneDiffPair.MakeEvent() );
@@ -122,14 +121,14 @@ void LENGTH_TUNER_TOOL::handleCommonEvents( const TOOL_EVENT& aEvent )
         }
     }
 
-    PNS_MEANDER_PLACER_BASE* placer = static_cast<PNS_MEANDER_PLACER_BASE*>( m_router->Placer() );
+    PNS::MEANDER_PLACER_BASE* placer = static_cast<PNS::MEANDER_PLACER_BASE*>( m_router->Placer() );
 
     if( !placer )
         return;
 
     if( aEvent.IsAction( &ACT_Settings ) )
     {
-        PNS_MEANDER_SETTINGS settings = placer->MeanderSettings();
+        PNS::MEANDER_SETTINGS settings = placer->MeanderSettings();
         DIALOG_PNS_LENGTH_TUNING_SETTINGS settingsDlg( m_frame, settings, m_router->Mode() );
 
         if( settingsDlg.ShowModal() )
@@ -172,7 +171,8 @@ void LENGTH_TUNER_TOOL::performTuning()
         return;
     }
 
-    PNS_MEANDER_PLACER_BASE* placer = static_cast<PNS_MEANDER_PLACER_BASE*>( m_router->Placer() );
+    PNS::MEANDER_PLACER_BASE* placer = static_cast<PNS::MEANDER_PLACER_BASE*>( 
+        m_router->Placer() );
 
     placer->UpdateSettings( m_savedMeanderSettings );
 
@@ -229,12 +229,6 @@ void LENGTH_TUNER_TOOL::performTuning()
     }
 
     m_router->StopRouting();
-
-    // Save the recent changes in the undo buffer
-    m_frame->SaveCopyInUndoList( m_router->GetUndoBuffer(), UR_UNSPECIFIED );
-    m_router->ClearUndoBuffer();
-    m_frame->OnModify();
-
     highlightNet( false );
 }
 
@@ -242,25 +236,25 @@ void LENGTH_TUNER_TOOL::performTuning()
 int LENGTH_TUNER_TOOL::TuneSingleTrace( const TOOL_EVENT& aEvent )
 {
     m_frame->SetToolID( ID_TRACK_BUTT, wxCURSOR_PENCIL, _( "Tune Trace Length" ) );
-    return mainLoop( PNS_MODE_TUNE_SINGLE );
+    return mainLoop( PNS::PNS_MODE_TUNE_SINGLE );
 }
 
 
 int LENGTH_TUNER_TOOL::TuneDiffPair( const TOOL_EVENT& aEvent )
 {
     m_frame->SetToolID( ID_TRACK_BUTT, wxCURSOR_PENCIL, _( "Tune Diff Pair Length" ) );
-    return mainLoop( PNS_MODE_TUNE_DIFF_PAIR );
+    return mainLoop( PNS::PNS_MODE_TUNE_DIFF_PAIR );
 }
 
 
 int LENGTH_TUNER_TOOL::TuneDiffPairSkew( const TOOL_EVENT& aEvent )
 {
     m_frame->SetToolID( ID_TRACK_BUTT, wxCURSOR_PENCIL, _( "Tune Diff Pair Skew" ) );
-    return mainLoop( PNS_MODE_TUNE_DIFF_PAIR_SKEW );
+    return mainLoop( PNS::PNS_MODE_TUNE_DIFF_PAIR_SKEW );
 }
 
 
-int LENGTH_TUNER_TOOL::mainLoop( PNS_ROUTER_MODE aMode )
+int LENGTH_TUNER_TOOL::mainLoop( PNS::ROUTER_MODE aMode )
 {
     // Deselect all items
     m_toolMgr->RunAction( COMMON_ACTIONS::selectionClear, true );
@@ -279,17 +273,14 @@ int LENGTH_TUNER_TOOL::mainLoop( PNS_ROUTER_MODE aMode )
     // Main loop: keep receiving events
     while( OPT_TOOL_EVENT evt = Wait() )
     {
-        if( m_needsSync )
-        {
-            m_router->SyncWorld();
-            m_router->SetView( getView() );
-            m_needsSync = false;
-        }
-
         if( evt->IsCancel() || evt->IsActivate() )
+        {
             break; // Finish
+        }
         else if( evt->IsMotion() )
+        {
             updateStartItem( *evt );
+        }
         else if( evt->IsClick( BUT_LEFT ) || evt->IsAction( &ACT_StartTuning ) )
         {
             updateStartItem( *evt );

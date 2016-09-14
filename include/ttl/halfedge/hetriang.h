@@ -43,9 +43,10 @@
 #define _HE_TRIANG_H_
 
 //#define TTL_USE_NODE_ID   // Each node gets it's own unique id
-#define TTL_USE_NODE_FLAG // Each node gets a flag (can be set to true or false)
+//#define TTL_USE_NODE_FLAG // Each node gets a flag (can be set to true or false)
 
 #include <list>
+#include <unordered_set>
 #include <vector>
 #include <iostream>
 #include <fstream>
@@ -100,13 +101,16 @@ protected:
 #endif
 
     /// Node coordinates
-    int m_x, m_y;
+    const int m_x, m_y;
 
     /// Tag for quick connection resolution
     int m_tag;
 
+    /// Whether it the node can be a target for ratsnest lines
+    bool m_noline;
+
     /// List of board items that share this node
-    std::list<const BOARD_CONNECTED_ITEM*> m_parents;
+    std::unordered_set<const BOARD_CONNECTED_ITEM*> m_parents;
 
     /// Layers that are occupied by this node
     LSET m_layers;
@@ -123,7 +127,7 @@ public:
 #ifdef TTL_USE_NODE_ID
         m_id( id_count++ ),
 #endif
-        m_x( aX ), m_y( aY ), m_tag( -1 )
+        m_x( aX ), m_y( aY ), m_tag( -1 ), m_noline( false )
     {
         m_layers.reset();
     }
@@ -155,6 +159,18 @@ public:
         m_tag = aTag;
     }
 
+    /// Decides whether this node can be a ratsnest line target
+    inline void SetNoLine( bool aEnable )
+    {
+        m_noline = aEnable;
+    }
+
+    /// Returns true if this node can be a target for ratsnest lines
+    inline const bool& GetNoLine() const
+    {
+        return m_noline;
+    }
+
 #ifdef TTL_USE_NODE_ID
     /// Returns the id (TTL_USE_NODE_ID must be defined)
     inline int Id() const
@@ -184,14 +200,19 @@ public:
 
     inline void AddParent( const BOARD_CONNECTED_ITEM* aParent )
     {
-        m_parents.push_back( aParent );
+        m_parents.insert( aParent );
         m_layers.reset();   // mark as needs updating
     }
 
     inline void RemoveParent( const BOARD_CONNECTED_ITEM* aParent )
     {
-        m_parents.remove( aParent );
-        m_layers.reset();   // mark as needs updating
+        auto it = m_parents.find( aParent );
+
+        if( it != m_parents.end() )
+        {
+            m_parents.erase( it );
+            m_layers.reset();   // mark as needs updating
+        }
     }
 
     const LSET& GetLayers()

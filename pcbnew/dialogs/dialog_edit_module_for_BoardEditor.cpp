@@ -41,6 +41,7 @@
 #include <wxPcbStruct.h>
 #include <base_units.h>
 #include <project.h>
+#include <board_commit.h>
 
 #include <class_module.h>
 #include <class_text_mod.h>
@@ -84,7 +85,7 @@ DIALOG_MODULE_BOARD_EDITOR::DIALOG_MODULE_BOARD_EDITOR( PCB_EDIT_FRAME*  aParent
     m_OrientValidator.SetWindow( m_OrientValueCtrl );
 
     aParent->Prj().Get3DCacheManager()->GetResolver()->SetProgramBase( &Pgm() );
-    
+
     m_PreviewPane = new PANEL_PREV_3D( m_Panel3D,
                                        aParent->Prj().Get3DCacheManager(),
                                        m_currentModuleCopy,
@@ -325,10 +326,10 @@ void DIALOG_MODULE_BOARD_EDITOR::InitModeditProperties()
 
     }
 
-    m_ReferenceCopy = new TEXTE_MODULE( NULL );
-    m_ValueCopy     = new TEXTE_MODULE( NULL );
-    m_ReferenceCopy->Copy( &m_CurrentModule->Reference() );
-    m_ValueCopy->Copy( &m_CurrentModule->Value() );
+    m_ReferenceCopy = new TEXTE_MODULE( m_CurrentModule->Reference() );
+    m_ReferenceCopy->SetParent( m_CurrentModule );
+    m_ValueCopy = new TEXTE_MODULE( m_CurrentModule->Value() );
+    m_ValueCopy->SetParent( m_CurrentModule );
     m_ReferenceCtrl->SetValue( m_ReferenceCopy->GetText() );
     m_ValueCtrl->SetValue( m_ValueCopy->GetText() );
 
@@ -343,7 +344,7 @@ void DIALOG_MODULE_BOARD_EDITOR::InitModeditProperties()
             "Only components with this option are put in the footprint position list file" ) );
     m_AttributsCtrl->SetItemToolTip( 2,
         _( "Use this attribute for \"virtual\" components drawn on board\n"
-           "(like a old ISA PC bus connector)" ) );
+           "like an edge connector (old ISA PC bus for instance)" ) );
 
     // Controls on right side of the dialog
     switch( m_CurrentModule->GetAttributes() & 255 )
@@ -498,7 +499,7 @@ void DIALOG_MODULE_BOARD_EDITOR::Edit3DShapeFileName()
     {
         wxString msg = _( "Invalid filename: " );
         msg.append( filename );
-        wxMessageBox( msg, _T( "Edit 3D file name" ) );
+        wxMessageBox( msg, _( "Edit 3D file name" ) );
 
         return;
     }
@@ -538,7 +539,7 @@ void DIALOG_MODULE_BOARD_EDITOR::BrowseAndAdd3DShapeFile()
         long tmp;
         sidx.ToLong( &tmp );
 
-        if( tmp > 0 && tmp <= 0x7FFFFFFF )
+        if( tmp > 0 && tmp <= INT_MAX )
             filter = (int) tmp;
     }
 
@@ -585,13 +586,18 @@ void DIALOG_MODULE_BOARD_EDITOR::BrowseAndAdd3DShapeFile()
 
 bool DIALOG_MODULE_BOARD_EDITOR::TransferDataToWindow()
 {
-    if( !wxDialog::TransferDataToWindow() )
+    if( !wxDialog::TransferDataToWindow() ||
+        !m_PanelProperties->TransferDataToWindow() )
+    {
+        wxMessageBox( _( "Error: invalid footprint parameter" ) );
         return false;
+    }
 
-    if( !m_PanelProperties->TransferDataToWindow() )
-        return false;
     if( !m_Panel3D->TransferDataToWindow() )
+    {
+        wxMessageBox( _( "Error: invalid 3D parameter" ) );
         return false;
+    }
 
     InitModeditProperties();
     InitBoardProperties();
@@ -605,17 +611,21 @@ bool DIALOG_MODULE_BOARD_EDITOR::TransferDataFromWindow()
     wxPoint  modpos;
     wxString msg;
 
-    if( !Validate() || !DIALOG_MODULE_BOARD_EDITOR_BASE::TransferDataFromWindow() )
-        return false;
+    BOARD_COMMIT commit( m_Parent );
+    commit.Modify( m_CurrentModule );
 
-    if( !m_PanelProperties->TransferDataFromWindow() )
+    if( !Validate() || !DIALOG_MODULE_BOARD_EDITOR_BASE::TransferDataFromWindow() ||
+        !m_PanelProperties->TransferDataFromWindow() )
+    {
+        wxMessageBox( _( "Error: invalid or missing footprint parameter" ) );
         return false;
+    }
+
     if( !m_Panel3D->TransferDataFromWindow() )
+    {
+        wxMessageBox( _( "Error: invalid or missing 3D parameter" ) );
         return false;
-
-    if( m_CurrentModule->GetFlags() == 0 )    // this is a simple edition, we
-                                              // must create an undo entry
-        m_Parent->SaveCopyInUndoList( m_CurrentModule, UR_CHANGED );
+    }
 
     if( m_DC )
     {
@@ -624,8 +634,10 @@ bool DIALOG_MODULE_BOARD_EDITOR::TransferDataFromWindow()
     }
 
     // Init Fields (should be first, because they can be moved or/and flipped later):
-    m_CurrentModule->Reference().Copy( m_ReferenceCopy );
-    m_CurrentModule->Value().Copy( m_ValueCopy );
+    TEXTE_MODULE& reference = m_CurrentModule->Reference();
+    reference = *m_ReferenceCopy;
+    TEXTE_MODULE& value = m_CurrentModule->Value();
+    value = *m_ValueCopy;
 
     // Initialize masks clearances
     m_CurrentModule->SetLocalClearance( ValueFromTextCtrl( *m_NetClearanceValueCtrl ) );
@@ -715,13 +727,23 @@ bool DIALOG_MODULE_BOARD_EDITOR::TransferDataFromWindow()
         m_CurrentModule->Flip( m_CurrentModule->GetPosition() );
 
     // This will update the S3D_INFO list into the current module
+    msg.Clear();
+
+    if( !m_PreviewPane->Validate( msg ) )   // Verify the validity of 3D parameters
+    {
+        DisplayError( this, msg );
+        return false;
+    }
+
     std::list<S3D_INFO>* draw3D = &m_CurrentModule->Models();
     draw3D->clear();
     draw3D->insert( draw3D->end(), m_shapes3D_list.begin(), m_shapes3D_list.end() );
 
     m_CurrentModule->CalculateBoundingBox();
 
-    m_Parent->OnModify();
+    // This is a simple edition, we must create an undo entry
+    if( m_CurrentModule->GetFlags() == 0 )
+        commit.Push( _( "Modify module properties" ) );
 
     SetReturnCode( PRM_EDITOR_EDIT_OK );
 

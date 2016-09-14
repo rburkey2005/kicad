@@ -95,7 +95,7 @@ GERBER_FILE_IMAGE::GERBER_FILE_IMAGE( int aLayer )
     m_IsVisible    = true;          // must be drawn
     m_PositiveDrawColor  = WHITE;   // The color used to draw positive items for this image
 
-    m_Selected_Tool = FIRST_DCODE;
+    m_Selected_Tool = 0;
     m_FileFunction = NULL;          // file function parameters
 
     ResetDefaultValues();
@@ -209,7 +209,7 @@ void GERBER_FILE_IMAGE::ResetDefaultValues()
     m_FilesPtr        = 0;
     m_PolygonFillMode = false;
     m_PolygonFillModeState = 0;
-    m_Selected_Tool = FIRST_DCODE;
+    m_Selected_Tool = 0;
     m_Last_Pen_Command = 0;
     m_Exposure = false;
 
@@ -357,4 +357,20 @@ void GERBER_FILE_IMAGE::DisplayImageInfo(  GERBVIEW_FRAME* aMainFrame  )
                                         Iu2Millimeter( m_ImageJustifyOffset.y ) );
 
     aMainFrame->AppendMsgPanel( _( "Image Justify Offset" ), msg, DARKRED );
+}
+
+
+void GERBER_FILE_IMAGE::RemoveAttribute( X2_ATTRIBUTE& aAttribute )
+{
+    /* Called when a %TD command is found
+     * Remove the attribute specified by the %TD command.
+     * is no attribute, all current attributes specified by the %TO and the %TA
+     * commands are cleared.
+     * if a attribute name is specified (for instance %TD.CN*%) is specified,
+     * only this attribute is cleared
+     */
+    m_NetAttributeDict.ClearAttribute( &aAttribute.GetPrm( 1 ) );
+
+    if( aAttribute.GetPrm( 1 ).IsEmpty() || aAttribute.GetPrm( 1 ) == ".AperFunction" )
+        m_AperFunction.Clear();
 }

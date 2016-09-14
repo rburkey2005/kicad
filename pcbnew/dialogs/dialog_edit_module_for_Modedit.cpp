@@ -43,6 +43,7 @@
 #include <macros.h>
 #include <validators.h>
 #include <kicad_string.h>
+#include <board_commit.h>
 
 #include <class_module.h>
 #include <class_text_mod.h>
@@ -71,7 +72,7 @@ DIALOG_MODULE_MODULE_EDITOR::DIALOG_MODULE_MODULE_EDITOR( FOOTPRINT_EDIT_FRAME* 
     SetIcon( icon );
 
     aParent->Prj().Get3DCacheManager()->GetResolver()->SetProgramBase( &Pgm() );
-    
+
     m_currentModuleCopy = new MODULE( *aModule );
 
     m_PreviewPane = new PANEL_PREV_3D( m_Panel3D,
@@ -165,19 +166,21 @@ void DIALOG_MODULE_MODULE_EDITOR::initModeditProperties()
 
     m_DocCtrl->SetValue( m_currentModule->GetDescription() );
     m_KeywordCtrl->SetValue( m_currentModule->GetKeywords() );
-    m_referenceCopy = new TEXTE_MODULE( NULL );
-    m_valueCopy = new TEXTE_MODULE( NULL );
-    m_referenceCopy->Copy( &m_currentModule->Reference() );
-    m_valueCopy->Copy( &m_currentModule->Value() );
+    m_referenceCopy = new TEXTE_MODULE( m_currentModule->Reference() );
+    m_referenceCopy->SetParent( m_currentModule );
+    m_valueCopy = new TEXTE_MODULE( m_currentModule->Value() );
+    m_valueCopy->SetParent( m_currentModule );
     m_ReferenceCtrl->SetValue( m_referenceCopy->GetText() );
     m_ValueCtrl->SetValue( m_valueCopy->GetText() );
     m_FootprintNameCtrl->SetValue( m_currentModule->GetFPID().Format() );
 
     m_AttributsCtrl->SetItemToolTip( 0, _( "Use this attribute for most non SMD components" ) );
     m_AttributsCtrl->SetItemToolTip( 1,
-                                    _( "Use this attribute for SMD components.\nOnly components with this option are put in the footprint position list file" ) );
+                                    _( "Use this attribute for SMD components.\n"
+                                       "Only components with this option are put in the footprint position list file" ) );
     m_AttributsCtrl->SetItemToolTip( 2,
-                                    _( "Use this attribute for \"virtual\" components drawn on board (like a old ISA PC bus connector)" ) );
+                                    _( "Use this attribute for \"virtual\" components drawn on board\n"
+                                       "like an edge connector (old ISA PC bus for instance)" ) );
 
     // Controls on right side of the dialog
     switch( m_currentModule->GetAttributes() & 255 )
@@ -347,7 +350,7 @@ void DIALOG_MODULE_MODULE_EDITOR::Edit3DShapeFileName()
     {
         wxString msg = _( "Invalid filename: " );
         msg.append( filename );
-        wxMessageBox( msg, _T( "Edit 3D file name" ) );
+        wxMessageBox( msg, _( "Edit 3D file name" ) );
 
         return;
     }
@@ -438,6 +441,9 @@ void DIALOG_MODULE_MODULE_EDITOR::OnCancelClick( wxCommandEvent& event )
 
 void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
 {
+    BOARD_COMMIT commit( m_parent );
+    wxString msg;
+
     // First, test for invalid chars in module name
     wxString footprintName = m_FootprintNameCtrl->GetValue();
 
@@ -445,17 +451,24 @@ void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
     {
         if( ! MODULE::IsLibNameValid( footprintName ) )
         {
-            wxString msg;
             msg.Printf( _( "Error:\none of invalid chars <%s> found\nin <%s>" ),
                         MODULE::StringLibNameInvalidChars( true ),
                         GetChars( footprintName ) );
 
             DisplayError( NULL, msg );
-                return;
+
+            return;
         }
     }
 
-    m_parent->SaveCopyInUndoList( m_currentModule, UR_MODEDIT );
+    if( !m_PreviewPane->Validate( msg ) )   // Verify the validity of 3D parameters
+    {
+        DisplayError( NULL, msg );
+        return;
+    }
+
+    commit.Modify( m_currentModule );
+
     m_currentModule->SetLocked( m_AutoPlaceCtrl->GetSelection() == 1 );
 
     switch( m_AttributsCtrl->GetSelection() )
@@ -483,15 +496,17 @@ void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
         m_currentModule->SetFPID( FPID( footprintName ) );
 
     // Init Fields:
-    m_currentModule->Reference().Copy( m_referenceCopy );
-    m_currentModule->Value().Copy( m_valueCopy );
+    TEXTE_MODULE& reference = m_currentModule->Reference();
+    reference = *m_referenceCopy;
+    TEXTE_MODULE& value = m_currentModule->Value();
+    value = *m_valueCopy;
 
     // Initialize masks clearances
     m_currentModule->SetLocalClearance( ValueFromTextCtrl( *m_NetClearanceValueCtrl ) );
     m_currentModule->SetLocalSolderMaskMargin( ValueFromTextCtrl( *m_SolderMaskMarginCtrl ) );
     m_currentModule->SetLocalSolderPasteMargin( ValueFromTextCtrl( *m_SolderPasteMarginCtrl ) );
     double   dtmp;
-    wxString msg = m_SolderPasteMarginRatioCtrl->GetValue();
+    msg = m_SolderPasteMarginRatioCtrl->GetValue();
     msg.ToDouble( &dtmp );
 
     // A  -50% margin ratio means no paste on a pad, the ratio must be >= -50 %
@@ -510,7 +525,7 @@ void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
 
     m_currentModule->CalculateBoundingBox();
 
-    m_parent->OnModify();
+    commit.Push( _( "Modify module properties" ) );
 
     EndModal( 1 );
 }

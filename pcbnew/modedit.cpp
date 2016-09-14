@@ -40,6 +40,7 @@
 #include <macros.h>
 #include <invoke_pcb_dialog.h>
 #include <class_pcb_layer_widget.h>
+#include <board_commit.h>
 
 #include <class_board.h>
 #include <class_module.h>
@@ -128,16 +129,8 @@ BOARD_ITEM* FOOTPRINT_EDIT_FRAME::ModeditLocateAndDisplay( int aHotKeyCode )
         wxMenu      itemMenu;
 
         // Give a title to the selection menu. It also allow to close the popup menu without any action
-        wxMenuItem* item_title = new wxMenuItem( &itemMenu, wxID_NONE, _( "Selection Clarification" ) );
-
-#ifdef __WINDOWS__
-        wxFont      bold_font( *wxNORMAL_FONT );
-        bold_font.SetWeight( wxFONTWEIGHT_BOLD );
-        bold_font.SetStyle( wxFONTSTYLE_ITALIC );
-        item_title->SetFont( bold_font );
-#endif
-
-        itemMenu.Append( item_title );
+        AddMenuItem( &itemMenu, wxID_NONE, _( "Clarify Selection" ),
+                     KiBitmap( dismiss_xpm ) );
         itemMenu.AppendSeparator();
 
         int limit = std::min( MAX_ITEMS_IN_PICKER, m_Collector->GetCount() );
@@ -159,7 +152,7 @@ BOARD_ITEM* FOOTPRINT_EDIT_FRAME::ModeditLocateAndDisplay( int aHotKeyCode )
         // PCB_BASE_FRAME::ProcessItemSelection()
         // and it calls SetCurItem() which in turn calls DisplayInfo() on the
         // item.
-        m_canvas->SetAbortRequest( true );   // changed in false if an item
+        m_canvas->SetAbortRequest( true );   // changed in false if an item is selected
         PopupMenu( &itemMenu );              // m_AbortRequest = false if an item is selected
 
         m_canvas->MoveCursorToCrossHair();
@@ -444,14 +437,13 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
             }
 
             m_toolManager->RunAction( COMMON_ACTIONS::selectionClear, true );
+            pcbframe->GetToolManager()->RunAction( COMMON_ACTIONS::selectionClear, true );
+            BOARD_COMMIT commit( pcbframe );
 
             // Create the "new" module
             MODULE* newmodule = new MODULE( *module_in_edit );
             newmodule->SetParent( mainpcb );
             newmodule->SetLink( 0 );
-
-            // Put the footprint in the main pcb linked list.
-            mainpcb->Add( newmodule );
 
             if( source_module )         // this is an update command
             {
@@ -459,51 +451,28 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
                 // the new module replace the old module (pos, orient, ref, value
                 // and connexions are kept)
                 // and the source_module (old module) is deleted
-                PICKED_ITEMS_LIST pickList;
-
-                if( pcbframe->IsGalCanvasActive() )
-                {
-                    KIGFX::VIEW* view = pcbframe->GetGalCanvas()->GetView();
-                    source_module->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, view, 
-                                                                  std::placeholders::_1 ) );
-                    view->Remove( source_module );
-                }
-
-                pcbframe->Exchange_Module( source_module, newmodule, &pickList );
+                pcbframe->Exchange_Module( source_module, newmodule, commit );
                 newmodule->SetTimeStamp( module_in_edit->GetLink() );
-
-                if( pickList.GetCount() )
-                    pcbframe->SaveCopyInUndoList( pickList, UR_UNSPECIFIED );
+                commit.Push( wxT( "Update module" ) );
             }
             else        // This is an insert command
             {
                 wxPoint cursor_pos = pcbframe->GetCrossHairPosition();
 
+                commit.Add( newmodule );
                 pcbframe->SetCrossHairPosition( wxPoint( 0, 0 ) );
                 pcbframe->PlaceModule( newmodule, NULL );
                 newmodule->SetPosition( wxPoint( 0, 0 ) );
                 pcbframe->SetCrossHairPosition( cursor_pos );
                 newmodule->SetTimeStamp( GetNewTimeStamp() );
-                pcbframe->SaveCopyInUndoList( newmodule, UR_NEW );
+                commit.Push( wxT( "Insert module" ) );
             }
 
             newmodule->ClearFlags();
             GetScreen()->ClrModify();
             pcbframe->SetCurItem( NULL );
+            // @todo LEGACY should be unnecessary
             mainpcb->m_Status_Pcb = 0;
-
-            if( pcbframe->IsGalCanvasActive() )
-            {
-                RN_DATA* ratsnest = pcbframe->GetBoard()->GetRatsnest();
-                ratsnest->Update( newmodule );
-                ratsnest->Recalculate();
-
-                KIGFX::VIEW* view = pcbframe->GetGalCanvas()->GetView();
-                newmodule->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, 
-                                                       std::placeholders::_1 ) );
-                view->Add( newmodule );
-                pcbframe->GetGalCanvas()->ForceRefresh();
-            }
         }
         break;
 
@@ -659,7 +628,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
     break;
 
     case ID_POPUP_PCB_DELETE_PAD:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         DeletePad( (D_PAD*) GetScreen()->GetCurItem(), false );
         SetCurItem( NULL );
         m_canvas->MoveCursorToCrossHair();
@@ -682,13 +651,13 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         break;
 
     case ID_POPUP_PCB_IMPORT_PAD_SETTINGS:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         m_canvas->MoveCursorToCrossHair();
         Import_Pad_Settings( (D_PAD*) GetScreen()->GetCurItem(), true );
         break;
 
     case ID_POPUP_PCB_GLOBAL_IMPORT_PAD_SETTINGS:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         // Calls the global change dialog:
         DlgGlobalChange_PadSettings( (D_PAD*) GetScreen()->GetCurItem() );
         m_canvas->MoveCursorToCrossHair();
@@ -715,7 +684,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         break;
 
     case ID_POPUP_PCB_DELETE_TEXTMODULE:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         DeleteTextModule( static_cast<TEXTE_MODULE*>( GetScreen()->GetCurItem() ) );
         SetCurItem( NULL );
         m_canvas->MoveCursorToCrossHair();
@@ -773,7 +742,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         break;
 
     case ID_POPUP_PCB_DELETE_EDGE:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         m_canvas->MoveCursorToCrossHair();
         RemoveStruct( GetScreen()->GetCurItem() );
         SetCurItem( NULL );
@@ -782,7 +751,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
     case ID_MODEDIT_MODULE_ROTATE:
     case ID_MODEDIT_MODULE_MIRROR:
     case ID_MODEDIT_MODULE_MOVE_EXACT:
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         Transform( (MODULE*) GetScreen()->GetCurItem(), id );
         m_canvas->Refresh();
         break;
@@ -878,7 +847,7 @@ void FOOTPRINT_EDIT_FRAME::moveExact()
 
     if( ret == wxID_OK )
     {
-        SaveCopyInUndoList( GetBoard()->m_Modules, UR_MODEDIT );
+        SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
 
         BOARD_ITEM* item = GetScreen()->GetCurItem();
 

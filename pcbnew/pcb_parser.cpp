@@ -344,7 +344,7 @@ S3D_INFO* PCB_PARSER::parse3DModel() throw( PARSE_ERROR, IO_ERROR )
 
     S3D_INFO* n3D = new S3D_INFO;
     NeedSYMBOLorNUMBER();
-    n3D->m_Filename = FromUTF8().ToUTF8();
+    n3D->m_Filename = FromUTF8();
 
     for( token = NextTok();  token != T_RIGHT;  token = NextTok() )
     {
@@ -1242,10 +1242,10 @@ void PCB_PARSER::parseNETINFO_ITEM() throw( IO_ERROR, PARSE_ERROR )
     // net 0 should be already in list, so store this net
     // if it is not the net 0, or if the net 0 does not exists.
     // (TODO: a better test.)
-    if( netCode > 0 || m_board->FindNet( 0 ) == NULL )
+    if( netCode > NETINFO_LIST::UNCONNECTED || !m_board->FindNet( NETINFO_LIST::UNCONNECTED ) )
     {
         NETINFO_ITEM* net = new NETINFO_ITEM( m_board, name, netCode );
-        m_board->AppendNet( net );
+        m_board->Add( net );
 
         // Store the new code mapping
         pushValueIntoMap( netCode, net->GetNet() );
@@ -1301,13 +1301,21 @@ void PCB_PARSER::parseNETCLASS() throw( IO_ERROR, PARSE_ERROR )
             nc->SetuViaDrill( parseBoardUnits( T_uvia_drill ) );
             break;
 
+        case T_diff_pair_width:
+            nc->SetDiffPairWidth( parseBoardUnits( T_diff_pair_width ) );
+            break;
+
+        case T_diff_pair_gap:
+            nc->SetDiffPairGap( parseBoardUnits( T_diff_pair_gap ) );
+            break;
+
         case T_add_net:
             NeedSYMBOLorNUMBER();
             nc->Add( FromUTF8() );
             break;
 
         default:
-            Expecting( "clearance, trace_width, via_dia, via_drill, uvia_dia, uvia_drill, or add_net" );
+            Expecting( "clearance, trace_width, via_dia, via_drill, uvia_dia, uvia_drill, diff_pair_width, diff_pair_gap or add_net" );
         }
 
         NeedRIGHT();
@@ -2980,7 +2988,7 @@ ZONE_CONTAINER* PCB_PARSER::parseZONE_CONTAINER() throw( IO_ERROR, PARSE_ERROR )
         {
             int newnetcode = m_board->GetNetCount();
             net = new NETINFO_ITEM( m_board, netnameFromfile, newnetcode );
-            m_board->AppendNet( net );
+            m_board->Add( net );
 
             // Store the new code mapping
             pushValueIntoMap( newnetcode, net->GetNet() );
