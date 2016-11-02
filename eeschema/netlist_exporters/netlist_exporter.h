@@ -35,6 +35,8 @@
 #include <sch_text.h>
 #include <sch_sheet.h>
 
+#include <tuple>
+
 /**
  * Class UNIQUE_STRINGS
  * tracks unique wxStrings and is useful in telling if a string
@@ -100,7 +102,7 @@ protected:
     /// avoids processing a lib component more than once.
     UNIQUE_STRINGS      m_ReferencesAlreadyFound;
 
-    std::vector<SCH_COMPONENT*> m_ComponentPartList;
+    std::vector<std::tuple<int, SCH_COMPONENT*> > m_ComponentPartList;
 
     // share a code generated std::set<void*> to reduce code volume
 

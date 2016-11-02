@@ -142,24 +142,30 @@ XNODE* NETLIST_EXPORTER_GENERIC::makeComponents()
             if( !comp->GetField( DATASHEET )->IsVoid() )
                 xcomp->AddChild( node( sDatasheet, comp->GetField( DATASHEET )->GetText() ) );
 
-            for (int i = 1; i <= comp->GetUnitCount(); i++) {
+            for (int j = 1; j <= comp->GetUnitCount(); j++) {
                 XNODE* xpart;
                 xcomp->AddChild( xpart = node(sPart) );
-                xpart->AddAttribute(sUnit, LIB_PART::SubReference(i));
+                xpart->AddAttribute(sUnit, LIB_PART::SubReference(j));
 
-                for (std::vector<SCH_COMPONENT*>::iterator it = m_ComponentPartList.begin(); it != m_ComponentPartList.end(); ++it) {
-                    if ((*it)->GetUnit() == i) {
+                for (auto it = m_ComponentPartList.begin(); it != m_ComponentPartList.end(); ++it) {
+                    int sheet2 = std::get<0>(*it);
+                    SCH_COMPONENT* comp2 = std::get<1>(*it);
+
+                    int unit = comp2->GetUnitSelection( &sheetList[sheet2] );  // slow
+
+                    if (unit == j) {
                         // Export all user defined fields within the component,
                         // which start at field index MANDATORY_FIELDS.  Only output the <fields>
                         // container element if there are any <field>s.
-                        if( (*it)->GetFieldCount() > MANDATORY_FIELDS )
+
+                        if( comp2->GetFieldCount() > MANDATORY_FIELDS )
                         {
                             XNODE* xfields;
                             xpart->AddChild( xfields = node( sFields ) );
 
-                            for( int fldNdx = MANDATORY_FIELDS; fldNdx < (*it)->GetFieldCount(); ++fldNdx )
+                            for( int fldNdx = MANDATORY_FIELDS; fldNdx < comp2->GetFieldCount(); ++fldNdx )
                             {
-                                SCH_FIELD*  f = (*it)->GetField( fldNdx );
+                                SCH_FIELD*  f = comp2->GetField( fldNdx );
 
                                 // only output a field if non empty and not just "~"
                                 if( !f->IsVoid() )

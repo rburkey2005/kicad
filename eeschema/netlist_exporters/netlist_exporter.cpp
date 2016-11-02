@@ -217,9 +217,8 @@ SCH_COMPONENT* NETLIST_EXPORTER::findNextComponentAndCreatePinList( EDA_ITEM*   
 
                 addPinToComponentPinList( comp, aSheetPath, pin );
             }
+            m_ComponentPartList.push_back(std::make_tuple(0,comp));
         }
-
-        m_ComponentPartList.push_back(comp);
 
         // Sort pins in m_SortedComponentPinList by pin number
         sort( m_SortedComponentPinList.begin(),
@@ -347,9 +346,9 @@ void NETLIST_EXPORTER::findAllInstancesOfComponent( SCH_COMPONENT*  aComponent,
             if( ref2.CmpNoCase( ref ) != 0 )
                 continue;
 
-            m_ComponentPartList.push_back(comp2);
-
             int unit2 = comp2->GetUnitSelection( &sheetList[i] );  // slow
+
+            m_ComponentPartList.push_back(std::make_tuple(i, comp2));
 
             for( LIB_PIN* pin = aEntry->GetNextPin();  pin;  pin = aEntry->GetNextPin( pin ) )
             {
