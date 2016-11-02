@@ -41,7 +41,7 @@ public:
     //~CPOSTSHADER_SSAO();
 
     // Imported from CPOSTSHADER
-    SFVEC3F Shade(const SFVEC2I &aShaderPos ) const;
+    SFVEC3F Shade(const SFVEC2I &aShaderPos ) const override;
 
 private:
     SFVEC3F posFromDepth( const SFVEC2F &coord ) const;
@@ -52,7 +52,8 @@ private:
                 const SFVEC3F &ddiff,
                 const SFVEC3F &cnorm,
                 int c1,
-                int c2) const;
+                int c2,
+                float aAttShadowFactor ) const;
 
     float giFF( const SFVEC2I &aShaderPos,
                 const SFVEC3F &ddiff,

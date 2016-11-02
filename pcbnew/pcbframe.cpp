@@ -79,6 +79,7 @@
 #include <pcb_draw_panel_gal.h>
 #include <gal/graphics_abstraction_layer.h>
 #include <functional>
+
 using namespace std::placeholders;
 
 ///@{
@@ -128,6 +129,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
     EVT_MENU( ID_GEN_EXPORT_FILE_MODULE_REPORT, PCB_EDIT_FRAME::GenFootprintsReport )
     EVT_MENU( ID_GEN_EXPORT_FILE_VRML, PCB_EDIT_FRAME::OnExportVRML )
     EVT_MENU( ID_GEN_EXPORT_FILE_IDF3, PCB_EDIT_FRAME::OnExportIDF3 )
+    EVT_MENU( ID_GEN_EXPORT_FILE_STEP, PCB_EDIT_FRAME::OnExportSTEP )
 
     EVT_MENU( ID_GEN_IMPORT_SPECCTRA_SESSION,PCB_EDIT_FRAME::ImportSpecctraSession )
     EVT_MENU( ID_GEN_IMPORT_SPECCTRA_DESIGN, PCB_EDIT_FRAME::ImportSpecctraDesign )
@@ -168,6 +170,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
 
     // menu Miscellaneous
     EVT_MENU( ID_MENU_LIST_NETS, PCB_EDIT_FRAME::ListNetsAndSelect )
+    EVT_MENU( ID_PCB_EDIT_ALL_VIAS_AND_TRACK_SIZE, PCB_EDIT_FRAME::Process_Special_Functions )
     EVT_MENU( ID_PCB_GLOBAL_DELETE, PCB_EDIT_FRAME::Process_Special_Functions )
     EVT_MENU( ID_MENU_PCB_CLEAN, PCB_EDIT_FRAME::Process_Special_Functions )
     EVT_MENU( ID_MENU_PCB_SWAP_LAYERS, PCB_EDIT_FRAME::Process_Special_Functions )
@@ -177,6 +180,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
     // Menu Help
     EVT_MENU( wxID_HELP, EDA_DRAW_FRAME::GetKicadHelp )
     EVT_MENU( wxID_INDEX, EDA_DRAW_FRAME::GetKicadHelp )
+    EVT_MENU( ID_HELP_GET_INVOLVED, EDA_DRAW_FRAME::GetKicadContribute )
     EVT_MENU( wxID_ABOUT, EDA_BASE_FRAME::GetKicadAbout )
 
     // Menu 3D Frame
@@ -466,6 +470,21 @@ PCB_EDIT_FRAME::PCB_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ) :
     }
 
     enableGALSpecificMenus();
+
+    // disable Export STEP item if kicad2step does not exist
+    wxString strK2S = Pgm().GetExecutablePath();
+    #ifdef __WXMAC__
+        strK2S += "Contents/MacOS/";
+    #endif
+    wxFileName appK2S( strK2S, "kicad2step" );
+
+    #ifdef _WIN32
+    appK2S.SetExt( "exe" );
+    #endif
+
+    if( !appK2S.FileExists() )
+        GetMenuBar()->FindItem( ID_GEN_EXPORT_FILE_STEP )->Enable( false );
+
 }
 
 
@@ -977,20 +996,24 @@ void PCB_EDIT_FRAME::SVG_Print( wxCommandEvent& event )
 
 void PCB_EDIT_FRAME::UpdateTitle()
 {
-    wxFileName  fileName = GetBoard()->GetFileName();
-    wxString    title = wxString::Format( wxT( "Pcbnew %s " ), GetChars( GetBuildVersion() ) );
+    wxFileName fileName = GetBoard()->GetFileName();
+    wxString fileinfo;
 
     if( fileName.IsOk() && fileName.FileExists() )
     {
-        title << fileName.GetFullPath();
-
-        if( !fileName.IsFileWritable() )
-            title << _( " [Read Only]" );
+        fileinfo = fileName.IsFileWritable()
+            ? wxString( wxEmptyString )
+            : _( " [Read Only]" );
     }
     else
     {
-        title << _( " [new file]" ) << wxT(" ") << fileName.GetFullPath();
+        fileinfo = _( " [new file]" );
     }
+
+    wxString title;
+    title.Printf( L"Pcbnew \u2014 %s%s",
+            fileName.GetFullPath(),
+            fileinfo );
 
     SetTitle( title );
 }
@@ -1091,7 +1114,9 @@ void PCB_EDIT_FRAME::OnUpdatePCBFromSch( wxCommandEvent& event )
                                  " PCBs from schematics, you need to launch Kicad shell"
                                  " and create a PCB project." ) );
         return;
-    } else {
+    }
+    else
+    {
         KIWAY_PLAYER* frame = Kiway().Player( FRAME_SCH, true );
         wxFileName schfn = Prj().AbsolutePath( Prj().GetProjectName() );
 
@@ -1104,6 +1129,5 @@ void PCB_EDIT_FRAME::OnUpdatePCBFromSch( wxCommandEvent& event )
         }
 
         Kiway().ExpressMail( FRAME_SCH, MAIL_SCH_PCB_UPDATE_REQUEST, "", this );
-
     }
 }

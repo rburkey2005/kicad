@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2015 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2015-2016 Wayne Stambaugh <stambaughw@gmail.com>
  * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
@@ -163,6 +163,7 @@ BEGIN_EVENT_TABLE( FOOTPRINT_EDIT_FRAME, PCB_BASE_FRAME )
     // Menu Help
     EVT_MENU( wxID_HELP, EDA_DRAW_FRAME::GetKicadHelp )
     EVT_MENU( wxID_INDEX, EDA_DRAW_FRAME::GetKicadHelp )
+    EVT_MENU( ID_HELP_GET_INVOLVED, EDA_DRAW_FRAME::GetKicadContribute )
     EVT_MENU( wxID_ABOUT, EDA_BASE_FRAME::GetKicadAbout )
 
     // Menu 3D Frame
@@ -292,37 +293,37 @@ FOOTPRINT_EDIT_FRAME::FOOTPRINT_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ) :
     lyrs.Caption( _( "Visibles" ) );
 
     m_auimgr.AddPane( m_mainToolBar,
-                      wxAuiPaneInfo( horiz ).Name( wxT( "m_mainToolBar" ) ).Top(). Row( 0 ) );
+                      wxAuiPaneInfo( horiz ).Name( "m_mainToolBar" ).Top(). Row( 0 ) );
 
     m_auimgr.AddPane( m_auxiliaryToolBar,
-                      wxAuiPaneInfo( horiz ).Name( wxT( "m_auxiliaryToolBar" ) ).Top().Row( 1 ) );
+                      wxAuiPaneInfo( horiz ).Name( "m_auxiliaryToolBar" ).Top().Row( 1 ) );
 
     // The main right vertical toolbar
     m_auimgr.AddPane( m_drawToolBar,
-                      wxAuiPaneInfo( vert ).Name( wxT( "m_VToolBar" ) ).Right().Layer(1) );
+                      wxAuiPaneInfo( vert ).Name( "m_VToolBar" ).Right().Layer(1) );
 
     // Add the layer manager ( most right side of pcbframe )
-    m_auimgr.AddPane( m_Layers, lyrs.Name( wxT( "m_LayersManagerToolBar" ) ).Right().Layer( 2 ) );
+    m_auimgr.AddPane( m_Layers, lyrs.Name( "m_LayersManagerToolBar" ).Right().Layer( 2 ) );
     // Layers manager is visible
-    m_auimgr.GetPane( wxT( "m_LayersManagerToolBar" ) ).Show( true );
+    m_auimgr.GetPane( "m_LayersManagerToolBar" ).Show( true );
 
     // The left vertical toolbar (fast acces to display options)
     m_auimgr.AddPane( m_optionsToolBar,
-                      wxAuiPaneInfo( vert ).Name( wxT( "m_optionsToolBar" ) ). Left().Layer(1) );
+                      wxAuiPaneInfo( vert ).Name( "m_optionsToolBar" ). Left().Layer(1) );
 
     m_auimgr.AddPane( m_canvas,
-                      wxAuiPaneInfo().Name( wxT( "DrawFrame" ) ).CentrePane() );
+                      wxAuiPaneInfo().Name( "DrawFrame" ).CentrePane() );
     m_auimgr.AddPane( (wxWindow*) GetGalCanvas(),
-                      wxAuiPaneInfo().Name( wxT( "DrawFrameGal" ) ).CentrePane().Hide() );
+                      wxAuiPaneInfo().Name( "DrawFrameGal" ).CentrePane().Hide() );
 
     m_auimgr.AddPane( m_messagePanel,
-                      wxAuiPaneInfo( mesg_pane ).Name( wxT( "MsgPanel" ) ).Bottom().Layer(10) );
+                      wxAuiPaneInfo( mesg_pane ).Name( "MsgPanel" ).Bottom().Layer(10) );
 
     // Create the manager and dispatcher & route draw panel events to the dispatcher
     setupTools();
     UseGalCanvas( parentFrame->IsGalCanvasActive() );
 
-    if( m_auimgr.GetPane( wxT( "m_LayersManagerToolBar" ) ).IsShown() )
+    if( m_auimgr.GetPane( "m_LayersManagerToolBar" ).IsShown() )
     {
         m_Layers->ReFill();
         m_Layers->ReFillRender();
@@ -362,11 +363,11 @@ const wxString FOOTPRINT_EDIT_FRAME::getLibPath()
     {
         const wxString& nickname = GetCurrentLib();
 
-        const FP_LIB_TABLE::ROW* row = Prj().PcbFootprintLibs()->FindRow( nickname );
+        const FP_LIB_TABLE_ROW* row = Prj().PcbFootprintLibs()->FindRow( nickname );
 
         return row->GetFullURI( true );
     }
-    catch( const IO_ERROR& ioe )
+    catch( const IO_ERROR& )
     {
         return wxEmptyString;
     }
@@ -409,15 +410,15 @@ void FOOTPRINT_EDIT_FRAME::restoreLastFootprint()
         {
             module = (MODULE*) pcb_io.Parse( pretty );
         }
-        catch( const PARSE_ERROR& pe )
+        catch( const PARSE_ERROR& )
         {
             // unlikely to be a problem, since we produced the pretty string.
-            wxLogError( wxT( "PARSE_ERROR" ) );
+            wxLogError( "PARSE_ERROR" );
         }
-        catch( const IO_ERROR& ioe )
+        catch( const IO_ERROR& )
         {
             // unlikely to be a problem, since we produced the pretty string.
-            wxLogError( wxT( "IO_ERROR" ) );
+            wxLogError( "IO_ERROR" );
         }
 
         if( module )
@@ -582,7 +583,7 @@ void FOOTPRINT_EDIT_FRAME::OnUpdateOptionsToolbar( wxUpdateUIEvent& aEvent )
         break;
 
     default:
-        wxMessageBox( wxT( "FOOTPRINT_EDIT_FRAME::OnUpdateOptionsToolbar error" ) );
+        wxMessageBox( "FOOTPRINT_EDIT_FRAME::OnUpdateOptionsToolbar error" );
         break;
     }
 
@@ -755,45 +756,41 @@ void FOOTPRINT_EDIT_FRAME::OnModify()
 
 void FOOTPRINT_EDIT_FRAME::updateTitle()
 {
-    wxString title   = _( "Footprint Editor " );
-
     wxString nickname = GetCurrentLib();
+    wxString nickname_display = _( "no active library" );
+    bool writable = true;
 
-    if( !nickname )
-    {
-    L_none:
-        title += _( "(no active library)" );
-    }
-    else
+    if( !!nickname )
     {
         try
         {
-            bool writable = Prj().PcbFootprintLibs()->IsFootprintLibWritable( nickname );
+            writable = Prj().PcbFootprintLibs()->IsFootprintLibWritable( nickname );
 
-            // no exception was thrown, this means libPath is valid, but it may be read only.
-            title = _( "Footprint Editor (active library: " ) + nickname + wxT( ")" );
-
-            if( !writable )
-                title += _( " [Read Only]" );
+            nickname_display = nickname;
         }
-        catch( const IO_ERROR& ioe )
+        catch( const IO_ERROR& )
         {
             // user may be bewildered as to why after selecting a library it is not showing up
             // in the title, we could show an error message, but that should have been done at time
             // of libary selection UI.
-            goto L_none;
-        }
-
-        // Now, add the full path, for info
-        if( nickname.size() )
-        {
-            FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
-            const FP_LIB_TABLE::ROW* row = libtable->FindRow( nickname );
-
-            if( row )
-                title << " (" << row->GetFullURI( true ) << ")";
         }
     }
+
+    wxString path_display;
+    if( nickname.size() )
+    {
+        FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
+        const FP_LIB_TABLE_ROW* row = libtable->FindRow( nickname );
+
+        if( row )
+            path_display = L" \u2014 " + row->GetFullURI( true );
+    }
+
+    wxString title;
+    title.Printf( _( "Footprint Editor" ) + L" \u2014 %s%s%s",
+            nickname_display,
+            writable ? wxString( wxEmptyString ) : _( " [Read Only]" ),
+            path_display );
 
     SetTitle( title );
 }
@@ -841,11 +838,11 @@ void FOOTPRINT_EDIT_FRAME::ProcessPreferences( wxCommandEvent& event )
     {
     // Hotkey IDs
     case ID_PREFERENCES_HOTKEY_EXPORT_CONFIG:
-        ExportHotkeyConfigToFile( g_Module_Editor_Hokeys_Descr, wxT( "pcbnew" ) );
+        ExportHotkeyConfigToFile( g_Module_Editor_Hokeys_Descr, "pcbnew" );
         break;
 
     case ID_PREFERENCES_HOTKEY_IMPORT_CONFIG:
-        ImportHotkeyConfigFromFile( g_Module_Editor_Hokeys_Descr, wxT( "pcbnew" ) );
+        ImportHotkeyConfigFromFile( g_Module_Editor_Hokeys_Descr, "pcbnew" );
         break;
 
     case ID_PREFERENCES_HOTKEY_SHOW_EDITOR:
@@ -882,7 +879,7 @@ void FOOTPRINT_EDIT_FRAME::ProcessPreferences( wxCommandEvent& event )
                     wxString msg = wxString::Format( _(
                         "Error occurred saving the global footprint library "
                         "table:\n\n%s" ),
-                        GetChars( ioe.errorText.GetData() )
+                        GetChars( ioe.What().GetData() )
                         );
                     wxMessageBox( msg, _( "File Save Error" ), wxOK | wxICON_ERROR );
                 }
@@ -902,7 +899,7 @@ void FOOTPRINT_EDIT_FRAME::ProcessPreferences( wxCommandEvent& event )
                     wxString msg = wxString::Format( _(
                         "Error occurred saving project specific footprint library "
                         "table:\n\n%s" ),
-                        GetChars( ioe.errorText )
+                        GetChars( ioe.What() )
                         );
                     wxMessageBox( msg, _( "File Save Error" ), wxOK | wxICON_ERROR );
                 }
@@ -921,7 +918,7 @@ void FOOTPRINT_EDIT_FRAME::ProcessPreferences( wxCommandEvent& event )
         break;
 
     default:
-        DisplayError( this, wxT( "FOOTPRINT_EDIT_FRAME::ProcessPreferences error" ) );
+        DisplayError( this, "FOOTPRINT_EDIT_FRAME::ProcessPreferences error" );
     }
 }
 

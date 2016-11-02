@@ -46,13 +46,13 @@ public:
     DIALOG_LIB_EDIT_PIN( EDA_DRAW_FRAME* parent, LIB_PIN* aPin );
     ~DIALOG_LIB_EDIT_PIN();
 
-    void OnInitDialog( wxInitDialogEvent& event);
+    void OnInitDialog( wxInitDialogEvent& event) override;
 
-    void OnCloseDialog( wxCloseEvent& event );
-    void OnCancelButtonClick( wxCommandEvent& event );
-    void OnOKButtonClick( wxCommandEvent& event );
-    void OnPaintShowPanel( wxPaintEvent& event );
-    void OnPropertiesChange( wxCommandEvent& event );
+    void OnCloseDialog( wxCloseEvent& event ) override;
+    void OnCancelButtonClick( wxCommandEvent& event ) override;
+    void OnOKButtonClick( wxCommandEvent& event ) override;
+    void OnPaintShowPanel( wxPaintEvent& event ) override;
+    void OnPropertiesChange( wxCommandEvent& event ) override;
 
     void SetOrientationList( const wxArrayString& list, const BITMAP_DEF* aBitmaps );
     void SetOrientation( int orientation )
@@ -86,9 +86,24 @@ public:
         return m_textPinNameTextSize->GetValue();
     }
 
-    void SetPinNameTextSizeUnits( const wxString& units )
+    void SetPinPositionX( const wxString& aSize )
     {
-        m_staticNameTextSizeUnits->SetLabel( units );
+        m_textPinPosX->SetValue( aSize );
+    }
+
+    void SetPinPositionY( const wxString& aSize )
+    {
+        m_textPinPosY->SetValue( aSize );
+    }
+
+    wxString GetPinPositionX()
+    {
+        return m_textPinPosX->GetValue();
+    }
+
+    wxString GetPinPositionY()
+    {
+        return m_textPinPosY->GetValue();
     }
 
     void SetPadName( const wxString& number )
@@ -106,21 +121,11 @@ public:
         return m_textPadNameTextSize->GetValue();
     }
 
-    void SetPadNameTextSizeUnits( const wxString& units )
-    {
-        m_staticNumberTextSizeUnits->SetLabel( units );
-    }
-
     void SetLength( const wxString& length )
     {
         m_textLength->SetValue( length );
     }
     wxString GetLength( void ) { return m_textLength->GetValue(); }
-
-    void SetLengthUnits( const wxString& units )
-    {
-        m_staticLengthUnits->SetLabel( units );
-    }
 
     void SetAddToAllParts( bool apply )
     {
@@ -139,6 +144,8 @@ public:
     {
         return m_checkApplyToAllConversions->GetValue();
     }
+
+    void SetDlgUnitsLabel( const wxString& units );
 
     void SetVisible( bool visible ) { m_checkShow->SetValue( visible ); }
     bool GetVisible( void ) { return m_checkShow->GetValue(); }

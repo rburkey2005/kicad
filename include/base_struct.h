@@ -395,7 +395,7 @@ public:
      * images.
      * @return The menu image associated with the item.
      */
-    virtual BITMAP_DEF GetMenuImage() const { return right_xpm; }
+    virtual BITMAP_DEF GetMenuImage() const;
 
     /**
      * Function Matches
@@ -484,10 +484,10 @@ public:
     EDA_ITEM& operator=( const EDA_ITEM& aItem );
 
     /// @copydoc VIEW_ITEM::ViewBBox()
-    virtual const BOX2I ViewBBox() const;
+    virtual const BOX2I ViewBBox() const override;
 
     /// @copydoc VIEW_ITEM::ViewGetLayers()
-    virtual void ViewGetLayers( int aLayers[], int& aCount ) const;
+    virtual void ViewGetLayers( int aLayers[], int& aCount ) const override;
 
 #if defined(DEBUG)
 

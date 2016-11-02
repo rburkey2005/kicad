@@ -2,8 +2,8 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2012-2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2008-2016 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -115,8 +115,8 @@ END_EVENT_TABLE()
 #define MODAL_MODE_EXTRASTYLE wxFRAME_FLOAT_ON_PARENT
 #endif
 
-#define FOOTPRINT_VIEWER_FRAME_NAME         wxT( "ModViewFrame" )
-#define FOOTPRINT_VIEWER_FRAME_NAME_MODAL   wxT( "ModViewFrameModal" )
+#define FOOTPRINT_VIEWER_FRAME_NAME         "ModViewFrame"
+#define FOOTPRINT_VIEWER_FRAME_NAME_MODAL   "ModViewFrameModal"
 
 
 FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent, FRAME_T aFrameType ) :
@@ -223,7 +223,7 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
     // most likely due to the fact that the other windows are not dockable and are preventing the
     // tool bar from docking on the right and left.
     wxAuiPaneInfo toolbarPaneInfo;
-    toolbarPaneInfo.Name( wxT( "m_mainToolBar" ) ).ToolbarPane().Top().CloseButton( false );
+    toolbarPaneInfo.Name( "m_mainToolBar" ).ToolbarPane().Top().CloseButton( false );
 
     EDA_PANEINFO info;
     info.InfoToolbarPane();
@@ -236,23 +236,23 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
 
     // Manage the list of libraries, left pane.
     m_auimgr.AddPane( m_libList,
-                      wxAuiPaneInfo( info ).Name( wxT( "m_libList" ) )
+                      wxAuiPaneInfo( info ).Name( "m_libList" )
                       .Left().Row( 1 ).MinSize( minsize ) );
 
     // Manage the list of footprints, center pane.
     m_auimgr.AddPane( m_footprintList,
-                      wxAuiPaneInfo( info ).Name( wxT( "m_footprintList" ) )
+                      wxAuiPaneInfo( info ).Name( "m_footprintList" )
                       .Left().Row( 2 ).MinSize( minsize ) );
 
     // Manage the draw panel, right pane.
     m_auimgr.AddPane( m_canvas,
-                      wxAuiPaneInfo().Name( wxT( "DrawFrame" ) ).CentrePane() );
+                      wxAuiPaneInfo().Name( "DrawFrame" ).CentrePane() );
     m_auimgr.AddPane( (wxWindow*) GetGalCanvas(),
-                      wxAuiPaneInfo().Name( wxT( "DrawFrameGal" ) ).CentrePane().Hide() );
+                      wxAuiPaneInfo().Name( "DrawFrameGal" ).CentrePane().Hide() );
 
     // Manage the message panel, bottom pane.
     m_auimgr.AddPane( m_messagePanel,
-                      wxAuiPaneInfo( mesg ).Name( wxT( "MsgPanel" ) ).Bottom() );
+                      wxAuiPaneInfo( mesg ).Name( "MsgPanel" ).Bottom() );
 
     if( !m_perspective.IsEmpty() )
     {
@@ -463,7 +463,7 @@ void FOOTPRINT_VIEWER_FRAME::ClickOnFootprintList( wxCommandEvent& event )
                         _( "Could not load footprint \"%s\" from library \"%s\".\n\nError %s." ),
                         GetChars( getCurFootprintName() ),
                         GetChars( getCurNickname() ),
-                        GetChars( ioe.errorText ) );
+                        GetChars( ioe.What() ) );
 
             DisplayError( this, msg );
         }
@@ -660,11 +660,11 @@ void FOOTPRINT_VIEWER_FRAME::Update3D_Frame( bool aForceReloadFootprint )
     if( draw3DFrame == NULL )
         return;
 
-    wxString frm3Dtitle = wxString::Format(
-                _( "ModView: 3D Viewer [%s]" ),
-                GetChars( getCurFootprintName() ) );
+    wxString title = wxString::Format(
+                _( "3D Viewer" ) + L" \u2014 %s",
+                getCurFootprintName() );
 
-    draw3DFrame->SetTitle( frm3Dtitle );
+    draw3DFrame->SetTitle( title );
 
     if( aForceReloadFootprint )
     {
@@ -696,8 +696,8 @@ void FOOTPRINT_VIEWER_FRAME::OnIterateFootprintList( wxCommandEvent& event )
         break;
 
     default:
-        wxString id = wxString::Format(wxT("%i"),event.GetId());
-        wxFAIL_MSG( wxT( "FOOTPRINT_VIEWER_FRAME::OnIterateFootprintList error: id = " ) + id );
+        wxString id = wxString::Format( "%i", event.GetId() );
+        wxFAIL_MSG( "FOOTPRINT_VIEWER_FRAME::OnIterateFootprintList error: id = " + id );
     }
 }
 
@@ -715,31 +715,25 @@ bool FOOTPRINT_VIEWER_FRAME::OnRightClick( const wxPoint& MousePos, wxMenu* PopM
 
 void FOOTPRINT_VIEWER_FRAME::UpdateTitle()
 {
-    wxString     msg;
+    wxString title;
+    wxString path;
 
-    msg = _( "Library Browser" );
-    msg << wxT( " [" );
-
-    if( getCurNickname().size() )
-    {
-        msg << getCurNickname();
-    }
-    else
-        msg += _( "no library selected" );
-
-    msg << wxT( "]" );
+    title.Printf( _( "Library Browser" ) + L" \u2014 %s",
+            getCurNickname().size()
+                ? getCurNickname()
+                : _( "no library selected" ) );
 
     // Now, add the full path, for info
     if( getCurNickname().size() )
     {
         FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
-        const FP_LIB_TABLE::ROW* row = libtable->FindRow( getCurNickname() );
+        const FP_LIB_TABLE_ROW* row = libtable->FindRow( getCurNickname() );
 
         if( row )
-            msg << " (" << row->GetFullURI( true ) << ")";
+            title << L" \u2014 " << row->GetFullURI( true );
     }
 
-    SetTitle( msg );
+    SetTitle( title );
 }
 
 

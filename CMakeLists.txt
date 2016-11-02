@@ -56,7 +56,7 @@ option( KICAD_SCRIPTING
     )
 
 option( KICAD_SCRIPTING_MODULES
-    "Build KiCad Python modules that can be used from scripting languages (default OFF)."
+    "Build native portion of the pcbnew Python module: _pcbnew.{pyd,so} for OS command line use of Python."
     )
 
 option( KICAD_SCRIPTING_WXPYTHON
@@ -70,6 +70,10 @@ option( KICAD_USE_SCH_IO_MANAGER
 option( KICAD_USE_OCE
     "Build tools and plugins related to OpenCascade Community Edition (default OFF)"
     )
+
+option( KICAD_INSTALL_DEMOS
+    "Install kicad demos and examples (default ON)"
+    ON )
 
 # when option KICAD_SCRIPTING OR KICAD_SCRIPTING_MODULES is enabled:
 # PYTHON_EXECUTABLE can be defined when invoking cmake
@@ -86,10 +90,6 @@ endif()
 option( BUILD_GITHUB_PLUGIN "Build the GITHUB_PLUGIN for pcbnew." ON )
 
 option( KICAD_SPICE "Build Kicad with internal Spice simulator." OFF )
-
-# This can be set to a custom name to brag about a particular branch in the "About" dialog:
-set( KICAD_REPO_NAME "unknown" CACHE STRING "Name of the tree from which this build came." )
-
 
 # Global setting: exports are explicit
 set( CMAKE_CXX_VISIBILITY_PRESET "hidden" )
@@ -166,6 +166,18 @@ if( CMAKE_VERSION VERSION_LESS 3.1 AND ( CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_C
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     else()
         message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+    endif()
+endif()
+
+
+# Warn about missing override specifiers, if supported
+if( CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+    include(CheckCXXCompilerFlag)
+
+    CHECK_CXX_COMPILER_FLAG("-Wsuggest-override" COMPILER_SUPPORTS_WSUGGEST_OVERRIDE)
+
+    if(COMPILER_SUPPORTS_WSUGGEST_OVERRIDE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsuggest-override")
     endif()
 endif()
 
@@ -325,7 +337,7 @@ set( KIFACE_PREFIX  "_" )
 #================================================
 if( NOT APPLE )
     # Everything without leading / is relative to CMAKE_INSTALL_PREFIX.
-    set( KICAD_BIN ${CMAKE_INSTALL_PREFIX}/bin
+    set( KICAD_BIN bin
         CACHE PATH "Location of KiCad binaries." )
 
     if( WIN32 )
@@ -341,10 +353,10 @@ if( NOT APPLE )
         set( KICAD_PLUGINS lib/kicad/plugins
             CACHE PATH "Location of KiCad plugins." )
 
-        set( KICAD_LIB ${CMAKE_INSTALL_PREFIX}/lib
+        set( KICAD_LIB lib
             CACHE PATH "Location of KiCad shared objects" )
 
-        set( KICAD_USER_PLUGIN ${CMAKE_INSTALL_PREFIX}/lib/kicad/plugins
+        set( KICAD_USER_PLUGIN lib/kicad/plugins
             CACHE PATH "Location of KiCad user-loaded plugins" )
     endif()
 
@@ -525,7 +537,7 @@ find_package( Cairo 1.8.8 REQUIRED )
 #
 # Note: Prior to Boost 1.59, the Boost context library is not built when compiling on windows
 #       with GCC.  You must patch the Boost sources.
-find_package( Boost 1.54.0 REQUIRED COMPONENTS context system thread )
+find_package( Boost 1.54.0 REQUIRED COMPONENTS context system )
 
 # Include MinGW resource compiler.
 include( MinGWResourceCompiler )
@@ -570,6 +582,11 @@ set( INC_AFTER
 
 # Find Python and other scripting resources
 if( KICAD_SCRIPTING OR KICAD_SCRIPTING_MODULES )
+
+    # SWIG 3.0 or later require for C++11 support.
+    find_package( SWIG 3.0 REQUIRED )
+    include( ${SWIG_USE_FILE} )
+
     # force a python version < 3.0
     set( PythonInterp_FIND_VERSION 2.6 )
     set( PythonLibs_FIND_VERSION 2.6 )
@@ -828,5 +845,7 @@ add_subdirectory( utils )
 add_subdirectory( qa )
 
 # Resources
+if ( KICAD_INSTALL_DEMOS )
 add_subdirectory( demos )
+endif ( KICAD_INSTALL_DEMOS )
 add_subdirectory( template )

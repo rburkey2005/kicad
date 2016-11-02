@@ -619,8 +619,7 @@ void PCB_PARSER::parseGeneralSection() throw( IO_ERROR, PARSE_ERROR )
             break;
 
         default:              // Skip everything but the board thickness.
-            wxLogDebug( wxT( "Skipping general section token %s " ),
-                        GetChars( GetTokenString( token ) ) );
+            //wxLogDebug( wxT( "Skipping general section token %s " ), GetChars( GetTokenString( token ) ) );
 
             while( ( token = NextTok() ) != T_RIGHT )
             {
@@ -1963,7 +1962,7 @@ MODULE* PCB_PARSER::parseMODULE_unchecked( wxArrayString* aInitialComments )
 
                 RotatePoint( &pt, module->GetOrientation() );
                 pad->SetPosition( pt + module->GetPosition() );
-                module->Add( pad );
+                module->Add( pad, ADD_APPEND );
             }
             break;
 

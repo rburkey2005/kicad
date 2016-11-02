@@ -72,9 +72,9 @@ public:
     {
         m_position     = aPos;
         m_color        = aColor;
-        m_att_constant = 1.0f;
-        m_att_linear   = 0.5f;
-        m_att_exp      = 0.25f;
+        m_att_constant = 0.9f;
+        m_att_linear   = 0.0005f;
+        m_att_exp      = 0.001f;
         m_castShadow   = true;
     }
 
@@ -83,17 +83,16 @@ public:
     void GetLightParameters( const SFVEC3F &aHitPoint,
                              SFVEC3F &aOutVectorToLight,
                              SFVEC3F &aOutLightColor,
-                             float &aOutDistance ) const
+                             float &aOutDistance ) const override
     {
         const SFVEC3F vectorLight = m_position - aHitPoint;
 
         aOutDistance = glm::length( vectorLight );
         aOutVectorToLight = vectorLight / aOutDistance; // normalize
 
-
-        float att = 1.0f / ( m_att_constant +
-                             m_att_linear   * aOutDistance +
-                             m_att_exp      * aOutDistance * aOutDistance );
+        const float att = 1.0f / ( m_att_constant +
+                                   m_att_linear   * aOutDistance +
+                                   m_att_exp      * aOutDistance * aOutDistance );
 
         if( att <= 0.0f )
             aOutLightColor = SFVEC3F( 0.0f, 0.0f, 0.0f );
@@ -134,7 +133,7 @@ public:
     void GetLightParameters( const SFVEC3F &aHitPoint,
                              SFVEC3F &aOutVectorToLight,
                              SFVEC3F &aOutLightColor,
-                             float &aOutDistance ) const
+                             float &aOutDistance ) const override
     {
         (void)aHitPoint; // unused
 

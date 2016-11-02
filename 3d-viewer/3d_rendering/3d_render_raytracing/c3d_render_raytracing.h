@@ -64,10 +64,10 @@ public:
     ~C3D_RENDER_RAYTRACING();
 
     // Imported from C3D_RENDER_BASE
-    void SetCurWindowSize( const wxSize &aSize );
-    bool Redraw(bool aIsMoving, REPORTER *aStatusTextReporter );
+    void SetCurWindowSize( const wxSize &aSize ) override;
+    bool Redraw(bool aIsMoving, REPORTER *aStatusTextReporter ) override;
 
-    int GetWaitForEditingTimeOut();
+    int GetWaitForEditingTimeOut() override;
 
 private:
     bool initializeOpenGL();
@@ -81,6 +81,19 @@ private:
     void rt_render_post_process_shade( GLubyte *ptrPBO , REPORTER *aStatusTextReporter );
     void rt_render_post_process_blur_finish( GLubyte *ptrPBO , REPORTER *aStatusTextReporter );
     void rt_render_trace_block( GLubyte *ptrPBO , signed int iBlock );
+    void rt_final_color( GLubyte *ptrPBO, const SFVEC3F &rgbColor, bool applyColorSpaceConversion );
+
+    void rt_shades_packet( const SFVEC3F *bgColorY,
+                           const RAY *aRayPkt,
+                           HITINFO_PACKET *aHitPacket,
+                           bool is_testShadow,
+                           SFVEC3F *aOutHitColor );
+
+    void rt_trace_AA_packet( const SFVEC3F *aBgColorY,
+                             const HITINFO_PACKET *aHitPck_X0Y0,
+                             const HITINFO_PACKET *aHitPck_AA_X1Y1,
+                             const RAY *aRayPck,
+                             SFVEC3F *aOutHitColor );
 
     // Materials
     void setupMaterials();
@@ -95,13 +108,21 @@ private:
         CBLINN_PHONG_MATERIAL m_Floor;
     }m_materials;
 
+    CBOARDNORMAL        m_board_normal_perturbator;
+    CCOPPERNORMAL       m_copper_normal_perturbator;
+    CSOLDERMASKNORMAL   m_solder_mask_normal_perturbator;
+    CPLASTICNORMAL      m_plastic_normal_perturbator;
+    CPLASTICSHINENORMAL m_plastic_shine_normal_perturbator;
+    CMETALBRUSHEDNORMAL m_brushed_metal_normal_perturbator;
+
     bool m_isPreview;
 
     SFVEC3F shadeHit( const SFVEC3F &aBgColor,
                       const RAY &aRay,
                       HITINFO &aHitInfo,
                       bool aIsInsideObject,
-                      unsigned int aRecursiveLevel ) const;
+                      unsigned int aRecursiveLevel,
+                      bool is_testShadow ) const;
 
     /// State used on quality render
     RT_RENDER_STATE m_rt_render_state;

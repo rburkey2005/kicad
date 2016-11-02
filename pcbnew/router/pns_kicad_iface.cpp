@@ -31,6 +31,7 @@
 #include <wxPcbStruct.h>
 
 #include <unordered_set>
+#include <unordered_map>
 
 #include <view/view.h>
 #include <view/view_item.h>
@@ -67,12 +68,12 @@ public:
     PNS_PCBNEW_RULE_RESOLVER( BOARD* aBoard, PNS::ROUTER* aRouter );
     virtual ~PNS_PCBNEW_RULE_RESOLVER();
 
-    virtual int Clearance( const PNS::ITEM* aA, const PNS::ITEM* aB );
-    virtual void OverrideClearance( bool aEnable, int aNetA = 0, int aNetB = 0, int aClearance = 0 );
-    virtual void UseDpGap( bool aUseDpGap ) { m_useDpGap = aUseDpGap; }
-    virtual int DpCoupledNet( int aNet );
-    virtual int DpNetPolarity( int aNet );
-    virtual bool DpNetPair( PNS::ITEM* aItem, int& aNetP, int& aNetN );
+    virtual int Clearance( const PNS::ITEM* aA, const PNS::ITEM* aB ) override;
+    virtual void OverrideClearance( bool aEnable, int aNetA = 0, int aNetB = 0, int aClearance = 0 ) override;
+    virtual void UseDpGap( bool aUseDpGap ) override { m_useDpGap = aUseDpGap; }
+    virtual int DpCoupledNet( int aNet ) override;
+    virtual int DpNetPolarity( int aNet ) override;
+    virtual bool DpNetPair( PNS::ITEM* aItem, int& aNetP, int& aNetN ) override;
 
 private:
     struct CLEARANCE_ENT
@@ -87,7 +88,8 @@ private:
     PNS::ROUTER* m_router;
     BOARD*       m_board;
 
-    std::vector<CLEARANCE_ENT> m_clearanceCache;
+    std::vector<CLEARANCE_ENT> m_netClearanceCache;
+    std::unordered_map<const D_PAD*, int> m_localClearanceCache;
     int m_defaultClearance;
     bool m_overrideEnabled;
     int m_overrideNetA, m_overrideNetB;
@@ -103,7 +105,7 @@ PNS_PCBNEW_RULE_RESOLVER::PNS_PCBNEW_RULE_RESOLVER( BOARD* aBoard, PNS::ROUTER* 
     PNS::NODE* world = m_router->GetWorld();
 
     PNS::TOPOLOGY topo( world );
-    m_clearanceCache.resize( m_board->GetNetCount() );
+    m_netClearanceCache.resize( m_board->GetNetCount() );
 
     for( unsigned int i = 0; i < m_board->GetNetCount(); i++ )
     {
@@ -120,10 +122,28 @@ PNS_PCBNEW_RULE_RESOLVER::PNS_PCBNEW_RULE_RESOLVER( BOARD* aBoard, PNS::ROUTER* 
 
         int clearance = nc->GetClearance();
         ent.clearance = clearance;
-        m_clearanceCache[i] = ent;
+        m_netClearanceCache[i] = ent;
 
         wxLogTrace( "PNS", "Add net %u netclass %s clearance %d", i, netClassName.mb_str(), clearance );
     }
+
+    for( MODULE* mod = m_board->m_Modules; mod ; mod = mod->Next() )
+    {
+        auto moduleClearance = mod->GetLocalClearance();
+
+        for( D_PAD* pad = mod->Pads(); pad; pad = pad->Next() )
+        {
+            int padClearance = pad->GetLocalClearance();
+
+            if( padClearance > 0 )
+                m_localClearanceCache[ pad ] = padClearance;
+
+            else if( moduleClearance > 0 )
+                m_localClearanceCache[ pad ] = moduleClearance;
+        }
+    }
+
+    //printf("DefaultCL : %d\n",  m_board->GetDesignSettings().m_NetClasses.Find ("Default clearance")->GetClearance());
 
     m_overrideEnabled = false;
     m_defaultClearance = Millimeter2iu( 0.254 );    // m_board->m_NetClasses.Find ("Default clearance")->GetClearance();
@@ -144,21 +164,27 @@ int PNS_PCBNEW_RULE_RESOLVER::localPadClearance( const PNS::ITEM* aItem ) const
         return 0;
 
     const D_PAD* pad = static_cast<D_PAD*>( aItem->Parent() );
-    return pad->GetLocalClearance();
+
+    auto i = m_localClearanceCache.find( pad );
+
+    if( i == m_localClearanceCache.end() )
+        return 0;
+
+    return i->second;
 }
 
 
 int PNS_PCBNEW_RULE_RESOLVER::Clearance( const PNS::ITEM* aA, const PNS::ITEM* aB )
 {
     int net_a = aA->Net();
-    int cl_a = ( net_a >= 0 ? m_clearanceCache[net_a].clearance : m_defaultClearance );
+    int cl_a = ( net_a >= 0 ? m_netClearanceCache[net_a].clearance : m_defaultClearance );
     int net_b = aB->Net();
-    int cl_b = ( net_b >= 0 ? m_clearanceCache[net_b].clearance : m_defaultClearance );
+    int cl_b = ( net_b >= 0 ? m_netClearanceCache[net_b].clearance : m_defaultClearance );
 
     bool linesOnly = aA->OfKind( PNS::ITEM::SEGMENT_T | PNS::ITEM::LINE_T )
                   && aB->OfKind( PNS::ITEM::SEGMENT_T | PNS::ITEM::LINE_T );
 
-    if( linesOnly && net_a >= 0 && net_b >= 0 && m_clearanceCache[net_a].coupledNet == net_b )
+    if( linesOnly && net_a >= 0 && net_b >= 0 && m_netClearanceCache[net_a].coupledNet == net_b )
     {
         cl_a = cl_b = m_router->Sizes().DiffPairGap() - 2 * PNS_HULL_MARGIN;
     }
@@ -166,8 +192,11 @@ int PNS_PCBNEW_RULE_RESOLVER::Clearance( const PNS::ITEM* aA, const PNS::ITEM* a
     int pad_a = localPadClearance( aA );
     int pad_b = localPadClearance( aB );
 
-    cl_a = std::max( cl_a, pad_a );
-    cl_b = std::max( cl_b, pad_b );
+    if( pad_a > 0 )
+        cl_a = pad_a;
+
+    if( pad_b > 0 )
+        cl_b = pad_b;
 
     return std::max( cl_a, cl_b );
 }
@@ -414,13 +443,11 @@ PNS_KICAD_IFACE::PNS_KICAD_IFACE()
     m_world = nullptr;
     m_router = nullptr;
     m_debugDecorator = nullptr;
-    m_commit = nullptr;
 }
 
 
 PNS_KICAD_IFACE::~PNS_KICAD_IFACE()
 {
-    delete m_commit;
     delete m_ruleResolver;
     delete m_debugDecorator;
 
@@ -823,7 +850,6 @@ void PNS_KICAD_IFACE::RemoveItem( PNS::ITEM* aItem )
 
     if( parent )
     {
-        assert( m_commit );
         m_commit->Remove( parent );
     }
 }
@@ -873,7 +899,6 @@ void PNS_KICAD_IFACE::AddItem( PNS::ITEM* aItem )
         aItem->SetParent( newBI );
         newBI->ClearFlags();
 
-        assert( m_commit );
         m_commit->Add( newBI );
     }
 }
@@ -882,6 +907,7 @@ void PNS_KICAD_IFACE::AddItem( PNS::ITEM* aItem )
 void PNS_KICAD_IFACE::Commit()
 {
     m_commit->Push( wxT( "Added a track" ) );
+    m_commit.reset( new BOARD_COMMIT ( m_frame ) );
 }
 
 
@@ -927,6 +953,5 @@ void PNS_KICAD_IFACE::SetHostFrame( PCB_EDIT_FRAME* aFrame )
 {
     m_frame = aFrame;
 
-    delete m_commit;
-    m_commit = new BOARD_COMMIT( aFrame );
+    m_commit.reset( new BOARD_COMMIT ( m_frame ) );
 }

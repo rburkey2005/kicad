@@ -232,7 +232,7 @@ bool DIALOG_SPICE_MODEL::TransferDataToWindow()
             m_fieldsTmp[idx] = fieldIt->GetText();
         else
             m_fieldsTmp[idx] = NETLIST_EXPORTER_PSPICE::GetSpiceFieldDefVal( (SPICE_FIELD) idx, &m_component,
-                NET_USE_X_PREFIX | NET_ADJUST_INCLUDE_PATHS | NET_ADJUST_PASSIVE_VALS );
+                NET_ADJUST_INCLUDE_PATHS | NET_ADJUST_PASSIVE_VALS );
     }
 
     // Analyze the component fields to fill out the dialog
@@ -626,7 +626,7 @@ void DIALOG_SPICE_MODEL::updateFromFile( wxComboBox* aComboBox,
     if( !filePath.Exists() )
     {
         // Look for the file in the project path
-        filePath.SetPath( Prj().GetProjectPath() );
+        filePath.SetPath( Prj().GetProjectPath() + filePath.GetPath() );
     }
 
     wxTextFile file;

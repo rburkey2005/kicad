@@ -21,6 +21,7 @@
  * or you may write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
+#include <cstdint>
 
 #include "pcb_editor_control.h"
 #include "common_actions.h"
@@ -746,7 +747,8 @@ int PCB_EDITOR_CONTROL::DrillOrigin( const TOOL_EVENT& aEvent )
 static bool highlightNet( TOOL_MANAGER* aToolMgr, const VECTOR2D& aPosition )
 {
     KIGFX::RENDER_SETTINGS* render = aToolMgr->GetView()->GetPainter()->GetSettings();
-    GENERAL_COLLECTORS_GUIDE guide = static_cast<PCB_BASE_FRAME*>( aToolMgr->GetEditFrame() )->GetCollectorsGuide();
+    GENERAL_COLLECTORS_GUIDE guide =
+        static_cast<PCB_BASE_FRAME*>( aToolMgr->GetEditFrame() )->GetCollectorsGuide();
     BOARD* board = static_cast<BOARD*>( aToolMgr->GetModel() );
     GENERAL_COLLECTOR collector;
     int net = -1;
@@ -770,13 +772,19 @@ static bool highlightNet( TOOL_MANAGER* aToolMgr, const VECTOR2D& aPosition )
         aToolMgr->GetView()->UpdateAllLayersColor();
     }
 
+    // Store the highlighted netcode in the current board (for dialogs for instance)
+    if( enableHighlight && net >= 0 )
+        board->SetHighLightNet( net );
+    else
+        board->ResetHighLight();
+
     return true;
 }
 
 
 int PCB_EDITOR_CONTROL::HighlightNet( const TOOL_EVENT& aEvent )
 {
-    int netcode = aEvent.Parameter<long>();
+    int netcode = aEvent.Parameter<intptr_t>();
 
     if( netcode > 0 )
     {

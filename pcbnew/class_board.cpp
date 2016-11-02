@@ -224,7 +224,7 @@ static void otherEnd( const TRACK& aTrack, const wxPoint& aNotThisEnd, wxPoint* 
 
 /**
  * Function find_vias_and_tracks_at
- * collects TRACKs and VIAs at aPos and returns true if any were VIAs.
+ * collects TRACKs and VIAs at aPos and returns the @a track_count which excludes vias.
  */
 static int find_vias_and_tracks_at( TRACKS& at_next, TRACKS& in_net, LSET& lset, const wxPoint& next )
 {
@@ -296,10 +296,13 @@ static void checkConnectedTo( BOARD* aBoard, TRACKS* aList, const TRACKS& aTrack
         if( next == aGoal )
             return;             // success
 
-        if( aBoard->GetPad( next, lset ) )
+        // Want an exact match on the position of next, i.e. pad at next,
+        // not a forgiving HitTest() with tolerance type of match, otherwise the overall
+        // algorithm will not work.  GetPadFast() is an exact match as I write this.
+        if( aBoard->GetPadFast( next, lset ) )
         {
             std::string m = StrPrintf(
-                "there is an intervening pad at:(xy %s) between start:(xy %s) and goal:(xy %s)",
+                "intervening pad at:(xy %s) between start:(xy %s) and goal:(xy %s)",
                 BOARD_ITEM::FormatInternalUnits( next ).c_str(),
                 BOARD_ITEM::FormatInternalUnits( aStart ).c_str(),
                 BOARD_ITEM::FormatInternalUnits( aGoal ).c_str()
@@ -313,13 +316,13 @@ static void checkConnectedTo( BOARD* aBoard, TRACKS* aList, const TRACKS& aTrack
         {
             std::string m = StrPrintf(
                 "found %d tracks intersecting at (xy %s), exactly 2 would be acceptable.",
-                track_count,
+                track_count + aList->size() == 1 ? 1 : 0,
                 BOARD_ITEM::FormatInternalUnits( next ).c_str()
                 );
             THROW_IO_ERROR( m );
         }
 
-        // reduce lset down to the layer that the only track at 'next' is on.
+        // reduce lset down to the layer that the last track at 'next' is on.
         lset = aList->back()->GetLayerSet();
 
         otherEnd( *aList->back(), next, &next );
@@ -334,21 +337,21 @@ static void checkConnectedTo( BOARD* aBoard, TRACKS* aList, const TRACKS& aTrack
 }
 
 
-TRACKS BOARD::TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint& aEndPos, int aNetCode )
+TRACKS BOARD::TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint& aGoalPos, int aNetCode )
 {
     TRACKS  in_between_pts;
-    TRACKS  on_start_pad;
+    TRACKS  on_start_point;
     TRACKS  in_net = TracksInNet( aNetCode );   // a small subset of TRACKs and VIAs
 
     for( auto t : in_net )
     {
         if( t->Type() == PCB_TRACE_T && ( t->GetStart() == aStartPos || t->GetEnd() == aStartPos )  )
-            on_start_pad.push_back( t );
+            on_start_point.push_back( t );
     }
 
-    IO_ERROR last_error;
+    wxString  per_path_problem_text;
 
-    for( auto t : on_start_pad )
+    for( auto t : on_start_point )    // explore each trace (path) leaving aStartPos
     {
         // checkConnectedTo() fills in_between_pts on every attempt.  For failures
         // this set needs to be cleared.
@@ -356,11 +359,12 @@ TRACKS BOARD::TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint&
 
         try
         {
-            checkConnectedTo( this, &in_between_pts, in_net, aEndPos, aStartPos, t );
+            checkConnectedTo( this, &in_between_pts, in_net, aGoalPos, aStartPos, t );
         }
         catch( const IO_ERROR& ioe )    // means not connected
         {
-            last_error = ioe;
+            per_path_problem_text += "\n\t";
+            per_path_problem_text += ioe.Problem();
             continue;           // keep trying, there may be other paths leaving from aStartPos
         }
 
@@ -369,17 +373,13 @@ TRACKS BOARD::TracksInNetBetweenPoints( const wxPoint& aStartPos, const wxPoint&
         return in_between_pts;
     }
 
-    if( on_start_pad.size() == 1 )
-        throw last_error;
-    else
-    {
-        std::string m = StrPrintf(
-            "no path connecting start:(xy %s) with end:(xy %s)",
+    wxString m = wxString::Format(
+            "no clean path connecting start:(xy %s) with goal:(xy %s)",
             BOARD_ITEM::FormatInternalUnits( aStartPos ).c_str(),
-            BOARD_ITEM::FormatInternalUnits( aEndPos ).c_str()
+            BOARD_ITEM::FormatInternalUnits( aGoalPos ).c_str()
             );
-        THROW_IO_ERROR( m );
-    }
+
+    THROW_IO_ERROR( m + per_path_problem_text );
 }
 
 
@@ -405,6 +405,8 @@ void BOARD::chainMarkedSegments( wxPoint aPosition, const LSET& aLayerSet, TRACK
      */
     for( ; ; )
     {
+
+
         if( GetPad( aPosition, layer_set ) != NULL )
             return;
 
@@ -1999,8 +2001,86 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
     if( firstTrack == NULL )
         return NULL;
 
+    // First step: calculate the track length and find the pads (when exist)
+    // at each end of the trace.
     double full_len = 0;
     double lenPadToDie = 0;
+    // Because we have a track (a set of track segments between 2 nodes),
+    // only 2 pads (maximum) will be taken in account:
+    // that are on each end of the track, if any.
+    // keep trace of them, to know the die length and the track length ibside each pad.
+    D_PAD* s_pad = NULL;        // the pad on one end of the trace
+    D_PAD* e_pad = NULL;        // the pad on the other end of the trace
+    int dist_fromstart = INT_MAX;
+    int dist_fromend = INT_MAX;
+
+    for( TRACK* track = firstTrack; track; track = track->Next() )
+    {
+        if( !track->GetState( BUSY ) )
+            continue;
+
+        layer_set = track->GetLayerSet();
+        D_PAD * pad_on_start = GetPad( track->GetStart(), layer_set );
+        D_PAD * pad_on_end = GetPad( track->GetEnd(), layer_set );
+
+        // a segment fully inside a pad does not contribute to the track len
+        // (an other track end inside this pad will contribute to this lenght)
+        if( pad_on_start && ( pad_on_start == pad_on_end ) )
+            continue;
+
+        full_len += track->GetLength();
+
+        if( pad_on_start == NULL && pad_on_end == NULL )
+            // This most of time the case
+            continue;
+
+        // At this point, we can have one track end on a pad, or the 2 track ends on
+        // 2 different pads.
+        // We don't know what pad (s_pad or e_pad) must be used to store the
+        // start point and the end point of the track, so if a pad is already set,
+        // use the other
+        if( pad_on_start )
+        {
+            SEG segm( track->GetStart(), pad_on_start->GetPosition() );
+            int dist = segm.Length();
+
+            if( s_pad == NULL )
+            {
+                dist_fromstart = dist;
+                s_pad = pad_on_start;
+            }
+            else if( e_pad == NULL )
+            {
+                dist_fromend = dist;
+                e_pad = pad_on_start;
+            }
+            else    // Should not occur, at least for basic pads
+            {
+                // wxLogMessage( "BOARD::MarkTrace: multiple pad_on_start" );
+            }
+        }
+
+        if( pad_on_end )
+        {
+            SEG segm( track->GetEnd(), pad_on_end->GetPosition() );
+            int dist = segm.Length();
+
+            if( s_pad == NULL )
+            {
+                dist_fromstart = dist;
+                s_pad = pad_on_end;
+            }
+            else if( e_pad == NULL )
+            {
+                dist_fromend = dist;
+                e_pad = pad_on_end;
+            }
+            else    // Should not occur, at least for basic pads
+            {
+                // wxLogMessage( "BOARD::MarkTrace: multiple pad_on_end" );
+            }
+        }
+    }
 
     if( aReorder )
     {
@@ -2023,25 +2103,6 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
                 track->UnLink();
                 list->Insert( track, firstTrack->Next() );
 
-                if( aTraceLength )
-                    full_len += track->GetLength();
-
-                if( aPadToDieLength ) // Add now length die.
-                {
-                    // In fact only 2 pads (maximum) will be taken in account:
-                    // that are on each end of the track, if any
-                    if( track->GetState( BEGIN_ONPAD ) )
-                    {
-                        D_PAD* pad = (D_PAD *) track->start;
-                        lenPadToDie += (double) pad->GetPadToDieLength();
-                    }
-
-                    if( track->GetState( END_ONPAD ) )
-                    {
-                        D_PAD* pad = (D_PAD *) track->end;
-                        lenPadToDie += (double) pad->GetPadToDieLength();
-                    }
-                }
             }
         }
     }
@@ -2055,26 +2116,22 @@ TRACK* BOARD::MarkTrace( TRACK*  aTrace, int* aCount,
             {
                 busy_count++;
                 track->SetState( BUSY, false );
-                full_len += track->GetLength();
-
-                // Add now length die.
-                // In fact only 2 pads (maximum) will be taken in account:
-                // that are on each end of the track, if any
-                if( track->GetState( BEGIN_ONPAD ) )
-                {
-                    D_PAD* pad = (D_PAD *) track->start;
-                    lenPadToDie += (double) pad->GetPadToDieLength();
-                }
-
-                if( track->GetState( END_ONPAD ) )
-                {
-                    D_PAD* pad = (D_PAD *) track->end;
-                    lenPadToDie += (double) pad->GetPadToDieLength();
-                }
             }
         }
 
         DBG( printf( "%s: busy_count:%d\n", __func__, busy_count ); )
+    }
+
+    if( s_pad )
+    {
+        full_len += dist_fromstart;
+        lenPadToDie += (double) s_pad->GetPadToDieLength();
+    }
+
+    if( e_pad )
+    {
+        full_len += dist_fromend;
+        lenPadToDie += (double) e_pad->GetPadToDieLength();
     }
 
     if( aTraceLength )

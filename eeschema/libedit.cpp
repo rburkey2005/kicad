@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2008-2013 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -50,22 +50,12 @@
 
 void LIB_EDIT_FRAME::DisplayLibInfos()
 {
-    wxString        msg = _( "Part Library Editor: " );
-    PART_LIB*    lib = GetCurLib();
+    PART_LIB* lib = GetCurLib();
+    wxString title = wxString::Format( L"Part Library Editor \u2014 %s%s",
+            lib ? lib->GetFullFileName() : _( "no library selected" ),
+            lib && lib->IsReadOnly() ? _( " [Read Only] ") : wxString( wxEmptyString ) );
 
-    if( lib )
-    {
-        msg += lib->GetFullFileName();
-
-        if( lib->IsReadOnly() )
-            msg += _( " [Read Only]" );
-    }
-    else
-    {
-        msg += _( "no library selected" );
-    }
-
-    SetTitle( msg );
+    SetTitle( title );
 }
 
 
@@ -157,7 +147,7 @@ void LIB_EDIT_FRAME::LoadOneLibraryPart( wxCommandEvent& event )
     {
         // Not found in the active library: search inside the full list
         // (can happen when using Viewlib to load a component)
-        libEntry = Prj().SchLibs()->FindLibraryEntry( cmp_name );
+        libEntry = Prj().SchLibs()->FindLibraryAlias( cmp_name );
 
         if( libEntry )
         {
@@ -537,7 +527,7 @@ void LIB_EDIT_FRAME::DeleteOnePart( wxCommandEvent& event )
         }
     }
 
-    lib->GetEntryNames( nameList );
+    lib->GetAliasNames( nameList );
 
     if( nameList.IsEmpty() )
     {
@@ -577,7 +567,7 @@ void LIB_EDIT_FRAME::DeleteOnePart( wxCommandEvent& event )
 
     if( !part || !part->HasAlias( libEntry->GetName() ) )
     {
-        lib->RemoveEntry( libEntry );
+        lib->RemoveAlias( libEntry );
         return;
     }
 
@@ -591,7 +581,7 @@ void LIB_EDIT_FRAME::DeleteOnePart( wxCommandEvent& event )
         return;
     }
 
-    LIB_ALIAS* nextEntry = lib->RemoveEntry( libEntry );
+    LIB_ALIAS* nextEntry = lib->RemoveAlias( libEntry );
 
     if( nextEntry != NULL )
     {

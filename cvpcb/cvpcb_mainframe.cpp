@@ -85,7 +85,6 @@ BEGIN_EVENT_TABLE( CVPCB_MAINFRAME, KIWAY_PLAYER )
     EVT_TOOL( ID_CVPCB_GOTO_PREVIOUSNA, CVPCB_MAINFRAME::ToPreviousNA )
     EVT_TOOL( ID_CVPCB_DEL_ASSOCIATIONS, CVPCB_MAINFRAME::DelAssociations )
     EVT_TOOL( ID_CVPCB_AUTO_ASSOCIE, CVPCB_MAINFRAME::AutomaticFootprintMatching )
-    EVT_TOOL( ID_PCB_DISPLAY_FOOTPRINT_DOC, CVPCB_MAINFRAME::DisplayDocFile )
     EVT_TOOL( ID_CVPCB_FOOTPRINT_DISPLAY_FILTERED_LIST,
               CVPCB_MAINFRAME::OnSelectFilteringFootprint )
     EVT_TOOL( ID_CVPCB_FOOTPRINT_DISPLAY_PIN_FILTERED_LIST,
@@ -425,7 +424,7 @@ void CVPCB_MAINFRAME::OnEditFootprintLibraryTable( wxCommandEvent& aEvent )
             wxString msg = wxString::Format(
                     _( "Error occurred saving the global footprint library table:\n'%s'\n%s" ),
                     GetChars( fileName ),
-                    GetChars( ioe.errorText )
+                    GetChars( ioe.What() )
                     );
             wxMessageBox( msg, _( "File Save Error" ), wxOK | wxICON_ERROR );
         }
@@ -445,7 +444,7 @@ void CVPCB_MAINFRAME::OnEditFootprintLibraryTable( wxCommandEvent& aEvent )
             wxString msg = wxString::Format(
                     _( "Error occurred saving the project footprint library table:\n'%s'\n%s" ),
                     GetChars( fileName ),
-                    GetChars( ioe.errorText )
+                    GetChars( ioe.What() )
                     );
             wxMessageBox( msg, _( "File Save Error" ), wxOK | wxICON_ERROR );
         }
@@ -470,12 +469,6 @@ void CVPCB_MAINFRAME::DisplayModule( wxCommandEvent& event )
 {
     CreateScreenCmp();
     GetFootprintViewerFrame()->RedrawScreen( wxPoint( 0, 0 ), false );
-}
-
-
-void CVPCB_MAINFRAME::DisplayDocFile( wxCommandEvent& event )
-{
-    GetAssociatedDocument( this, m_DocModulesFileName, &Kiface().KifaceSearch() );
 }
 
 
@@ -748,21 +741,22 @@ bool CVPCB_MAINFRAME::LoadFootprintFiles()
 
 void CVPCB_MAINFRAME::UpdateTitle()
 {
-    wxString    title = wxString::Format( wxT( "Cvpcb %s  " ), GetChars( GetBuildVersion() ) );
+    wxString    title;
     PROJECT&    prj = Prj();
     wxFileName fn = prj.GetProjectFullName();
 
     if( fn.IsOk() && !prj.GetProjectFullName().IsEmpty() && fn.FileExists() )
     {
-        title += wxString::Format( _("Project: '%s'"),
-                                   GetChars( fn.GetFullPath() )
-                                 );
-
-        if( !fn.IsFileWritable() )
-            title += _( " [Read Only]" );
+        title.Printf( L"Cvpcb \u2014 %s%s",
+                fn.GetFullPath(),
+                fn.IsFileWritable()
+                    ? wxString( wxEmptyString )
+                    : _( " [Read Only]" ) );
     }
     else
-        title += _( "[no project]" );
+    {
+        title = "Cvpcb";
+    }
 
     SetTitle( title );
 }
@@ -805,7 +799,7 @@ int CVPCB_MAINFRAME::ReadSchematicNetlist( const std::string& aNetlist )
     }
     catch( const IO_ERROR& ioe )
     {
-        wxString msg = wxString::Format( _( "Error loading netlist.\n%s" ), ioe.errorText.GetData() );
+        wxString msg = wxString::Format( _( "Error loading netlist.\n%s" ), ioe.What().GetData() );
         wxMessageBox( msg, _( "Netlist Load Error" ), wxOK | wxICON_ERROR );
         return 1;
     }

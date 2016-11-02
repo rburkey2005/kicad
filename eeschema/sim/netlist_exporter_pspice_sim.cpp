@@ -35,13 +35,13 @@ wxString NETLIST_EXPORTER_PSPICE_SIM::GetSpiceVector( const wxString& aName, SIM
 
     if( aType & SPT_VOLTAGE )
     {
-        const auto& netMapping = GetNetIndexMap();
-        auto it = netMapping.find( aName );
+        // Spice netlist netnames does not accept some chars, whicyh are replaced
+        // by eeschema netlist generator.
+        // Replace these forbidden chars to find the actual spice net name
+        wxString spicenet = aName;
+        NETLIST_EXPORTER_PSPICE::ReplaceForbiddenChars( spicenet );
 
-        if( it == netMapping.end() )
-            return "";
-
-        return wxString::Format( "V(%d)", it->second );
+        return wxString::Format( "V(%s)", spicenet.GetData() );
     }
 
     else if( aType & SPT_CURRENT )
@@ -151,6 +151,9 @@ void NETLIST_EXPORTER_PSPICE_SIM::writeDirectives( OUTPUTFORMATTER* aFormatter, 
         for( const auto& current :
                 NETLIST_EXPORTER_PSPICE_SIM::GetCurrents( (SPICE_PRIMITIVE) item.m_primitive ) )
         {
+            if( !item.m_enabled )
+                continue;
+
             /// @todo is it required to switch to lowercase
             aFormatter->Print( 0, ".save %s\n",
                     (const char*) GetSpiceVector( item.m_refName, SPT_CURRENT, current ).c_str() );

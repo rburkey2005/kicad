@@ -138,9 +138,9 @@ void LIB_EDIT_FRAME::InstallConfigFrame( wxCommandEvent& event )
     {
         PART_LIBS::LibNamesAndPaths( prj, false, &lib_paths, &lib_names );
     }
-    catch( const IO_ERROR& ioe )
+    catch( const IO_ERROR& DBG( ioe ) )
     {
-        DBG(printf( "%s: %s\n", __func__, TO_UTF8( ioe.errorText ) );)
+        DBG(printf( "%s: %s\n", __func__, TO_UTF8( ioe.What() ) );)
         return;
     }
 
@@ -198,9 +198,9 @@ void SCH_EDIT_FRAME::InstallConfigFrame( wxCommandEvent& event )
     {
         PART_LIBS::LibNamesAndPaths( prj, false, &lib_paths, &lib_names );
     }
-    catch( const IO_ERROR& ioe )
+    catch( const IO_ERROR& DBG( ioe ) )
     {
-        DBG(printf( "%s: %s\n", __func__, TO_UTF8( ioe.errorText ) );)
+        DBG(printf( "%s: %s\n", __func__, TO_UTF8( ioe.What() ) );)
         return;
     }
 
@@ -419,10 +419,8 @@ PARAM_CFG_ARRAY& SCH_EDIT_FRAME::GetProjectFileParametersList()
 
     m_projectFileParams.push_back( new PARAM_CFG_WXSTRING( wxT( "NetFmtName" ),
                                             &m_netListFormat) );
-    m_projectFileParams.push_back( new PARAM_CFG_BOOL( wxT( "SpiceForceRefPrefix" ),
-                                            &m_spiceNetlistAddReferencePrefix, false ) );
-    m_projectFileParams.push_back( new PARAM_CFG_BOOL( wxT( "SpiceUseNetNumbers" ),
-                                            &m_spiceNetlistUseNetcodeAsNetname, false ) );
+    m_projectFileParams.push_back( new PARAM_CFG_BOOL( wxT( "SpiceAjustPassiveValues" ),
+                                            &m_spiceAjustPassiveValues, false ) );
 
     m_projectFileParams.push_back( new PARAM_CFG_INT( wxT( "LabSize" ),
                                             &s_defaultTextSize,
@@ -661,11 +659,11 @@ void SCH_EDIT_FRAME::LoadSettings( wxConfigBase* aCfg )
         {
             m_TemplateFieldNames.Parse( &lexer );
         }
-        catch( const IO_ERROR& e )
+        catch( const IO_ERROR& DBG( e ) )
         {
             // @todo show error msg
             DBG( printf( "templatefieldnames parsing error: '%s'\n",
-                       TO_UTF8( e.errorText ) ); )
+                       TO_UTF8( e.What() ) ); )
         }
     }
 }

@@ -178,7 +178,7 @@ bool WIZARD_FPLIB_TABLE::LIBRARY::Test()
     {
         footprints = p->FootprintEnumerate( m_path );
     }
-    catch( IO_ERROR& e )
+    catch( IO_ERROR& )
     {
         m_status = LIBRARY::INVALID;
         return false;
@@ -668,7 +668,7 @@ bool WIZARD_FPLIB_TABLE::downloadGithubLibsFromList( wxArrayString& aUrlList,
         {
             if( aErrorMessage )
                 aErrorMessage->Printf( _( "Error:\n'%s'\nwhile downloading library:\n'%s'" ),
-                                       GetChars( ioe.errorText ), GetChars( libsrc_name ) );
+                                       GetChars( ioe.What() ), GetChars( libsrc_name ) );
             return false;
         }
     }

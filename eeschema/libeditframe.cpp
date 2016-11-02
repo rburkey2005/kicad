@@ -127,6 +127,7 @@ BEGIN_EVENT_TABLE( LIB_EDIT_FRAME, EDA_DRAW_FRAME )
     EVT_MENU( ID_LIBEDIT_GEN_SVG_FILE, LIB_EDIT_FRAME::OnPlotCurrentComponent )
     EVT_MENU( wxID_HELP, EDA_DRAW_FRAME::GetKicadHelp )
     EVT_MENU( wxID_INDEX, EDA_DRAW_FRAME::GetKicadHelp )
+    EVT_MENU( ID_HELP_GET_INVOLVED, EDA_DRAW_FRAME::GetKicadContribute )
     EVT_MENU( wxID_ABOUT, EDA_BASE_FRAME::GetKicadAbout )
 
     EVT_MENU( wxID_PREFERENCES, LIB_EDIT_FRAME::OnPreferencesOptions )
@@ -200,7 +201,7 @@ LIB_EDIT_FRAME::LIB_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ) :
     m_LastGridSizeId = ID_POPUP_GRID_LEVEL_50 - ID_POPUP_GRID_LEVEL_1000;
 
     wxIcon icon;
-    icon.CopyFromBitmap( KiBitmap( libedit_icon_xpm ) );
+    icon.CopyFromBitmap( KiBitmap( icon_libedit_xpm ) );
     SetIcon( icon );
 
     LoadSettings( config() );
@@ -369,7 +370,7 @@ double LIB_EDIT_FRAME::BestZoom()
 
     if( part )
     {
-        EDA_RECT boundingBox = part->GetBoundingBox( m_unit, m_convert );
+        EDA_RECT boundingBox = part->GetUnitBoundingBox( m_unit, m_convert );
 
         dx = boundingBox.GetWidth();
         dy = boundingBox.GetHeight();
