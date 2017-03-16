@@ -616,7 +616,7 @@ void MirrorMarkedItems( MODULE* module, wxPoint offset, bool force_all )
         tmpz.x = -tmpz.x;
         pad->SetDelta( tmpz );
 
-        pad->SetOrientation( 1800 - pad->GetOrientation() );
+        pad->SetOrientation( - pad->GetOrientation() );
     }
 
     for( EDA_ITEM* item = module->GraphicalItems();  item;  item = item->Next() )
@@ -809,7 +809,7 @@ int MarkItemsInBloc( MODULE* module, EDA_RECT& Rect )
 
     ClearMarkItems( module );   // Just in case ...
 
-    pos = module->Reference().GetTextPosition();
+    pos = module->Reference().GetTextPos();
 
     if( Rect.Contains( pos ) )
     {
@@ -817,7 +817,7 @@ int MarkItemsInBloc( MODULE* module, EDA_RECT& Rect )
         ItemsCount++;
     }
 
-    pos = module->Value().GetTextPosition();
+    pos = module->Value().GetTextPos();
 
     if( Rect.Contains( pos ) )
     {
@@ -857,7 +857,7 @@ int MarkItemsInBloc( MODULE* module, EDA_RECT& Rect )
             break;
 
         case PCB_MODULE_TEXT_T:
-            pos = static_cast<TEXTE_MODULE*>( item )->GetTextPosition();
+            pos = static_cast<TEXTE_MODULE*>( item )->GetTextPos();
 
             if( Rect.Contains( pos ) )
             {

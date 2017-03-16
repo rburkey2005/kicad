@@ -154,9 +154,8 @@ public:
     {}
 
     template <class InputIterator>
-    LSEQ( InputIterator start, InputIterator end ) :
-        BASE_SEQ( start, end ),
-        m_index( 0 )
+    LSEQ( InputIterator aStart, InputIterator aEnd ) :
+        BASE_SEQ( aStart, aEnd ), m_index( 0 )
     {}
 
     void Rewind()           { m_index = 0; }
@@ -663,12 +662,6 @@ LAYER_ID FlipLayer( LAYER_ID aLayerId, int aCopperLayersCount = 0 );
  */
 LSET FlipLayerMask( LSET aMask, int aCopperLayersCount = 0 );
 
-/**
- * Return a string (to be shown to the user) describing a layer mask.
- * Useful for showing where is a pad, track, entity, etc.
- * The BOARD is needed because layer names are (somewhat) customizable
- */
-wxString LayerMaskDescribe( const BOARD* aBoard, LSET aMask );
 
 /**
  * Returns a netname layer corresponding to the given layer.

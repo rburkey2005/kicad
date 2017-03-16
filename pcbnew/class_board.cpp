@@ -238,7 +238,7 @@ static int find_vias_and_tracks_at( TRACKS& at_next, TRACKS& in_net, LSET& lset,
         {
             lset |= t->GetLayerSet();
             at_next.push_back( t );
-            in_net.erase( it );
+            it = in_net.erase( it );
         }
         else
             ++it;
@@ -777,9 +777,9 @@ void BOARD::SetElementVisibility( int aPCB_VISIBLE, bool isEnabled )
 }
 
 
-EDA_COLOR_T BOARD::GetVisibleElementColor( int aPCB_VISIBLE )
+COLOR4D BOARD::GetVisibleElementColor( int aPCB_VISIBLE )
 {
-    EDA_COLOR_T color = UNSPECIFIED_COLOR;
+    COLOR4D color = COLOR4D::UNSPECIFIED;
 
     switch( aPCB_VISIBLE )
     {
@@ -806,7 +806,7 @@ EDA_COLOR_T BOARD::GetVisibleElementColor( int aPCB_VISIBLE )
 }
 
 
-void BOARD::SetVisibleElementColor( int aPCB_VISIBLE, EDA_COLOR_T aColor )
+void BOARD::SetVisibleElementColor( int aPCB_VISIBLE, COLOR4D aColor )
 {
     switch( aPCB_VISIBLE )
     {
@@ -831,13 +831,13 @@ void BOARD::SetVisibleElementColor( int aPCB_VISIBLE, EDA_COLOR_T aColor )
 }
 
 
-void BOARD::SetLayerColor( LAYER_ID aLayer, EDA_COLOR_T aColor )
+void BOARD::SetLayerColor( LAYER_ID aLayer, COLOR4D aColor )
 {
     GetColorsSettings()->SetLayerColor( aLayer, aColor );
 }
 
 
-EDA_COLOR_T BOARD::GetLayerColor( LAYER_ID aLayer ) const
+COLOR4D BOARD::GetLayerColor( LAYER_ID aLayer ) const
 {
     return GetColorsSettings()->GetLayerColor( aLayer );
 }
@@ -1054,7 +1054,7 @@ unsigned BOARD::GetNodesCount() const
 }
 
 
-EDA_RECT BOARD::ComputeBoundingBox( bool aBoardEdgesOnly )
+EDA_RECT BOARD::ComputeBoundingBox( bool aBoardEdgesOnly ) const
 {
     bool hasItems = false;
     EDA_RECT area;
@@ -1122,8 +1122,6 @@ EDA_RECT BOARD::ComputeBoundingBox( bool aBoardEdgesOnly )
             hasItems = true;
         }
     }
-
-    m_BoundingBox = area;   // save for BOARD::GetBoundingBox()
 
     return area;
 }
@@ -2364,6 +2362,7 @@ ZONE_CONTAINER* BOARD::InsertArea( int netcode, int iarea, LAYER_ID layer, int x
         m_ZoneDescriptorList.push_back( new_area );
 
     new_area->Outline()->Start( layer, x, y, hatch );
+
     return new_area;
 }
 
@@ -2425,7 +2424,7 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
     if( !IsEmpty() )
     {
         // Position new components below any existing board features.
-        EDA_RECT bbbox = ComputeBoundingBox( true );
+        EDA_RECT bbbox = GetBoardEdgesBoundingBox();
 
         if( bbbox.GetWidth() || bbbox.GetHeight() )
         {
@@ -2549,6 +2548,16 @@ void BOARD::ReplaceNetlist( NETLIST& aNetlist, bool aDeleteSinglePadNets,
                         // if "false", the default library values of the new footprint
                         // will be used
                         footprint->CopyNetlistSettings( newFootprint, false );
+
+                        // Compare the footprint name only, in case the nickname is empty or in case
+                        // user moved the footprint to a new library.  Chances are if footprint name is
+                        // same then the footprint is very nearly the same and the two texts should
+                        // be kept at same size, position, and rotation.
+                        if( newFootprint->GetFPID().GetLibItemName() == footprint->GetFPID().GetLibItemName() )
+                        {
+                            newFootprint->Reference().SetEffects( footprint->Reference() );
+                            newFootprint->Value().SetEffects( footprint->Value() );
+                        }
 
                         Remove( footprint );
                         Add( newFootprint, ADD_APPEND );

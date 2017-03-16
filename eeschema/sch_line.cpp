@@ -212,15 +212,15 @@ int SCH_LINE::GetPenSize() const
 
 
 void SCH_LINE::Draw( EDA_DRAW_PANEL* panel, wxDC* DC, const wxPoint& offset,
-                     GR_DRAWMODE DrawMode, EDA_COLOR_T Color )
+                     GR_DRAWMODE DrawMode, COLOR4D Color )
 {
-    EDA_COLOR_T color;
+    COLOR4D color;
     int width = GetPenSize();
 
-    if( Color >= 0 )
+    if( Color != COLOR4D::UNSPECIFIED )
         color = Color;
     else
-        color = GetLayerColor( m_Layer );
+        color = GetLayerColor( GetState( BRIGHTENED ) ? LAYER_BRIGHTENED : m_Layer );
 
     GRSetDrawMode( DC, DrawMode );
 
@@ -559,7 +559,7 @@ bool SCH_LINE::HitTest( const EDA_RECT& aRect, bool aContained, int aAccuracy ) 
     EDA_RECT rect = aRect;
 
     if ( aAccuracy )
-    	rect.Inflate( aAccuracy );
+        rect.Inflate( aAccuracy );
 
     if( aContained )
         return rect.Contains( m_start ) && rect.Contains( m_end );

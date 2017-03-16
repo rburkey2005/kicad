@@ -145,30 +145,36 @@ static void InitKiCadAboutNew( AboutAppInfo& info )
     description << wxT( "<ul>" );
     description << wxT( "<li>" )
                 << HtmlHyperlink( wxT( "http://www.kicad-pcb.org" ),
-                                  _( "The official KiCad site" ) )
+                                  _( "The official KiCad website" ) )
                 << wxT( "</li>" );
     description << wxT( "<li>" )
                 << HtmlHyperlink( wxT( "https://launchpad.net/kicad" ),
                                   _( "Developer's website on Launchpad" ) )
                 << wxT("</li>" );
+
     description << wxT( "<li>" )
                 << HtmlHyperlink( wxT( "https://github.com/KiCad/" ),
-                                  _( "Our official Repository for component and footprint libraries" ) )
+                                  _( "Official repository for component and footprint libraries" ) )
                 << wxT( "</li>" );
 
-    description << wxT( "<p><u>" )
-                << _( "Non official repositories" )
-                << wxT( "</u>" );
     description << wxT( "<li>" )
-                << HtmlHyperlink( wxT( "http://www.kicadlib.org" ),
-                                  _( "Additional component libraries repository (kicadlib)" ) )
+                << HtmlHyperlink( wxT( "https://github.com/KiCad/Footprint_Wizards" ),
+                                  _( "Footprint wizards info on our official repository " ) )
                 << wxT( "</li>" );
+    description << wxT( "</ul></p>" );
+
+    description << wxT( "<p><b><u>" )
+                << _( "Non official repositories" )
+                << wxT( "</b></u>" );
+
+    description << wxT( "<ul>" );
+
     description << wxT( "<li>" )
                 << HtmlHyperlink( wxT( "http://smisioto.no-ip.org/elettronica/kicad/kicad-en.htm" ),
                                   _( "Additional component libraries repository (smisioto)" ) )
                 << wxT( "</li>" );
-    description << wxT( "</ul>" );
-    description << wxT( "</p>" );
+
+    description << wxT( "</ul></p>" );
 
     description << wxT( "<p><b><u>" )
                 << _( "Bug tracker" )
@@ -177,19 +183,19 @@ static void InitKiCadAboutNew( AboutAppInfo& info )
     // bullet-ed list with some http links
     description << wxT( "<ul>" );
     description << wxT( "<li>" )
-                <<HtmlHyperlink( wxT( "https://bugs.launchpad.net/kicad/+bugs?orderby=-id&start=0" ),
-                                 _( "Report or examine bugs" ) )
+                << HtmlHyperlink( wxT( "https://bugs.launchpad.net/kicad/+bugs?orderby=-id&start=0" ),
+                                  _( "Report or examine bugs" ) )
                 << wxT( "</li>" );
     description << wxT( "</ul></p>" );
 
     description << wxT( "<p><b><u>" )
-                << _( "KiCad user group and community" )
+                << _( "KiCad user's groups and community" )
                 << wxT( "</u></b>" ); // bold & underlined font caption
 
     description << wxT( "<ul>" );
     description << wxT( "<li>" )
                 << HtmlHyperlink( wxT( "https://groups.yahoo.com/neo/groups/kicad-users/info" ),
-                                  _( "KiCad user group" ) )
+                                  _( "KiCad user's group" ) )
                 << wxT( "</li>" );
 
     description << wxT( "<li>" )

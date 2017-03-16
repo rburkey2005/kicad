@@ -4,7 +4,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2015-2016 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2015-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -114,8 +114,8 @@ public:
 
     // Virtual from EDA_DRAW_FRAME
     // the background color of the draw canvas:
-    EDA_COLOR_T GetDrawBgColor() const override;
-    void SetDrawBgColor( EDA_COLOR_T aColor) override;
+    COLOR4D GetDrawBgColor() const override;
+    void SetDrawBgColor( COLOR4D aColor) override;
 
     const TITLE_BLOCK& GetTitleBlock() const override;
     void SetTitleBlock( const TITLE_BLOCK& aTitleBlock ) override;
@@ -135,6 +135,8 @@ public:
      * @param aUseLibBrowser     bool to call the library viewer to select the component
      * @param aUnit              a pointer to int to return the selected unit (if any)
      * @param aConvert           a pointer to int to return the selected De Morgan shape (if any)
+     * @param aHighlight         name of component to highlight in the list.
+     *                           highlights none if there isn't one by that name
      *
      * @return the component name
      */
@@ -143,7 +145,8 @@ public:
                                          int&            aHistoryLastUnit,
                                          bool            aUseLibBrowser,
                                          int*            aUnit,
-                                         int*            aConvert );
+                                         int*            aConvert,
+                                         const wxString& aHighlight = wxEmptyString );
 
 protected:
 

@@ -6,7 +6,7 @@
  *
  * Copyright (C) 1992-2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2013 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2013-2016 Wayne Stambaugh <stambaughw@verizon.net>
  * Copyright (C) 1992-2016 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
@@ -41,7 +41,7 @@ using namespace std::placeholders;
 #include <netlist_reader.h>
 #include <reporter.h>
 #include <wildcards_and_files_ext.h>
-#include <fpid.h>
+#include <lib_id.h>
 #include <fp_lib_table.h>
 
 #include <class_board.h>
@@ -51,7 +51,8 @@ using namespace std::placeholders;
 #include <io_mgr.h>
 
 #include <tool/tool_manager.h>
-#include <tools/common_actions.h>
+#include <tools/pcb_actions.h>
+#include <view/view.h>
 
 
 void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
@@ -71,7 +72,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     std::vector<MODULE*> newFootprints;
     // keep trace of the initial baord area, if we want to place new footprints
     // outside the existinag board
-    EDA_RECT bbox = board->ComputeBoundingBox( false );
+    EDA_RECT bbox = board->GetBoundingBox();
 
     netlist.SetIsDryRun( aIsDryRun );
     netlist.SetFindByTimeStamp( aSelectByTimeStamp );
@@ -116,7 +117,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     }
 
     // Clear selection, just in case a selected item has to be removed
-    m_toolManager->RunAction( COMMON_ACTIONS::selectionClear, true );
+    m_toolManager->RunAction( PCB_ACTIONS::selectionClear, true );
 
     netlist.SortByReference();
     board->ReplaceNetlist( netlist, aDeleteSinglePadNets, &newFootprints, aReporter );
@@ -133,7 +134,7 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
         {
             for( MODULE* footprint : newFootprints )
             {
-                m_toolManager->RunAction( COMMON_ACTIONS::selectItem, true, footprint );
+                m_toolManager->RunAction( PCB_ACTIONS::selectItem, true, footprint );
             }
             m_toolManager->InvokeTool( "pcbnew.InteractiveEdit" );
         }
@@ -157,9 +158,8 @@ void PCB_EDIT_FRAME::ReadPcbNetlist( const wxString& aNetlistFileName,
     // Reload modules
     for( MODULE* module = board->m_Modules; module; module = module->Next() )
     {
-        module->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1 ) );
+        module->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1, -1 ) );
         view->Add( module );
-        module->ViewUpdate();
     }
 
     if( aDeleteUnconnectedTracks && board->m_Track )
@@ -227,7 +227,7 @@ void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
     throw( IO_ERROR, PARSE_ERROR )
 {
     wxString   msg;
-    FPID       lastFPID;
+    LIB_ID     lastFPID;
     COMPONENT* component;
     MODULE*    module = 0;
     MODULE*    fpOnBoard;
@@ -244,7 +244,7 @@ void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
 #if ALLOW_PARTIAL_FPID
         // The FPID is ok as long as there is a footprint portion coming
         // from eeschema.
-        if( !component->GetFPID().GetFootprintName().size() )
+        if( !component->GetFPID().GetLibItemName().size() )
 #else
         if( component->GetFPID().empty() )
 #endif
@@ -273,11 +273,11 @@ void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
         {
             if( aReporter )
             {
-                msg.Printf( _( "* Warning: component '%s': board footprint '%s', netlist footprint '%s'\n" ),
+                msg.Printf( _( "Footprint of component '%s' changed: board footprint '%s', netlist footprint '%s'\n" ),
                             GetChars( component->GetReference() ),
                             GetChars( fpOnBoard->GetFPID().Format() ),
                             GetChars( component->GetFPID().Format() ) );
-                aReporter->Report( msg );
+                aReporter->Report( msg, REPORTER::RPT_WARNING );
             }
 
             continue;
@@ -293,9 +293,9 @@ void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
             module = NULL;
 
 #if ALLOW_PARTIAL_FPID
-            // The FPID is ok as long as there is a footprint portion coming
+            // The LIB_ID is ok as long as there is a footprint portion coming
             // the library if it's needed.  Nickname can be blank.
-            if( !component->GetFPID().GetFootprintName().size() )
+            if( !component->GetFPID().GetLibItemName().size() )
 #else
             if( !component->GetFPID().IsValid() )
 #endif
@@ -326,7 +326,7 @@ void PCB_EDIT_FRAME::LoadFootprints( NETLIST& aNetlist, REPORTER* aReporter )
                     msg.Printf( _( "Component '%s' footprint '%s' was not found in "
                                    "any libraries in the footprint library table.\n" ),
                                 GetChars( component->GetReference() ),
-                                GetChars( component->GetFPID().GetFootprintName() ) );
+                                GetChars( component->GetFPID().GetLibItemName() ) );
                     aReporter->Report( msg, REPORTER::RPT_ERROR );
                 }
 

@@ -30,6 +30,7 @@
 
 #include <fctsys.h>
 #include <wx/valgen.h>
+#include <wx/valnum.h>
 #include <schframe.h>
 #include <base_units.h>
 
@@ -110,7 +111,17 @@ DIALOG_LABEL_EDITOR::DIALOG_LABEL_EDITOR( SCH_EDIT_FRAME* aParent, SCH_TEXT* aTe
     m_CurrentText = aTextItem;
     InitDialog();
 
-    FixOSXCancelButtonIssue();
+    // Conservative limits 0.0 to 10.0 inches
+    const int minSize = 0;  // a value like 0.01 is better, but if > 0, creates
+                            // annoying issues when trying to enter a value starting by 0 or .0
+    const int maxSize = 10 * 1000 * IU_PER_MILS;
+
+    wxFloatingPointValidator<double> textSizeValidator( NULL, wxNUM_VAL_NO_TRAILING_ZEROES );
+    textSizeValidator.SetPrecision( 4 );
+    textSizeValidator.SetRange( To_User_Unit( g_UserUnit, minSize ),
+                                To_User_Unit( g_UserUnit, maxSize ) );
+
+    m_TextSize->SetValidator( textSizeValidator );
 
     // Now all widgets have the size fixed, call FinishDialogSettings
     FinishDialogSettings();
@@ -205,8 +216,8 @@ void DIALOG_LABEL_EDITOR::InitDialog()
     textWidth.Append( 'M', MINTEXTWIDTH );
     EnsureTextCtrlWidth( m_textLabel, &textWidth );
 
-    // Set validators
-    m_TextOrient->SetSelection( m_CurrentText->GetOrientation() );
+    // Set text options:
+    m_TextOrient->SetSelection( m_CurrentText->GetLabelSpinStyle() );
     m_TextShape->SetSelection( m_CurrentText->GetShape() );
 
     int style = 0;
@@ -223,7 +234,7 @@ void DIALOG_LABEL_EDITOR::InitDialog()
     msg.Printf( _( "H%s x W%s" ), GetChars( units ), GetChars( units ) );
     m_staticSizeUnits->SetLabel( msg );
 
-    msg = StringFromValue( g_UserUnit, m_CurrentText->GetSize().x );
+    msg = StringFromValue( g_UserUnit, m_CurrentText->GetTextWidth() );
     m_TextSize->SetValue( msg );
 
     if( m_CurrentText->Type() != SCH_GLOBAL_LABEL_T
@@ -290,10 +301,10 @@ void DIALOG_LABEL_EDITOR::TextPropertiesAccept( wxCommandEvent& aEvent )
         return;
     }
 
-    m_CurrentText->SetOrientation( m_TextOrient->GetSelection() );
+    m_CurrentText->SetLabelSpinStyle( m_TextOrient->GetSelection() );
     text  = m_TextSize->GetValue();
     value = ValueFromString( g_UserUnit, text );
-    m_CurrentText->SetSize( wxSize( value, value ) );
+    m_CurrentText->SetTextSize( wxSize( value, value ) );
 
     if( m_TextShape )
         /// @todo move cast to widget
@@ -306,7 +317,7 @@ void DIALOG_LABEL_EDITOR::TextPropertiesAccept( wxCommandEvent& aEvent )
     if( ( style & 2 ) )
     {
         m_CurrentText->SetBold( true );
-        m_CurrentText->SetThickness( GetPenSizeForBold( m_CurrentText->GetSize().x ) );
+        m_CurrentText->SetThickness( GetPenSizeForBold( m_CurrentText->GetTextWidth() ) );
     }
     else
     {
@@ -318,7 +329,7 @@ void DIALOG_LABEL_EDITOR::TextPropertiesAccept( wxCommandEvent& aEvent )
 
     // Make the text size the new default size ( if it is a new text ):
     if( m_CurrentText->IsNew() )
-        SetDefaultTextSize( m_CurrentText->GetSize().x );
+        SetDefaultTextSize( m_CurrentText->GetTextWidth() );
 
     m_Parent->GetCanvas()->RefreshDrawingRect( m_CurrentText->GetBoundingBox() );
     m_Parent->GetCanvas()->MoveCursorToCrossHair();

@@ -2,8 +2,8 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2014 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 2008-2014 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2014 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2008-2017 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2004-2017 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -76,6 +76,11 @@ class LIB_EDIT_FRAME : public SCH_BASE_FRAME
      */
     bool m_editPinsPerPartOrConvert;
 
+    /**
+     * the option to show the pin electrical name in the component editor
+     */
+    bool m_showPinElectricalTypeName;
+
     /** The current draw or edit graphic item fill style. */
     static FILL_T m_drawFillStyle;
 
@@ -103,8 +108,8 @@ class LIB_EDIT_FRAME : public SCH_BASE_FRAME
     /// The current text size setting.
     static int m_textSize;
 
-    /// Current text orientation setting.
-    static int m_textOrientation;
+    /// Current text angle setting.
+    static double m_current_text_angle;
 
     /// The default pin num text size setting.
     static int m_textPinNumDefaultSize;
@@ -227,6 +232,11 @@ public:
     void OnSelectPart( wxCommandEvent& event );
 
     /**
+     * From Option toolbar: option to show the electrical pin type name
+     */
+    void OnShowElectricalType( wxCommandEvent& event );
+
+    /**
      * Function DeleteOnePart
      * is the command event handler to delete an entry from the current library.
      *
@@ -271,6 +281,8 @@ public:
 
     void OnOpenPinTable( wxCommandEvent& aEvent );
 
+    void OnSaveCurrentPart( wxCommandEvent& aEvent );
+
     void OnUpdateSelectTool( wxUpdateUIEvent& aEvent );
     void OnUpdateEditingPart( wxUpdateUIEvent& event );
     void OnUpdateNotEditingPart( wxUpdateUIEvent& event );
@@ -284,6 +296,7 @@ public:
     void OnUpdateDeMorganNormal( wxUpdateUIEvent& event );
     void OnUpdateDeMorganConvert( wxUpdateUIEvent& event );
     void OnUpdateSelectAlias( wxUpdateUIEvent& event );
+    void OnUpdateElectricalType( wxUpdateUIEvent& aEvent );
 
     void UpdateAliasSelectList();
     void UpdatePartSelectList();
@@ -390,6 +403,10 @@ public:
     bool GetShowDeMorgan() { return m_showDeMorgan; }
 
     void SetShowDeMorgan( bool show ) { m_showDeMorgan = show; }
+
+    bool GetShowElectricalType() { return m_showPinElectricalTypeName; }
+
+    void SetShowElectricalType( bool aShow ) { m_showPinElectricalTypeName = aShow; }
 
     FILL_T GetFillStyle() { return m_drawFillStyle; }
 
@@ -590,6 +607,8 @@ private:
     LIB_ITEM* LocateItemUsingCursor( const wxPoint& aPosition,
                                      const KICAD_T aFilterList[] = LIB_COLLECTOR::AllItems );
     void EditField( LIB_FIELD* Field );
+
+    void refreshSchematic();
 
 public:
     /**

@@ -140,17 +140,8 @@ public:
 
     int GetPenSize() const override;
 
-    /**
-     * Function IsVisible
-     * @return true is this field is visible, false if flagged invisible
-     */
-    bool IsVisible() const
-    {
-        return !( m_Attributs & TEXT_NO_VISIBLE );
-    }
-
     void Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-               GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor = UNSPECIFIED_COLOR ) override;
+               GR_DRAWMODE aDrawMode, COLOR4D aColor = COLOR4D::UNSPECIFIED ) override;
 
     bool Save( FILE* aFile ) const override;
 
@@ -158,9 +149,8 @@ public:
 
     void Move( const wxPoint& aMoveVector ) override
     {
-        m_Pos += aMoveVector;
+        Offset( aMoveVector );
     }
-
 
     void Rotate( wxPoint aPosition ) override;
 
@@ -196,7 +186,7 @@ public:
 
     bool IsReplaceable() const override { return true; }
 
-    wxPoint GetLibPosition() const { return m_Pos; }
+    wxPoint GetLibPosition() const { return EDA_TEXT::GetTextPos(); }
 
     wxPoint GetPosition() const override;
 

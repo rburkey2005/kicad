@@ -27,7 +27,6 @@
 #ifndef __CLASS_PCB_PAINTER_H
 #define __CLASS_PCB_PAINTER_H
 
-#include <layers_id_colors_and_visibility.h>
 #include <painter.h>
 
 #include <memory>
@@ -65,14 +64,25 @@ class PCB_RENDER_SETTINGS : public RENDER_SETTINGS
 public:
     friend class PCB_PAINTER;
 
-    enum ClearanceMode {
-        CL_VIAS     = 0x1,
-        CL_PADS     = 0x2,
-        CL_TRACKS   = 0x4
+    ///> Flags to control clearance lines visibility
+    enum CLEARANCE_MODE
+    {
+        CL_NONE             = 0x00,
+
+        // Object type
+        CL_PADS             = 0x01,
+        CL_VIAS             = 0x02,
+        CL_TRACKS           = 0x04,
+
+        // Existence
+        CL_NEW              = 0x08,
+        CL_EDITED           = 0x10,
+        CL_EXISTING         = 0x20
     };
 
     ///> Determines how zones should be displayed
-    enum DisplayZonesMode {
+    enum DISPLAY_ZONE_MODE
+    {
         DZ_HIDE_FILLED = 0,
         DZ_SHOW_FILLED,
         DZ_SHOW_OUTLINED
@@ -93,29 +103,6 @@ public:
 
     /// @copydoc RENDER_SETTINGS::GetColor()
     virtual const COLOR4D& GetColor( const VIEW_ITEM* aItem, int aLayer ) const override;
-
-    /**
-     * Function GetLayerColor
-     * Returns the color used to draw a layer.
-     * @param aLayer is the layer number.
-     */
-    inline const COLOR4D& GetLayerColor( int aLayer ) const
-    {
-        return m_layerColors[aLayer];
-    }
-
-    /**
-     * Function SetLayerColor
-     * Changes the color used to draw a layer.
-     * @param aLayer is the layer number.
-     * @param aColor is the new color.
-     */
-    inline void SetLayerColor( int aLayer, const COLOR4D& aColor )
-    {
-        m_layerColors[aLayer] = aColor;
-
-        update();       // recompute other shades of the color
-    }
 
     /**
      * Function SetSketchMode
@@ -140,23 +127,14 @@ public:
     }
 
 protected:
-    ///> @copydoc RENDER_SETTINGS::Update()
-    void update() override;
-
-    ///> Colors for all layers (normal)
-    COLOR4D m_layerColors[TOTAL_LAYER_COUNT];
-
-    ///> Colors for all layers (highlighted)
-    COLOR4D m_layerColorsHi[TOTAL_LAYER_COUNT];
-
-    ///> Colors for all layers (selected)
-    COLOR4D m_layerColorsSel[TOTAL_LAYER_COUNT];
-
-    ///> Colors for all layers (darkened)
-    COLOR4D m_layerColorsDark[TOTAL_LAYER_COUNT];
-
     ///> Flag determining if items on a given layer should be drawn as an outline or a filled item
     bool    m_sketchMode[TOTAL_LAYER_COUNT];
+
+    ///> Flag determining if board graphic items should be outlined or stroked
+    bool    m_sketchBoardGfx;
+
+    ///> Flag determining if footprint graphic items should be outlined or stroked
+    bool    m_sketchFpGfx;
 
     ///> Flag determining if pad numbers should be visible
     bool    m_padNumbers;
@@ -171,7 +149,10 @@ protected:
     static const double MAX_FONT_SIZE;
 
     ///> Option for different display modes for zones
-    DisplayZonesMode m_displayZoneMode;
+    DISPLAY_ZONE_MODE m_displayZone;
+
+    ///> Clearance visibility settings
+    int m_clearance;
 };
 
 
@@ -191,7 +172,7 @@ public:
     }
 
     /// @copydoc PAINTER::GetSettings()
-    virtual RENDER_SETTINGS* GetSettings() override
+    virtual PCB_RENDER_SETTINGS* GetSettings() override
     {
         return &m_pcbSettings;
     }
@@ -214,6 +195,15 @@ protected:
     void draw( const DIMENSION* aDimension, int aLayer );
     void draw( const PCB_TARGET* aTarget );
     void draw( const MARKER_PCB* aMarker );
+
+    /**
+     * Function getLineThickness()
+     * Get the thickness to draw for a line (e.g. 0 thickness lines
+     * get a minimum value).
+     * @param aActualThickness line own thickness
+     * @return the thickness to draw
+     */
+    int getLineThickness( int aActualThickness ) const;
 };
 } // namespace KIGFX
 

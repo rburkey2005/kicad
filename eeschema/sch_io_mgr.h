@@ -5,7 +5,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2016 CERN
- * Copyright (C) 2016 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 2016-2017 KiCad Developers, see CHANGELOG.TXT for contributors.
  *
  * @author Wayne Stambaugh <stambaughw@gmail.com>
  *
@@ -216,6 +216,8 @@ public:
      */
     virtual int GetModifyHash() const = 0;
 
+    virtual void SaveLibrary( const wxString& aFileName, const PROPERTIES* aProperties = NULL );
+
     /**
      * Function Load
      *
@@ -271,6 +273,9 @@ public:
     virtual void Save( const wxString& aFileName, SCH_SCREEN* aSchematic, KIWAY* aKiway,
                        const PROPERTIES* aProperties = NULL );
 
+    virtual size_t GetSymbolLibCount( const wxString&   aLibraryPath,
+                                      const PROPERTIES* aProperties = NULL );
+
     /**
      * Function EnumerateSymbolLib
      *
@@ -291,8 +296,25 @@ public:
                                      const wxString&   aLibraryPath,
                                      const PROPERTIES* aProperties = NULL );
 
-    // Temporary for testing using PART_LIB instead of SCH_PLUGIN.
-    virtual void TransferCache( PART_LIB& aTarget );
+    /**
+     * Function EnumerateSymbolLib
+     *
+     * returns a list of #LIB_PART aliases contained within the library @a aLibraryPath.
+     *
+     * @param aAliasList is an array to populate with the #LIB_ALIAS pointers associated with
+     *                   the library.
+     * @param aLibraryPath is a locator for the "library", usually a directory, file,
+     *                     or URL containing one or more #LIB_PART objects.
+     * @param aProperties is an associative array that can be used to tell the plugin anything
+     *                    needed about how to perform with respect to @a aLibraryPath.  The
+     *                    caller continues to own this object (plugin may not delete it), and
+     *                    plugins should expect it to be optionally NULL.
+     *
+     * @throw IO_ERROR if the library cannot be found, the part library cannot be loaded.
+     */
+    virtual void EnumerateSymbolLib( std::vector<LIB_ALIAS*>& aAliasList,
+                                     const wxString&   aLibraryPath,
+                                     const PROPERTIES* aProperties = NULL );
 
     /**
      * Function LoadSymbol

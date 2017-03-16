@@ -94,8 +94,6 @@ public:
 
         m_sdbSizerOK->SetDefault();
 
-        FixOSXCancelButtonIssue();
-
         // Now all widgets have the size fixed, call FinishDialogSettings
         FinishDialogSettings();
     }
@@ -185,7 +183,7 @@ void PCB_EDIT_FRAME::OnExportIDF3( wxCommandEvent& event )
 
     if( dlg.GetAutoAdjustOffset() )
     {
-        EDA_RECT bbox = GetBoard()->ComputeBoundingBox( true );
+        EDA_RECT bbox = GetBoard()->GetBoardEdgesBoundingBox();
 
         aXRef = bbox.Centre().x * MM_PER_IU;
         aYRef = bbox.Centre().y * MM_PER_IU;

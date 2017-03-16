@@ -46,6 +46,7 @@
 #include <wxBasePcbFrame.h>
 #include <class_pcb_text.h>
 #include <class_drawsegment.h>
+#include <class_dimension.h>
 #include <class_zone.h>
 #include <class_module.h>
 #include <reporter.h>
@@ -269,7 +270,7 @@ class CINFO3D_VISU
      * @param aColor: the color mapped
      * @return the color in SFVEC3F format
      */
-    SFVEC3F GetColor( EDA_COLOR_T aColor ) const;
+    SFVEC3F GetColor( COLOR4D aColor ) const;
 
     /**
      * @brief GetLayerTopZpos3DU - Get the top z position
@@ -451,6 +452,11 @@ class CINFO3D_VISU
                                            int aClearanceValue );
 
     void AddShapeWithClearanceToContainer( const DRAWSEGMENT *aDrawSegment,
+                                           CGENERICCONTAINER2D *aDstContainer,
+                                           LAYER_ID aLayerId,
+                                           int aClearanceValue );
+
+    void AddShapeWithClearanceToContainer( const DIMENSION *aDimension,
                                            CGENERICCONTAINER2D *aDstContainer,
                                            LAYER_ID aLayerId,
                                            int aClearanceValue );

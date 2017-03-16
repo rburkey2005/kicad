@@ -37,8 +37,9 @@
 #include <dialog_helpers.h>
 #include <msgpanel.h>
 #include <fp_lib_table.h>
-#include <fpid.h>
+#include <lib_id.h>
 #include <confirm.h>
+#include <bitmaps.h>
 
 #include <class_board.h>
 #include <class_module.h>
@@ -54,8 +55,9 @@
 
 #include <tool/tool_manager.h>
 #include <tool/tool_dispatcher.h>
+#include <tool/common_tools.h>
 #include "tools/pcbnew_control.h"
-#include "tools/common_actions.h"
+#include "tools/pcb_actions.h"
 
 #include <functional>
 using namespace std::placeholders;
@@ -187,6 +189,7 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
 
     // Create GAL canvas
     PCB_DRAW_PANEL_GAL* drawPanel = new PCB_DRAW_PANEL_GAL( this, -1, wxPoint( 0, 0 ), m_FrameSize,
+                                                            parentFrame->GetGalDisplayOptions(),
                                                             parentFrame->GetGalCanvas()->GetBackend() );
     SetGalCanvas( drawPanel );
 
@@ -194,19 +197,21 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
     m_toolManager = new TOOL_MANAGER;
     m_toolManager->SetEnvironment( GetBoard(), drawPanel->GetView(),
                                    drawPanel->GetViewControls(), this );
-    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager );
+    m_actions = new PCB_ACTIONS();
+    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager, m_actions );
     drawPanel->SetEventDispatcher( m_toolDispatcher );
 
     m_toolManager->RegisterTool( new PCBNEW_CONTROL );
-    m_toolManager->ResetTools( TOOL_BASE::RUN );
+    m_toolManager->RegisterTool( new COMMON_TOOLS );
+    m_toolManager->InitTools();
 
     // If a footprint was previously loaded, reload it
     if( getCurNickname().size() && getCurFootprintName().size() )
     {
-        FPID id;
+        LIB_ID id;
 
         id.SetLibNickname( getCurNickname() );
-        id.SetFootprintName( getCurFootprintName() );
+        id.SetLibItemName( getCurFootprintName() );
         GetBoard()->Add( loadFootprint( id ) );
     }
 
@@ -449,9 +454,9 @@ void FOOTPRINT_VIEWER_FRAME::ClickOnFootprintList( wxCommandEvent& event )
         // Delete the current footprint
         GetBoard()->m_Modules.DeleteAll();
 
-        FPID id;
+        LIB_ID id;
         id.SetLibNickname( getCurNickname() );
-        id.SetFootprintName( getCurFootprintName() );
+        id.SetLibItemName( getCurFootprintName() );
 
         try
         {
@@ -511,10 +516,10 @@ void FOOTPRINT_VIEWER_FRAME::ExportSelectedFootprint( wxCommandEvent& event )
     {
         wxString fp_name = m_footprintList->GetString( ii );
 
-        FPID fpid;
+        LIB_ID fpid;
 
         fpid.SetLibNickname( getCurNickname() );
-        fpid.SetFootprintName( fp_name );
+        fpid.SetLibItemName( fp_name );
 
         DismissModal( true, fpid.Format() );
     }
@@ -677,7 +682,7 @@ void FOOTPRINT_VIEWER_FRAME::Update3D_Frame( bool aForceReloadFootprint )
 }
 
 
-EDA_COLOR_T FOOTPRINT_VIEWER_FRAME::GetGridColor() const
+COLOR4D FOOTPRINT_VIEWER_FRAME::GetGridColor() const
 {
     return g_ColorsSettings.GetItemColor( GRID_VISIBLE );
 }
@@ -727,7 +732,7 @@ void FOOTPRINT_VIEWER_FRAME::UpdateTitle()
     if( getCurNickname().size() )
     {
         FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
-        const FP_LIB_TABLE_ROW* row = libtable->FindRow( getCurNickname() );
+        const LIB_TABLE_ROW* row = libtable->FindRow( getCurNickname() );
 
         if( row )
             title << L" \u2014 " << row->GetFullURI( true );
@@ -773,7 +778,7 @@ void FOOTPRINT_VIEWER_FRAME::SelectCurrentFootprint( wxCommandEvent& event )
             delete oldmodule;
         }
 
-        setCurFootprintName( module->GetFPID().GetFootprintName() );
+        setCurFootprintName( module->GetFPID().GetLibItemName() );
 
         wxString nickname = module->GetFPID().GetLibNickname();
 
@@ -870,7 +875,7 @@ void FOOTPRINT_VIEWER_FRAME::updateView()
     {
         static_cast<PCB_DRAW_PANEL_GAL*>( GetGalCanvas() )->DisplayBoard( GetBoard() );
         m_toolManager->ResetTools( TOOL_BASE::MODEL_RELOAD );
-        m_toolManager->RunAction( COMMON_ACTIONS::zoomFitScreen, true );
+        m_toolManager->RunAction( ACTIONS::zoomFitScreen, true );
     }
 }
 

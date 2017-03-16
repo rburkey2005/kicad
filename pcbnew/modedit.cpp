@@ -54,7 +54,7 @@
 #include <modview_frame.h>
 #include <collectors.h>
 #include <tool/tool_manager.h>
-#include <tools/common_actions.h>
+#include <tools/pcb_actions.h>
 
 #include <dialog_edit_module_for_Modedit.h>
 #include <dialog_move_exact.h>
@@ -217,8 +217,8 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
     case ID_POPUP_PCB_ROTATE_MODULE_CLOCKWISE:
     case ID_POPUP_PCB_ROTATE_MODULE_COUNTERCLOCKWISE:
     case ID_POPUP_PCB_EDIT_TEXTMODULE:
-    case ID_POPUP_PCB_IMPORT_PAD_SETTINGS:
-    case ID_POPUP_PCB_EXPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_APPLY_PAD_SETTINGS:
+    case ID_POPUP_PCB_COPY_PAD_SETTINGS:
     case ID_POPUP_PCB_GLOBAL_IMPORT_PAD_SETTINGS:
     case ID_POPUP_PCB_STOP_CURRENT_DRAWING:
     case ID_POPUP_MODEDIT_EDIT_BODY_ITEM:
@@ -436,8 +436,8 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
                 break;
             }
 
-            m_toolManager->RunAction( COMMON_ACTIONS::selectionClear, true );
-            pcbframe->GetToolManager()->RunAction( COMMON_ACTIONS::selectionClear, true );
+            m_toolManager->RunAction( PCB_ACTIONS::selectionClear, true );
+            pcbframe->GetToolManager()->RunAction( PCB_ACTIONS::selectionClear, true );
             BOARD_COMMIT commit( pcbframe );
 
             // Create the "new" module
@@ -582,7 +582,6 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
 
             int ret = dialog.ShowModal();
             GetScreen()->GetCurItem()->ClearFlags();
-            GetBoard()->m_Modules.GetFirst()->ViewUpdate();
 
             if( ret > 0 )
                 m_canvas->Refresh();
@@ -650,7 +649,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         createArray();
         break;
 
-    case ID_POPUP_PCB_IMPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_APPLY_PAD_SETTINGS:
         SaveCopyInUndoList( GetBoard()->m_Modules, UR_CHANGED );
         m_canvas->MoveCursorToCrossHair();
         Import_Pad_Settings( (D_PAD*) GetScreen()->GetCurItem(), true );
@@ -663,7 +662,7 @@ void FOOTPRINT_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         m_canvas->MoveCursorToCrossHair();
         break;
 
-    case ID_POPUP_PCB_EXPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_COPY_PAD_SETTINGS:
         m_canvas->MoveCursorToCrossHair();
         Export_Pad_Settings( (D_PAD*) GetScreen()->GetCurItem() );
         break;
@@ -963,6 +962,11 @@ void FOOTPRINT_EDIT_FRAME::OnVerticalToolbar( wxCommandEvent& aEvent )
         SetToolID( id, wxCURSOR_BULLSEYE, _( "Delete item" ) );
         break;
 
+    case ID_MODEDIT_MEASUREMENT_TOOL:
+        DisplayError( this, wxT( "Unsupported tool in legacy canvas" ) );
+        SetToolID( ID_NO_TOOL_SELECTED, m_canvas->GetDefaultCursor(), wxEmptyString );
+        break;
+
     default:
         wxFAIL_MSG( wxT( "Unknown command id." ) );
         SetToolID( ID_NO_TOOL_SELECTED, m_canvas->GetDefaultCursor(), wxEmptyString );
@@ -970,7 +974,7 @@ void FOOTPRINT_EDIT_FRAME::OnVerticalToolbar( wxCommandEvent& aEvent )
 }
 
 
-EDA_COLOR_T FOOTPRINT_EDIT_FRAME::GetGridColor() const
+COLOR4D FOOTPRINT_EDIT_FRAME::GetGridColor() const
 {
     return g_ColorsSettings.GetItemColor( GRID_VISIBLE );
 }
@@ -980,12 +984,12 @@ void FOOTPRINT_EDIT_FRAME::SetActiveLayer( LAYER_ID aLayer )
 {
     PCB_BASE_FRAME::SetActiveLayer( aLayer );
 
-    GetGalCanvas()->SetHighContrastLayer( aLayer );
-
     m_Layers->SelectLayer( GetActiveLayer() );
     m_Layers->OnLayerSelected();
 
     if( IsGalCanvasActive() )
+    {
+        GetGalCanvas()->SetHighContrastLayer( aLayer );
         GetGalCanvas()->Refresh();
+    }
 }
-

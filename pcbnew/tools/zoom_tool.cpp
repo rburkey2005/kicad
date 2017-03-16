@@ -21,11 +21,12 @@
 #include <wxPcbStruct.h>
 #include <class_draw_panel_gal.h>
 #include <view/view_controls.h>
+#include <view/view.h>
 #include <tool/tool_manager.h>
+#include <preview_items/selection_area.h>
 
 #include "zoom_tool.h"
-#include "selection_area.h"
-#include "common_actions.h"
+#include "pcb_actions.h"
 
 
 ZOOM_TOOL::ZOOM_TOOL() :
@@ -75,7 +76,7 @@ bool ZOOM_TOOL::selectRegion()
     auto canvas = m_frame->GetGalCanvas();
     getViewControls()->SetAutoPan( true );
 
-    SELECTION_AREA area;
+    KIGFX::PREVIEW::SELECTION_AREA area;
     view->Add( &area );
 
     while( auto evt = Wait() )
@@ -90,13 +91,13 @@ bool ZOOM_TOOL::selectRegion()
         {
             area.SetOrigin( evt->DragOrigin() );
             area.SetEnd( evt->Position() );
-            area.ViewSetVisible( true );
-            area.ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
+            view->SetVisible( &area, true );
+            view->Update( &area, KIGFX::GEOMETRY );
         }
 
         if( evt->IsMouseUp( BUT_LEFT ) )
         {
-            area.ViewSetVisible( false );
+            view->SetVisible( &area, false );
             auto selectionBox = area.ViewBBox();
 
             VECTOR2D screenSize = view->ToWorld( canvas->GetClientSize(), false );
@@ -118,7 +119,7 @@ bool ZOOM_TOOL::selectRegion()
         }
     }
 
-    area.ViewSetVisible( false );
+    view->SetVisible( &area, false );
     view->Remove( &area );
     getViewControls()->SetAutoPan( false );
 
@@ -128,5 +129,5 @@ bool ZOOM_TOOL::selectRegion()
 
 void ZOOM_TOOL::SetTransitions()
 {
-    Go( &ZOOM_TOOL::Main, COMMON_ACTIONS::zoomTool.MakeEvent() );
+    Go( &ZOOM_TOOL::Main, PCB_ACTIONS::zoomTool.MakeEvent() );
 }

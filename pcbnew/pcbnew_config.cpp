@@ -44,7 +44,6 @@
 #include <worksheet.h>
 #include <dialog_hotkeys_editor.h>
 #include <fp_lib_table.h>
-#include <fp_lib_table_lexer.h>
 #include <worksheet_shape_builder.h>
 
 #include <class_board.h>
@@ -61,6 +60,7 @@
 #include <dialog_mask_clearance.h>
 #include <dialog_general_options.h>
 #include <wildcards_and_files_ext.h>
+#include <view/view.h>
 
 
 void PCB_EDIT_FRAME::Process_Config( wxCommandEvent& event )
@@ -70,12 +70,12 @@ void PCB_EDIT_FRAME::Process_Config( wxCommandEvent& event )
 
     switch( id )
     {
-    case ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER_DIALOG:
+    case ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER:
         m_show_layer_manager_tools = ! m_show_layer_manager_tools;
         m_auimgr.GetPane( wxT( "m_LayersManagerToolBar" ) ).Show( m_show_layer_manager_tools );
         m_auimgr.Update();
 
-        GetMenuBar()->SetLabel( ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER_DIALOG,
+        GetMenuBar()->SetLabel( ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER,
                                 m_show_layer_manager_tools ?
                                 _("Hide &Layers Manager" ) : _("Show &Layers Manager" ));
         break;
@@ -87,7 +87,7 @@ void PCB_EDIT_FRAME::Process_Config( wxCommandEvent& event )
 
         GetMenuBar()->SetLabel( ID_MENU_PCB_SHOW_HIDE_MUWAVE_TOOLBAR,
                                 m_show_microwave_tools ?
-                                _( "Hide Microwave Toolbar" ): _( "Show Microwave Toolbar" ));
+                                _( "Hide Microwa&ve Toolbar" ): _( "Show Microwa&ve Toolbar" ));
         break;
 
 
@@ -187,7 +187,7 @@ void PCB_EDIT_FRAME::Process_Config( wxCommandEvent& event )
             if( dlg.ShowModal() == 1 && IsGalCanvasActive() )
             {
                 for( MODULE* module = GetBoard()->m_Modules; module; module = module->Next() )
-                    module->ViewUpdate();
+                    GetGalCanvas()->GetView()->Update( module );
 
                 GetGalCanvas()->Refresh();
             }

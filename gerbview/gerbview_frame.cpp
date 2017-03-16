@@ -37,6 +37,7 @@
 #include <colors_selection.h>
 #include <class_gbr_layer_box_selector.h>
 #include <msgpanel.h>
+#include <bitmaps.h>
 
 #include <gerbview.h>
 #include <gerbview_frame.h>
@@ -80,6 +81,7 @@ GERBVIEW_FRAME::GERBVIEW_FRAME( KIWAY* aKiway, wxWindow* aParent ):
     m_DCodeSelector = NULL;
     m_displayMode   = 0;
     m_drillFileHistory.SetBaseId( ID_GERBVIEW_DRILL_FILE1 );
+    m_zipFileHistory.SetBaseId( ID_GERBVIEW_ZIP_FILE1 );
 
     if( m_canvas )
         m_canvas->SetEnableBlockCommands( true );
@@ -295,10 +297,16 @@ void GERBVIEW_FRAME::LoadSettings( wxConfigBase* aCfg )
     aCfg->Read( cfgShowNegativeObjects, &tmp, false );
     SetElementVisibility( NEGATIVE_OBJECTS_VISIBLE, tmp );
 
-    // because we have 2 file histories, we must read this one
+    // because we have more than one file history, we must read this one
     // using a specific path
     aCfg->SetPath( wxT( "drl_files" ) );
     m_drillFileHistory.Load( *aCfg );
+    aCfg->SetPath( wxT( ".." ) );
+
+    // because we have more than one file history, we must read this one
+    // using a specific path
+    aCfg->SetPath( wxT( "zip_files" ) );
+    m_zipFileHistory.Load( *aCfg );
     aCfg->SetPath( wxT( ".." ) );
 }
 
@@ -317,10 +325,15 @@ void GERBVIEW_FRAME::SaveSettings( wxConfigBase* aCfg )
                  IsElementVisible( NEGATIVE_OBJECTS_VISIBLE ) );
 
     // Save the drill file history list.
-    // Because we have 2 file histories, we must save this one
+    // Because we have  more than one file history, we must save this one
     // in a specific path
     aCfg->SetPath( wxT( "drl_files" ) );
     m_drillFileHistory.Save( *aCfg );
+    aCfg->SetPath( wxT( ".." ) );
+
+    // Save the zip file history list.
+    aCfg->SetPath( wxT( "zip_files" ) );
+    m_zipFileHistory.Save( *aCfg );
     aCfg->SetPath( wxT( ".." ) );
 }
 
@@ -594,9 +607,9 @@ bool GERBVIEW_FRAME::IsLayerVisible( int aLayer ) const
 }
 
 
-EDA_COLOR_T GERBVIEW_FRAME::GetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible ) const
+COLOR4D GERBVIEW_FRAME::GetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible ) const
 {
-    EDA_COLOR_T color = UNSPECIFIED_COLOR;
+    COLOR4D color = COLOR4D::UNSPECIFIED;
 
     switch( aItemIdVisible )
     {
@@ -626,7 +639,7 @@ void GERBVIEW_FRAME::SetGridVisibility( bool aVisible )
 
 
 void GERBVIEW_FRAME::SetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible,
-                                             EDA_COLOR_T aColor )
+                                             COLOR4D aColor )
 {
     switch( aItemIdVisible )
     {
@@ -646,7 +659,7 @@ void GERBVIEW_FRAME::SetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible,
     }
 }
 
-EDA_COLOR_T GERBVIEW_FRAME::GetNegativeItemsColor() const
+COLOR4D GERBVIEW_FRAME::GetNegativeItemsColor() const
 {
     if( IsElementVisible( NEGATIVE_OBJECTS_VISIBLE ) )
         return GetVisibleElementColor( NEGATIVE_OBJECTS_VISIBLE );
@@ -655,13 +668,13 @@ EDA_COLOR_T GERBVIEW_FRAME::GetNegativeItemsColor() const
 }
 
 
-EDA_COLOR_T GERBVIEW_FRAME::GetLayerColor( int aLayer ) const
+COLOR4D GERBVIEW_FRAME::GetLayerColor( int aLayer ) const
 {
     return m_colorsSettings->GetLayerColor( aLayer );
 }
 
 
-void GERBVIEW_FRAME::SetLayerColor( int aLayer, EDA_COLOR_T aColor )
+void GERBVIEW_FRAME::SetLayerColor( int aLayer, COLOR4D aColor )
 {
     m_colorsSettings->SetLayerColor( aLayer, aColor );
 }

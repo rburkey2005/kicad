@@ -1,10 +1,10 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2013-2016 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2013-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2013-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -41,6 +41,7 @@
 #include <3d_viewer/eda_3d_viewer.h>
 #include <msgpanel.h>
 #include <fp_lib_table.h>
+#include <bitmaps.h>
 
 #include <pcbnew.h>
 #include <pcbnew_id.h>
@@ -53,6 +54,7 @@
 #include <module_editor_frame.h>
 #include <dialog_helpers.h>
 #include <dialog_plot.h>
+#include <dialog_exchange_modules.h>
 #include <convert_to_biu.h>
 #include <view/view.h>
 #include <view/view_controls.h>
@@ -68,7 +70,7 @@
 
 #include <tool/tool_manager.h>
 #include <tool/tool_dispatcher.h>
-#include <tools/common_actions.h>
+#include <tools/pcb_actions.h>
 
 #include <wildcards_and_files_ext.h>
 
@@ -115,6 +117,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
 
     // Menu Files:
     EVT_MENU( ID_MAIN_MENUBAR, PCB_EDIT_FRAME::Process_Special_Functions )
+    EVT_MENU( ID_MENU_PCB_FLIP_VIEW, PCB_EDIT_FRAME::OnFlipPcbView )
 
     EVT_MENU( ID_APPEND_FILE, PCB_EDIT_FRAME::Files_io )
     EVT_MENU( ID_SAVE_BOARD_AS, PCB_EDIT_FRAME::Files_io )
@@ -150,7 +153,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
     EVT_MENU( ID_CONFIG_READ, PCB_EDIT_FRAME::Process_Config )
     EVT_MENU_RANGE( ID_PREFERENCES_HOTKEY_START, ID_PREFERENCES_HOTKEY_END,
                     PCB_EDIT_FRAME::Process_Config )
-    EVT_MENU( ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER_DIALOG, PCB_EDIT_FRAME::Process_Config )
+    EVT_MENU( ID_MENU_PCB_SHOW_HIDE_LAYERS_MANAGER, PCB_EDIT_FRAME::Process_Config )
     EVT_MENU( ID_MENU_PCB_SHOW_HIDE_MUWAVE_TOOLBAR, PCB_EDIT_FRAME::Process_Config )
     EVT_MENU( wxID_PREFERENCES, PCB_EDIT_FRAME::Process_Config )
     EVT_MENU( ID_PCB_LAYERS_SETUP, PCB_EDIT_FRAME::Process_Config )
@@ -217,6 +220,11 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
     EVT_TOOL( ID_TOOLBARH_PCB_MODE_TRACKS, PCB_EDIT_FRAME::OnSelectAutoPlaceMode )
     EVT_TOOL( ID_TOOLBARH_PCB_FREEROUTE_ACCESS, PCB_EDIT_FRAME::Access_to_External_Tool )
 
+
+#if defined(KICAD_SCRIPTING) && defined(KICAD_SCRIPTING_ACTION_MENU)
+    EVT_TOOL( ID_TOOLBARH_PCB_ACTION_PLUGIN_REFRESH, PCB_EDIT_FRAME::OnActionPluginRefresh )
+#endif
+
 #if defined( KICAD_SCRIPTING_WXPYTHON )
     // has meaning only with KICAD_SCRIPTING_WXPYTHON enabled
     EVT_TOOL( ID_TOOLBARH_PCB_SCRIPTING_CONSOLE, PCB_EDIT_FRAME::ScriptingConsoleEnableDisable )
@@ -251,7 +259,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
     // Vertical main toolbar:
     EVT_TOOL( ID_NO_TOOL_SELECTED, PCB_EDIT_FRAME::OnSelectTool )
     EVT_TOOL( ID_ZOOM_SELECTION, PCB_EDIT_FRAME::OnSelectTool )
-    EVT_TOOL_RANGE( ID_PCB_HIGHLIGHT_BUTT, ID_PCB_PLACE_GRID_COORD_BUTT,
+    EVT_TOOL_RANGE( ID_PCB_HIGHLIGHT_BUTT, ID_PCB_MEASUREMENT_TOOL,
                     PCB_EDIT_FRAME::OnSelectTool )
 
     EVT_TOOL_RANGE( ID_PCB_MUWAVE_START_CMD, ID_PCB_MUWAVE_END_CMD,
@@ -303,7 +311,7 @@ BEGIN_EVENT_TABLE( PCB_EDIT_FRAME, PCB_BASE_FRAME )
                          PCB_EDIT_FRAME::OnUpdateSelectTrackWidth )
     EVT_UPDATE_UI_RANGE( ID_POPUP_PCB_SELECT_VIASIZE1, ID_POPUP_PCB_SELECT_VIASIZE8,
                          PCB_EDIT_FRAME::OnUpdateSelectViaSize )
-    EVT_UPDATE_UI_RANGE( ID_PCB_HIGHLIGHT_BUTT, ID_PCB_PLACE_GRID_COORD_BUTT,
+    EVT_UPDATE_UI_RANGE( ID_PCB_HIGHLIGHT_BUTT, ID_PCB_MEASUREMENT_TOOL,
                          PCB_EDIT_FRAME::OnUpdateVerticalToolbar )
     EVT_UPDATE_UI_RANGE( ID_TB_OPTIONS_SHOW_ZONES, ID_TB_OPTIONS_SHOW_ZONES_OUTLINES_ONLY,
                          PCB_EDIT_FRAME::OnUpdateZoneDisplayStyle )
@@ -335,7 +343,9 @@ PCB_EDIT_FRAME::PCB_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ) :
 
     // Create GAL canvas
     EDA_DRAW_PANEL_GAL* galCanvas = new PCB_DRAW_PANEL_GAL( this, -1, wxPoint( 0, 0 ),
-                                                m_FrameSize, EDA_DRAW_PANEL_GAL::GAL_TYPE_NONE );
+                                                m_FrameSize,
+                                                GetGalDisplayOptions(),
+                                                EDA_DRAW_PANEL_GAL::GAL_TYPE_NONE );
 
     SetGalCanvas( galCanvas );
 
@@ -484,7 +494,6 @@ PCB_EDIT_FRAME::PCB_EDIT_FRAME( KIWAY* aKiway, wxWindow* aParent ) :
 
     if( !appK2S.FileExists() )
         GetMenuBar()->FindItem( ID_GEN_EXPORT_FILE_STEP )->Enable( false );
-
 }
 
 
@@ -557,12 +566,12 @@ void PCB_EDIT_FRAME::setupTools()
     m_toolManager = new TOOL_MANAGER;
     m_toolManager->SetEnvironment( m_Pcb, GetGalCanvas()->GetView(),
                                    GetGalCanvas()->GetViewControls(), this );
-    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager );
+    m_actions = new PCB_ACTIONS();
+    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager, m_actions );
 
     // Register tools
-    registerAllTools( m_toolManager );
-
-    m_toolManager->ResetTools( TOOL_BASE::RUN );
+    m_actions->RegisterAllTools( m_toolManager );
+    m_toolManager->InitTools();
 
     // Run the selection tool, it is supposed to be always active
     m_toolManager->InvokeTool( "pcbnew.InteractiveSelection" );
@@ -623,6 +632,17 @@ void PCB_EDIT_FRAME::OnCloseWindow( wxCloseEvent& Event )
             Files_io_from_id( ID_SAVE_BOARD );
             break;
         }
+    }
+
+    if( IsGalCanvasActive() )
+    {
+        // On Windows 7 / 32 bits, on OpenGL mode only, Pcbnew crashes
+        // when closing this frame if a footprint was selected, and the footprint editor called
+        // to edit this footprint, and when closing pcbnew if this footprint is still selected
+        // See https://bugs.launchpad.net/kicad/+bug/1655858
+        // I think this is certainly a OpenGL event fired after frame deletion, so this workaround
+        // avoid the crash (JPC)
+        GetGalCanvas()->SetEvtHandlerEnabled( false );
     }
 
     GetGalCanvas()->StopDrawing();
@@ -698,6 +718,39 @@ void PCB_EDIT_FRAME::UseGalCanvas( bool aEnable )
     PCB_BASE_EDIT_FRAME::UseGalCanvas( aEnable );
 
     enableGALSpecificMenus();
+
+    // Force colors to be legacy-compatible in case they were changed in GAL
+    if( !aEnable )
+    {
+        forceColorsToLegacy();
+        Refresh();
+    }
+
+    // Re-create the layer manager to allow arbitrary colors when GAL is enabled
+    ReFillLayerWidget();
+    m_Layers->ReFillRender();
+}
+
+
+void PCB_EDIT_FRAME::forceColorsToLegacy()
+{
+    COLORS_DESIGN_SETTINGS* cds = GetBoard()->GetColorsSettings();
+
+    for( int i = 0; i < LAYER_ID_COUNT; i++ )
+    {
+        COLOR4D c = cds->GetLayerColor( i );
+        c.SetToNearestLegacyColor();
+        c.a = 0.8;
+        cds->SetLayerColor( i, c );
+    }
+
+    for( unsigned int i = 0; i < DIM( cds->m_ItemsColors ); i++ )
+    {
+        COLOR4D c = cds->GetItemColor( i );
+        c.SetToNearestLegacyColor();
+        c.a = 0.8;
+        cds->SetItemColor( i, c );
+    }
 }
 
 
@@ -716,7 +769,8 @@ void PCB_EDIT_FRAME::enableGALSpecificMenus()
             ID_TUNE_SINGLE_TRACK_LEN_BUTT,
             ID_TUNE_DIFF_PAIR_LEN_BUTT,
             ID_TUNE_DIFF_PAIR_SKEW_BUTT,
-            ID_MENU_DIFF_PAIR_DIMENSIONS
+            ID_MENU_DIFF_PAIR_DIMENSIONS,
+            ID_MENU_PCB_FLIP_VIEW
         };
 
         bool enbl = IsGalCanvasActive();
@@ -797,26 +851,20 @@ void PCB_EDIT_FRAME::SetGridVisibility(bool aVisible)
 }
 
 
-EDA_COLOR_T PCB_EDIT_FRAME::GetGridColor() const
+COLOR4D PCB_EDIT_FRAME::GetGridColor() const
 {
     return GetBoard()->GetVisibleElementColor( GRID_VISIBLE );
 }
 
 
-void PCB_EDIT_FRAME::SetGridColor( EDA_COLOR_T aColor )
+void PCB_EDIT_FRAME::SetGridColor( COLOR4D aColor )
 {
 
     GetBoard()->SetVisibleElementColor( GRID_VISIBLE, aColor );
 
     if( IsGalCanvasActive() )
     {
-        StructColors c = g_ColorRefs[ aColor ];
-        KIGFX::COLOR4D color(  (double) c.m_Red / 255.0,
-                        (double) c.m_Green / 255.0,
-                        (double) c.m_Blue / 255.0,
-                        0.7 );
-
-         GetGalCanvas()->GetGAL()->SetGridColor( color );
+        GetGalCanvas()->GetGAL()->SetGridColor( aColor );
     }
 }
 
@@ -859,14 +907,14 @@ void PCB_EDIT_FRAME::SetActiveLayer( LAYER_ID aLayer )
 {
     PCB_BASE_FRAME::SetActiveLayer( aLayer );
 
-    GetGalCanvas()->SetHighContrastLayer( aLayer );
-
     syncLayerWidgetLayer();
 
     if( IsGalCanvasActive() )
     {
-        m_toolManager->RunAction( COMMON_ACTIONS::layerChanged );       // notify other tools
+        m_toolManager->RunAction( PCB_ACTIONS::layerChanged );       // notify other tools
         GetGalCanvas()->SetFocus();                 // otherwise hotkeys are stuck somewhere
+
+        GetGalCanvas()->SetHighContrastLayer( aLayer );
         GetGalCanvas()->Refresh();
     }
 }
@@ -1037,7 +1085,6 @@ void PCB_EDIT_FRAME::ScriptingConsoleEnableDisable( wxCommandEvent& aEvent )
     else
         wxMessageBox( wxT( "Error: unable to create the Python Console" ) );
 }
-
 #endif
 
 
@@ -1130,4 +1177,39 @@ void PCB_EDIT_FRAME::OnUpdatePCBFromSch( wxCommandEvent& event )
 
         Kiway().ExpressMail( FRAME_SCH, MAIL_SCH_PCB_UPDATE_REQUEST, "", this );
     }
+}
+
+
+void PCB_EDIT_FRAME::OnFlipPcbView( wxCommandEvent& evt )
+{
+    auto view = GetGalCanvas()->GetView();
+    view->SetMirror( evt.IsChecked(), false );
+    view->RecacheAllItems();
+    Refresh();
+}
+
+
+void PCB_EDIT_FRAME::PythonPluginsReload()
+{
+    // Reload Python plugins if they are newer than
+    // the already loaded, and load new plugins
+#if defined(KICAD_SCRIPTING)
+    //Reload plugin list: reload Python plugins if they are newer than
+    // the already loaded, and load new plugins
+    PythonPluginsReloadBase();
+
+    #if defined(KICAD_SCRIPTING_ACTION_MENU)
+        // Action plugins can be modified, therefore the plugins menu
+        // must be updated:
+        RebuildActionPluginMenus();
+    #endif
+#endif
+}
+
+
+int PCB_EDIT_FRAME::InstallExchangeModuleFrame( MODULE* Module )
+{
+    DIALOG_EXCHANGE_MODULE dialog( this, Module );
+
+    return dialog.ShowQuasiModal();
 }

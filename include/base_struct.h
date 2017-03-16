@@ -34,13 +34,8 @@
 
 #include <core/typeinfo.h>
 
-#include <colors.h>
-#include <bitmaps.h>
-#include <richio.h>
+#include <bitmap_types.h>
 #include <view/view_item.h>
-#include <class_eda_rect.h>
-#include <functional>
-
 
 #if defined(DEBUG)
 #include <iostream>         // needed for Show()
@@ -229,12 +224,12 @@ public:
     inline bool IsBrightened() const { return m_Flags & BRIGHTENED; }
 
     inline void SetWireImage() { SetFlags( IS_WIRE_IMAGE ); }
-    inline void SetSelected() { SetFlags( SELECTED ); ViewUpdate( COLOR ); }
-    inline void SetHighlighted() { SetFlags( HIGHLIGHTED ); ViewUpdate( COLOR ); }
+    inline void SetSelected() { SetFlags( SELECTED ); }
+    inline void SetHighlighted() { SetFlags( HIGHLIGHTED ); }
     inline void SetBrightened() { SetFlags( BRIGHTENED ); }
 
-    inline void ClearSelected() { ClearFlags( SELECTED ); ViewUpdate( COLOR ); }
-    inline void ClearHighlighted() { ClearFlags( HIGHLIGHTED ); ViewUpdate( COLOR ); }
+    inline void ClearSelected() { ClearFlags( SELECTED ); }
+    inline void ClearHighlighted() { ClearFlags( HIGHLIGHTED ); }
     inline void ClearBrightened() { ClearFlags( BRIGHTENED ); }
 
     void SetModified();
@@ -305,17 +300,7 @@ public:
      * system.
      * It is OK to overestimate the size by a few counts.
      */
-    virtual const EDA_RECT GetBoundingBox() const
-    {
-#if defined(DEBUG)
-        printf( "Missing GetBoundingBox()\n" );
-        Show( 0, std::cout ); // tell me which classes still need GetBoundingBox support
-#endif
-
-        // return a zero-sized box per default. derived classes should override
-        // this
-        return EDA_RECT( wxPoint( 0, 0 ), wxSize( 0, 0 ) );
-    }
+    virtual const EDA_RECT GetBoundingBox() const;
 
     /**
      * Function Clone

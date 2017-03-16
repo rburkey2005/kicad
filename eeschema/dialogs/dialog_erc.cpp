@@ -38,6 +38,7 @@
 #include <invoke_sch_dialog.h>
 #include <project.h>
 #include <kiface_i.h>
+#include <bitmaps.h>
 
 #include <netlist.h>
 #include <class_netlist_object.h>
@@ -76,8 +77,6 @@ DIALOG_ERC::DIALOG_ERC( SCH_EDIT_FRAME* parent ) :
     m_parent = parent;
     m_lastMarkerFound = NULL;
     Init();
-
-    FixOSXCancelButtonIssue();
 
     // Now all widgets have the size fixed, call FinishDialogSettings
     FinishDialogSettings();

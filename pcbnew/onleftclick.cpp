@@ -280,7 +280,7 @@ void PCB_EDIT_FRAME::OnLeftClick( wxDC* aDC, const wxPoint& aPosition )
     case ID_TRACK_BUTT:
         if( !IsCopperLayer( GetActiveLayer() ) )
         {
-            DisplayError( this, _( "Tracks on Copper layers only " ) );
+            DisplayError( this, _( "Tracks on Copper layers only" ) );
             break;
         }
 
@@ -437,6 +437,11 @@ void PCB_EDIT_FRAME::OnLeftClick( wxDC* aDC, const wxPoint& aPosition )
         m_canvas->DrawGridAxis( aDC, GR_XOR, GetBoard()->GetGridOrigin() );
         SetGridOrigin( GetCrossHairPosition() );
         m_canvas->DrawGridAxis( aDC, GR_COPY, GetBoard()->GetGridOrigin() );
+        break;
+
+    case ID_PCB_MEASUREMENT_TOOL:
+        DisplayError( this, wxT( "This tool is not available in the legacy canvas" ) );
+        SetToolID( ID_NO_TOOL_SELECTED, m_canvas->GetDefaultCursor(), wxEmptyString );
         break;
 
     default:

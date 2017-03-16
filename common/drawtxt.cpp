@@ -103,7 +103,7 @@ int GraphicTextWidth( const wxString& aText, const wxSize& aSize, bool aItalic, 
  *  @param aClipBox = the clipping rect, or NULL if no clipping
  *  @param aDC = the current Device Context. NULL if draw within a 3D GL Canvas
  *  @param aPos = text position (according to h_justify, v_justify)
- *  @param aColor (enum EDA_COLOR_T) = text color
+ *  @param aColor (COLOR4D) = text color
  *  @param aText = text to draw
  *  @param aOrient = angle in 0.1 degree
  *  @param aSize = text size (size.x or size.y can be < 0 for mirrored texts)
@@ -122,7 +122,7 @@ int GraphicTextWidth( const wxString& aText, const wxSize& aSize, bool aItalic, 
 void DrawGraphicText( EDA_RECT* aClipBox,
                       wxDC* aDC,
                       const wxPoint& aPos,
-                      EDA_COLOR_T aColor,
+                      COLOR4D aColor,
                       const wxString& aText,
                       double aOrient,
                       const wxSize& aSize,
@@ -160,7 +160,7 @@ void DrawGraphicText( EDA_RECT* aClipBox,
     if( size.x < 0 )
         size.x = - size.x;
 
-    dummy.SetSize( size );
+    dummy.SetTextSize( size );
 
     basic_gal.SetTextAttributes( &dummy );
     basic_gal.SetPlotter( aPlotter );
@@ -172,11 +172,12 @@ void DrawGraphicText( EDA_RECT* aClipBox,
     basic_gal.StrokeText( aText, VECTOR2D( aPos ), aOrient * M_PI/1800 );
 }
 
+
 void DrawGraphicHaloText( EDA_RECT* aClipBox, wxDC * aDC,
                           const wxPoint &aPos,
-                          enum EDA_COLOR_T aBgColor,
-                          enum EDA_COLOR_T aColor1,
-                          enum EDA_COLOR_T aColor2,
+                          const COLOR4D aBgColor,
+                          COLOR4D aColor1,
+                          COLOR4D aColor2,
                           const wxString &aText,
                           double aOrient,
                           const wxSize &aSize,
@@ -187,9 +188,10 @@ void DrawGraphicHaloText( EDA_RECT* aClipBox, wxDC * aDC,
                           PLOTTER * aPlotter )
 {
     // Swap color if contrast would be better
-    if( ColorIsLight( aBgColor ) )
+    // TODO: Maybe calculate contrast some way other than brightness
+    if( aBgColor.GetBrightness() > 0.5 )
     {
-        EDA_COLOR_T c = aColor1;
+        COLOR4D c = aColor1;
         aColor1 = aColor2;
         aColor2 = c;
     }
@@ -209,7 +211,7 @@ void DrawGraphicHaloText( EDA_RECT* aClipBox, wxDC * aDC,
  * Function PLOTTER::Text
  *  same as DrawGraphicText, but plot graphic text insteed of draw it
  *  @param aPos = text position (according to aH_justify, aV_justify)
- *  @param aColor (enum EDA_COLOR_T) = text color
+ *  @param aColor (COLOR4D) = text color
  *  @param aText = text to draw
  *  @param aOrient = angle in 0.1 degree
  *  @param aSize = text size (size.x or size.y can be < 0 for mirrored texts)
@@ -223,7 +225,7 @@ void DrawGraphicHaloText( EDA_RECT* aClipBox, wxDC * aDC,
  *  @param aMultilineAllowed = true to plot text as multiline, otherwise single line
  */
 void PLOTTER::Text( const wxPoint&              aPos,
-                    enum EDA_COLOR_T            aColor,
+                    const COLOR4D               aColor,
                     const wxString&             aText,
                     double                      aOrient,
                     const wxSize&               aSize,
@@ -247,8 +249,7 @@ void PLOTTER::Text( const wxPoint&              aPos,
 
     SetCurrentLineWidth( textPensize, aData );
 
-    if( aColor >= 0 )
-        SetColor( aColor );
+    SetColor( aColor );
 
     DrawGraphicText( NULL, NULL, aPos, aColor, aText,
                      aOrient, aSize,

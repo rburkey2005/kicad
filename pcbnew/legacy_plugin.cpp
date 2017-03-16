@@ -434,7 +434,7 @@ void LEGACY_PLUGIN::loadAllSections( bool doAppend )
         {
             unique_ptr<MODULE>    module( new MODULE( m_board ) );
 
-            FPID        fpid;
+            LIB_ID      fpid;
             std::string fpName = StrPurge( line + SZ( "$MODULE" ) );
 
             // The footprint names in legacy libraries can contain the '/' and ':'
@@ -442,7 +442,7 @@ void LEGACY_PLUGIN::loadAllSections( bool doAppend )
             ReplaceIllegalFileNameChars( &fpName );
 
             if( !fpName.empty() )
-                fpid = FPID( fpName );
+                fpid = LIB_ID( fpName );
 
             module->SetFPID( fpid );
 
@@ -660,14 +660,10 @@ void LEGACY_PLUGIN::loadGENERAL()
 
         else if( TESTLINE( "Di" ) )
         {
-            BIU x1 = biuParse( line + SZ( "Di" ), &data );
-            BIU y1 = biuParse( data, &data );
-            BIU x2 = biuParse( data, &data );
-            BIU y2 = biuParse( data );
-
-            EDA_RECT bbbox( wxPoint( x1, y1 ), wxSize( x2-x1, y2-y1 ) );
-
-            m_board->SetBoundingBox( bbbox );
+            biuParse( line + SZ( "Di" ), &data );
+            biuParse( data, &data );
+            biuParse( data, &data );
+            biuParse( data );
         }
 
         /* This is no more usefull, so this info is no more parsed
@@ -1377,7 +1373,7 @@ void LEGACY_PLUGIN::loadMODULE( MODULE* aModule )
 
     wxString msg = wxString::Format(
         wxT( "Missing '$EndMODULE' for MODULE '%s'" ),
-        GetChars( aModule->GetFPID().GetFootprintName() ) );
+        GetChars( aModule->GetFPID().GetLibItemName() ) );
 
     THROW_IO_ERROR( msg );
 }
@@ -1432,7 +1428,7 @@ void LEGACY_PLUGIN::loadPAD( MODULE* aModule )
                                 padchar,
                                 padchar,
                                 m_reader->LineNumber(),
-                                GetChars( aModule->GetFPID().GetFootprintName() )
+                                GetChars( aModule->GetFPID().GetLibItemName() )
                     );
                 THROW_IO_ERROR( m_error );
             }
@@ -1638,7 +1634,7 @@ void LEGACY_PLUGIN::loadMODULE_EDGE( MODULE* aModule )
                         (unsigned char) line[1],
                         (unsigned char) line[1],
                         m_reader->LineNumber(),
-                        GetChars( aModule->GetFPID().GetFootprintName() )
+                        GetChars( aModule->GetFPID().GetLibItemName() )
                         );
         THROW_IO_ERROR( m_error );
     }
@@ -1801,14 +1797,6 @@ void LEGACY_PLUGIN::loadMODULE_TEXT( TEXTE_MODULE* aText )
     // as far forward as needed until the first double quote.
     txt_end = data + ReadDelimitedText( &m_field, data );
 
-#if 1 && defined(DEBUG)
-    if( m_field == wxT( "ARM_C8" ) )
-    {
-        int breakhere = 1;
-        (void) breakhere;
-    }
-#endif
-
     aText->SetText( m_field );
 
     // after switching to strtok, there's no easy coming back because of the
@@ -1832,11 +1820,11 @@ void LEGACY_PLUGIN::loadMODULE_TEXT( TEXTE_MODULE* aText )
     aText->SetType( static_cast<TEXTE_MODULE::TEXT_TYPE>( type ) );
 
     aText->SetPos0( wxPoint( pos0_x, pos0_y ) );
-    aText->SetSize( wxSize( size0_x, size0_y ) );
+    aText->SetTextSize( wxSize( size0_x, size0_y ) );
 
     orient -= ( static_cast<MODULE*>( aText->GetParent() ) )->GetOrientation();
 
-    aText->SetOrientation( orient );
+    aText->SetTextAngle( orient );
 
     // @todo put in accessors?
     // Set a reasonable width:
@@ -2174,7 +2162,7 @@ void LEGACY_PLUGIN::loadPCB_TEXT()
                 sz.y = 5;
             */
 
-            pcbtxt->SetSize( size );
+            pcbtxt->SetTextSize( size );
 
             /* @todo move into an accessor
             // Set a reasonable width:
@@ -2185,9 +2173,9 @@ void LEGACY_PLUGIN::loadPCB_TEXT()
             */
 
             pcbtxt->SetThickness( thickn );
-            pcbtxt->SetOrientation( angle );
+            pcbtxt->SetTextAngle( angle );
 
-            pcbtxt->SetTextPosition( wxPoint( pos_x, pos_y ) );
+            pcbtxt->SetTextPos( wxPoint( pos_x, pos_y ) );
         }
 
         else if( TESTLINE( "De" ) )
@@ -2823,7 +2811,7 @@ void LEGACY_PLUGIN::loadDIMENSION()
 
             dim->Text().SetMirrored( mirror && *mirror == '0' );
             dim->Text().SetThickness( thickn );
-            dim->Text().SetOrientation( orient );
+            dim->Text().SetTextAngle( orient );
         }
 
         else if( TESTLINE( "Sb" ) )
@@ -3318,20 +3306,11 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
             std::string         footprintName = StrPurge( line + SZ( "$MODULE" ) );
 
             // The footprint names in legacy libraries can contain the '/' and ':'
-            // characters which will cause the FPID parser to choke.
+            // characters which will cause the LIB_ID parser to choke.
             ReplaceIllegalFileNameChars( &footprintName );
 
             // set the footprint name first thing, so exceptions can use name.
-            module->SetFPID( FPID( footprintName ) );
-
-#if 0 && defined( DEBUG )
-            printf( "%s\n", footprintName.c_str() );
-            if( footprintName == "QFN40" )
-            {
-                int breakhere = 1;
-                (void) breakhere;
-            }
-#endif
+            module->SetFPID( LIB_ID( footprintName ) );
 
             m_owner->loadMODULE( module.get() );
 
@@ -3339,7 +3318,7 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
 
             // Not sure why this is asserting on debug builds.  The debugger shows the
             // strings are the same.  If it's not really needed maybe it can be removed.
-//            wxASSERT( footprintName == m->GetFPID().GetFootprintName() );
+//            wxASSERT( footprintName == m->GetFPID().GetLibItemName() );
 
             /*
 
@@ -3386,7 +3365,7 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
                     {
                         nameOK = true;
 
-                        m->SetFPID( FPID( newName ) );
+                        m->SetFPID( LIB_ID( newName ) );
                         std::pair<MODULE_ITER, bool> r = m_modules.insert( newName, m );
 
                         wxASSERT_MSG( r.second, wxT( "error doing cache insert using guaranteed unique name" ) );

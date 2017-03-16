@@ -3,8 +3,8 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2014 Dick Hollenbeck, dick@softplc.com
- * Copyright (C) 2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2015-2017 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -32,6 +32,7 @@
 #ifndef COMPONENT_CLASS_H
 #define COMPONENT_CLASS_H
 
+#include <lib_id.h>
 
 #include <sch_field.h>
 #include <transform.h>
@@ -73,7 +74,9 @@ public:
 private:
 
     wxPoint     m_Pos;
-    wxString    m_part_name;    ///< Name to look for in the library, i.e. "74LS00".
+
+    ///< Name and library where symbol was loaded from, i.e. "74xx:74LS00".
+    LIB_ID      m_lib_id;
 
     int         m_unit;         ///< The unit for multiple part per package components.
     int         m_convert;      ///< The alternate body style for components that have more than
@@ -158,8 +161,10 @@ public:
      */
     bool IsMovableFromAnchorPoint() override { return false; }
 
-    void SetPartName( const wxString& aName, PART_LIBS* aLibs=NULL );
-    const wxString& GetPartName() const        { return m_part_name; }
+    void SetLibId( const LIB_ID& aName, PART_LIBS* aLibs=NULL );
+    const LIB_ID& GetLibId() const        { return m_lib_id; }
+
+    PART_REF& GetPartRef() { return m_part; }
 
     /**
      * Function Resolve
@@ -376,7 +381,7 @@ public:
      * Virtual function, from the base class SCH_ITEM::Draw
      */
     void Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-               GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor = UNSPECIFIED_COLOR ) override
+               GR_DRAWMODE aDrawMode, COLOR4D aColor = COLOR4D::UNSPECIFIED ) override
     {
         Draw( aPanel, aDC, aOffset, aDrawMode, aColor, true );
     }
@@ -389,12 +394,12 @@ public:
      * @param aOffset drawing Offset (usually wxPoint(0,0),
      *  but can be different when moving an object)
      * @param aDrawMode GR_OR, GR_XOR, ...
-     * @param aColor UNSPECIFIED_COLOR to use the normal body item color, or use this color if >= 0
+     * @param aColor COLOR4D::UNSPECIFIED to use the normal body item color, or use this color if >= 0
      * @param aDrawPinText = true to draw pin texts, false to draw only the pin shape
      *  usually false to draw a component when moving it, and true otherwise.
      */
     void Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-               GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor,
+               GR_DRAWMODE aDrawMode, COLOR4D aColor,
                bool aDrawPinText );
 
     void SwapData( SCH_ITEM* aItem ) override;
@@ -527,7 +532,7 @@ public:
 
     wxString GetSelectMenuText() const override;
 
-    BITMAP_DEF GetMenuImage() const override { return  add_component_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     void GetNetListItem( NETLIST_OBJECT_LIST& aNetListItems,
                          SCH_SHEET_PATH*      aSheetPath ) override;

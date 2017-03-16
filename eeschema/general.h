@@ -29,7 +29,9 @@
 #ifndef _GENERAL_H_
 #define _GENERAL_H_
 
-#include <colors.h>     // for EDA_COLOR_T
+#include <gal/color4d.h>
+
+using KIGFX::COLOR4D;
 
 class TRANSFORM;
 class SCH_SHEET;
@@ -56,12 +58,12 @@ class SCH_SHEET;
 #define DEFAULTDRAWLINETHICKNESS 6
 
 ///< The default pin len value when creating pins(can be changed in preference menu)
-#define DEFAULTPINLENGTH 200
+#define DEFAULTPINLENGTH 100
 
-///< The default pin len value when creating pins(can be changed in preference menu)
+///< The default pin number size when creating pins(can be changed in preference menu)
 #define DEFAULTPINNUMSIZE 50
 
-///< The default pin len value when creating pins(can be changed in preference menu)
+///< The default pin name size when creating pins(can be changed in preference menu)
 #define DEFAULTPINNAMESIZE 50
 
 #define GR_DEFAULT_DRAWMODE GR_COPY
@@ -97,6 +99,7 @@ typedef enum {
     LAYER_DEVICE_BACKGROUND,
     LAYER_GRID,
     LAYER_BACKGROUND,
+    LAYER_BRIGHTENED,
     LAYERSCH_ID_COUNT
 } LAYERSCH_ID;
 
@@ -137,13 +140,13 @@ void SetDefaultTextSize( int aSize );
 int GetDefaultBusThickness();
 void SetDefaultBusThickness( int aThickness );
 
-EDA_COLOR_T GetLayerColor( LAYERSCH_ID aLayer );
-void        SetLayerColor( EDA_COLOR_T aColor, LAYERSCH_ID aLayer );
+COLOR4D  GetLayerColor( LAYERSCH_ID aLayer );
+void     SetLayerColor( COLOR4D aColor, LAYERSCH_ID aLayer );
 
 // Color to draw selected items
-EDA_COLOR_T GetItemSelectedColor();
+COLOR4D GetItemSelectedColor();
 
 // Color to draw items flagged invisible, in libedit (they are invisible in Eeschema
-EDA_COLOR_T GetInvisibleItemColor();
+COLOR4D GetInvisibleItemColor();
 
 #endif    // _GENERAL_H_

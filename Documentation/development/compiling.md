@@ -6,9 +6,9 @@ software development experience.  This document contains the instructions on how
 from source on the supported platforms.  It is not intended as a guide for installing or building
 [library dependencies](#library_dependencies).  Please consult your platforms documentation for
 installing packages or the source code when building the library dependencies.  Currently the
-supported platforms are Windows Versions 7-10, just about any version of Linux, and OSX
-10.7-10.10.  You may be able to build KiCad on other platforms but it is not supported.  On
-Windows and Linux the [GNU GCC][] is the only supported compiler and on OSX [Clang][] is the
+supported platforms are Windows Versions 7-10, just about any version of Linux, and macOS
+10.9-10.12.  You may be able to build KiCad on other platforms but it is not supported.  On
+Windows and Linux the [GNU GCC][] is the only supported compiler and on macOS [Clang][] is the
 only supported compiler.
 
 [TOC]
@@ -127,7 +127,7 @@ so use at your own risk.
 ## Graphics Context Overlay ## {#overlay_opt}
 
 The USE_WX_OVERLAY option is used to enable the optional wxOverlay class for graphics rendering
-on OSX.  This is enabled on OSX by default and disabled on all other platforms.
+on macOS.  This is enabled on macOS by default and disabled on all other platforms.
 
 ## Scripting Support ## {#scripting_opt}
 
@@ -151,20 +151,15 @@ enabled by default.
 
 ## Integrated Spice simulator ## {#spice_opt}
 
-The KICAD_SPICE option is used to control if the Spice simulator interface for eeschema is built.  When
+The KICAD_SPICE option is used to control if the Spice simulator interface for Eeschema is built.  When
 this option is enabled, it requires [ngspice][] to be available as a shared library.  This option is
 disabled by default.
-
-## New schmatic file format ## {#sch_io_mgr_opt}
-
-The KICAD_USE_SCH_IO_MANAGER option is used to control if the new Eeschema I/O manager for handling
-schematic and symbol library I/O is enabled. This option is disabled by default.
 
 ## STEP/IGES support for the 3D viewer ## {#oce_opt}
 
 The KICAD_USE_OCE is used for the 3D viewer plugin to support STEP and IGES 3D models. Build tools
 and plugins related to OpenCascade Community Edition (OCE) are enabled with this option. When
-enabled it requires [OCE][] to be available, and the location of the installed OCE libary to be
+enabled it requires [OCE][] to be available, and the location of the installed OCE library to be
 passed via the OCE_DIR flag. This option is disabled by default.
 
 ## Demos and Examples ## {#demo_install_opt}
@@ -174,10 +169,25 @@ whether install them or not with the KICAD_INSTALL_DEMOS option. You can also se
 install them with the KICAD_DEMOS variable. On Linux the demos are installed in
 $PREFIX/share/kicad/demos by default.
 
+## Python Scripting Action Menu Support ## {#python_action_menu_opt}
+
+The KICAD_SCRIPTING_ACTION_MENU option allows Python scripts to be added directly to the Pcbnew
+menu.  This option is disabled by default.  Please note that this option is highly experimental
+and can cause Pcbnew to crash if Python scripts create an invalid object state within Pcbnew.
+
 ## Setting the Build Version and Repository Name ## {#build_version_opt}
 
-By default, KiCad builds the version string information from the [git][] repository information
-as follows:
+The KiCad version string is defined by the three CMake variables KICAD_VERSION, KICAD_BRANCH_NAME,
+and KICAD_VERSION_EXTRA.  Variables KICAD_BRANCH_NAME and KICAD_VERSION_EXTRA are defined as empty
+strings and can be set at configuration.  Unless the source branch is a stable release archive,
+KICAD_VERSION is set to "no-vcs-found".  If an optional variable is not define, it is not appended
+to the full version string.  If an optional variable is defined it is appended along with a leading
+'-' to the full version string as follows:
+
+    KICAD_VERSION[-KICAD_BRANCH_NAME][-KICAD_VERSION_EXTRA]
+
+When the version string is set to "no-vcs-found", the build script automatically creates the
+version string information from the [git][] repository information as follows:
 
     (2016-08-26 revision 67230ac)-master
      |                   |        |
@@ -188,10 +198,6 @@ as follows:
      |                   present
      |
      date of commit, or date of build if no .git present
-
-Package developers can set the version string information by using the KICAD_BUILD_VERSION and
-KICAD_REPO_NAME configuration variables during CMake configuration for custom versions and
-when building from the source archives.
 
 # Getting the KiCad Source Code ## {#getting_src}
 
@@ -254,7 +260,7 @@ The easiest way to build KiCad using the [MSYS2][] build environment is to use t
 development branch.  To build the KiCad package, run the `msys2_shell.bat` file located in the
 MSYS2 install path and run the following commands:
 
-    pacman -S git
+    pacman -S base-devel git
     mkdir src
     cd src
     git clone https://github.com/Alexpux/MINGW-packages
@@ -274,7 +280,8 @@ method of building KiCad, your task is significantly more involved.  For 64 bit 
 the `mingw64_shell.bat` file located in the MSYS2 install path.  At the command prompt run the
 the following commands:
 
-    pacman -S mingw-w64-x86_64-cmake \
+    pacman -S base-devel \
+              mingw-w64-x86_64-cmake \
               mingw-w64-x86_64-doxygen \
               mingw-w64-x86_64-gcc \
               mingw-w64-x86_64-python2 \
@@ -329,11 +336,14 @@ configure pacman to prevent upgrading the 64-bit Boost package by adding:
 to your /etc/pacman.conf file.
 
 
-# Building KiCad on OSX # {#build_osx}
+# Building KiCad on macOS # {#build_osx}
 
-Building on OSX is challenging at best.  It typically requires building dependency libraries
+Building on macOS is challenging at best.  It typically requires building dependency libraries
 that require patching in order to work correctly.  For more information on the complexities of
-building KiCad on OSX, see the [OSX bundle build scripts][].
+building and packaging KiCad on macOS, see the [macOS bundle build scripts][].
+
+In the following set of commands, replace the macOS version number (i.e. 10.9) with the desired
+minimum version.  It may be easiest to build for the same version you are running.
 
 Download the wxPython source and build using the following commands:
 
@@ -347,7 +357,7 @@ Download the wxPython source and build using the following commands:
     patch -p0 < path-to-kicad-src/patches/wxwidgets-3.0.2_macosx_unicode_pasteboard.patch
     mkdir build
     cd build
-    export MAC_OS_X_VERSION_MIN_REQUIRED=10.7
+    export MAC_OS_X_VERSION_MIN_REQUIRED=10.9
     ../configure \
         --prefix=`pwd`/../wx-bin \
         --with-opengl \
@@ -362,7 +372,7 @@ Download the wxPython source and build using the following commands:
         --with-zlib=builtin \
         --with-expat=builtin \
         --without-liblzma \
-        --with-macosx-version-min=10.7 \
+        --with-macosx-version-min=10.9 \
         --enable-universal-binary=i386,x86_64 \
         CC=clang \
         CXX=clang++
@@ -375,7 +385,7 @@ Build KiCad using the following commands:
     cd build/release
     cmake -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.7 \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
           -DwxWidgets_CONFIG_EXECUTABLE=path-to-wx-install/bin/wx-config \
           -DKICAD_SCRIPTING=ON \
           -DKICAD_SCRIPTING_MODULES=ON \
@@ -434,5 +444,5 @@ you will have to apply the Boost patches in the KiCad source [patches folder][].
 [MSYS2 64-bit SourceForge repo]: http://sourceforge.net/projects/msys2/files/REPOS/MINGW/x86_64/
 [libcurl]: http://curl.haxx.se/libcurl/
 [GLM]: http://glm.g-truc.net/
-[ngspice]: http://ngspice.sourceforge.net/#
 [git]: https://git-scm.com/
+[OCE]: https://github.com/tpaviot/oce

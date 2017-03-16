@@ -1,9 +1,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2013-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -38,6 +38,8 @@
 #include <kiface_i.h>
 #include <pgm_base.h>
 #include <wxstruct.h>
+#include <menus_helpers.h>
+#include <bitmaps.h>
 
 #include <wx/display.h>
 #include <wx/utils.h>
@@ -200,6 +202,25 @@ bool EDA_BASE_FRAME::Enable( bool enable )
 }
 
 
+void EDA_BASE_FRAME::SetAutoSaveInterval( int aInterval )
+{
+    m_autoSaveInterval = aInterval;
+
+    if( m_autoSaveTimer->IsRunning() )
+    {
+        if( m_autoSaveInterval > 0 )
+        {
+            m_autoSaveTimer->Start( m_autoSaveInterval * 1000, wxTIMER_ONE_SHOT );
+        }
+        else
+        {
+            m_autoSaveTimer->Stop();
+            m_autoSaveState = false;
+        }
+    }
+}
+
+
 void EDA_BASE_FRAME::onAutoSaveTimer( wxTimerEvent& aEvent )
 {
     if( !doAutoSave() )
@@ -219,6 +240,13 @@ void EDA_BASE_FRAME::ReCreateMenuBar()
 
 
 void EDA_BASE_FRAME::ShowChangedLanguage()
+{
+    ReCreateMenuBar();
+    GetMenuBar()->Refresh();
+}
+
+
+void EDA_BASE_FRAME::ShowChangedIcons()
 {
     ReCreateMenuBar();
     GetMenuBar()->Refresh();
@@ -611,4 +639,53 @@ void EDA_BASE_FRAME::CheckForAutoSaveFile( const wxFileName& aFileName,
         // Remove the auto save file when using the previous file as is.
         wxRemoveFile( autoSaveFileName.GetFullPath() );
     }
+}
+
+
+bool EDA_BASE_FRAME::PostCommandMenuEvent( int evt_type )
+{
+    if( evt_type != 0 )
+    {
+        wxCommandEvent evt( wxEVT_COMMAND_MENU_SELECTED );
+        evt.SetEventObject( this );
+        evt.SetId( evt_type );
+        wxPostEvent( this, evt );
+        return true;
+    }
+
+    return false;
+}
+
+
+void EDA_BASE_FRAME::OnChangeIconsOptions( wxCommandEvent& event )
+{
+    if( event.GetId() == ID_KICAD_SELECT_ICONS_IN_MENUS )
+    {
+        Pgm().SetUseIconsInMenus( event.IsChecked() );
+    }
+
+    ReCreateMenuBar();
+}
+
+
+void EDA_BASE_FRAME::AddMenuIconsOptions( wxMenu* MasterMenu )
+{
+    wxMenu*      menu = NULL;
+    wxMenuItem*  item = MasterMenu->FindItem( ID_KICAD_SELECT_ICONS_OPTIONS );
+
+    if( item )     // This menu exists, do nothing
+        return;
+
+    menu = new wxMenu;
+
+    menu->Append( new wxMenuItem( menu, ID_KICAD_SELECT_ICONS_IN_MENUS,
+                  _( "Icons in Menus" ), wxEmptyString,
+                  wxITEM_CHECK ) );
+    menu->Check( ID_KICAD_SELECT_ICONS_IN_MENUS, Pgm().GetUseIconsInMenus() );
+
+    AddMenuItem( MasterMenu, menu,
+                 ID_KICAD_SELECT_ICONS_OPTIONS,
+                 _( "Icons Options" ),
+                 _( "Select show icons in menus and icons sizes" ),
+                 KiBitmap( hammer_xpm ) );
 }

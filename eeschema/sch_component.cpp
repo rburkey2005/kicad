@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -36,6 +36,7 @@
 #include <schframe.h>
 #include <plot_common.h>
 #include <msgpanel.h>
+#include <bitmaps.h>
 
 #include <general.h>
 #include <class_library.h>
@@ -102,7 +103,7 @@ static LIB_PART* dummy()
 
         LIB_TEXT* text = new LIB_TEXT( part );
 
-        text->SetSize( wxSize( 150, 150 ) );
+        text->SetTextSize( wxSize( 150, 150 ) );
         text->SetText( wxString( wxT( "??" ) ) );
 
         part->AddDrawItem( square );
@@ -130,7 +131,7 @@ SCH_COMPONENT::SCH_COMPONENT( LIB_PART& aPart, SCH_SHEET_PATH* sheet, int unit,
 
     m_unit      = unit;
     m_convert   = convert;
-    m_part_name = aPart.GetName();
+    m_lib_id.SetLibItemName( aPart.GetName(), false );
     m_part      = aPart.SharedPtr();
     m_currentSheetPath = NULL;
     m_fieldsAutoplaced = AUTOPLACED_NO;
@@ -171,9 +172,11 @@ SCH_COMPONENT::SCH_COMPONENT( LIB_PART& aPart, SCH_SHEET_PATH* sheet, int unit,
             schField = AddField( fld );
         }
 
-        schField->SetTextPosition( m_Pos + it->GetTextPosition() );
         schField->ImportValues( *it );
         schField->SetText( it->GetText() );
+
+        // Now the field is initialized, place it to the right position:
+        schField->SetTextPos( m_Pos + it->GetTextPos() );
     }
 
     wxString msg = aPart.GetReferenceField().GetText();
@@ -187,9 +190,8 @@ SCH_COMPONENT::SCH_COMPONENT( LIB_PART& aPart, SCH_SHEET_PATH* sheet, int unit,
     msg += wxT( "?" );
     SetRef( sheet, msg );
 
-    // Use the schematic component name instead of the library value field
-    // name.
-    GetField( VALUE )->SetText( GetPartName() );
+    // Use the schematic component name instead of the library value field name.
+    GetField( VALUE )->SetText( GetLibId().GetLibItemName() );
 }
 
 
@@ -201,7 +203,7 @@ SCH_COMPONENT::SCH_COMPONENT( const SCH_COMPONENT& aComponent ) :
     m_Pos       = aComponent.m_Pos;
     m_unit      = aComponent.m_unit;
     m_convert   = aComponent.m_convert;
-    m_part_name = aComponent.m_part_name;
+    m_lib_id    = aComponent.m_lib_id;
     m_part      = aComponent.m_part;
 
     SetTimeStamp( aComponent.m_TimeStamp );
@@ -257,11 +259,11 @@ EDA_ITEM* SCH_COMPONENT::Clone() const
 }
 
 
-void SCH_COMPONENT::SetPartName( const wxString& aName, PART_LIBS* aLibs )
+void SCH_COMPONENT::SetLibId( const LIB_ID& aLibId, PART_LIBS* aLibs )
 {
-    if( m_part_name != aName )
+    if( m_lib_id != aLibId )
     {
-        m_part_name = aName;
+        m_lib_id = aLibId;
         SetModified();
 
         if( aLibs )
@@ -276,7 +278,7 @@ bool SCH_COMPONENT::Resolve( PART_LIBS* aLibs )
 {
     // I've never been happy that the actual individual PART_LIB is left up to
     // flimsy search path ordering.  None-the-less find a part based on that design:
-    if( LIB_PART* part = aLibs->FindLibPart( m_part_name ) )
+    if( LIB_PART* part = aLibs->FindLibPart( m_lib_id ) )
     {
         m_part = part->SharedPtr();
         return true;
@@ -285,17 +287,54 @@ bool SCH_COMPONENT::Resolve( PART_LIBS* aLibs )
     return false;
 }
 
+// Helper sort function, used in SCH_COMPONENT::ResolveAll, to sort
+// sch component by lib_id
+static bool sort_by_libid( const SCH_COMPONENT* ref, SCH_COMPONENT* cmp )
+{
+    return ref->GetLibId() < cmp->GetLibId();
+}
 
 void SCH_COMPONENT::ResolveAll(
         const SCH_COLLECTOR& aComponents, PART_LIBS* aLibs )
 {
+    // Usually, many components use the same part lib.
+    // to avoid too long calculation time the list of components is grouped
+    // and once the lib part is found for one member of a group, it is also
+    // set for all other members of this group
+    std::vector<SCH_COMPONENT*> cmp_list;
+
+    // build the cmp list.
     for( int i = 0;  i < aComponents.GetCount();  ++i )
     {
         SCH_COMPONENT* cmp = dynamic_cast<SCH_COMPONENT*>( aComponents[i] );
         wxASSERT( cmp );
 
         if( cmp )   // cmp == NULL should not occur.
-            cmp->Resolve( aLibs );
+            cmp_list.push_back( cmp );
+    }
+
+    // sort it by lib part. Cmp will be grouped by same lib part.
+    std::sort( cmp_list.begin(), cmp_list.end(), sort_by_libid );
+
+    LIB_ID curr_libid;
+
+    for( unsigned ii = 0; ii < cmp_list.size (); ++ii )
+    {
+        SCH_COMPONENT* cmp = cmp_list[ii];
+        curr_libid = cmp->m_lib_id;
+        cmp->Resolve( aLibs );
+
+        // Propagate the m_part pointer to other members using the same lib_id
+        for( unsigned jj = ii+1; jj < cmp_list.size (); ++jj )
+        {
+            SCH_COMPONENT* next_cmp = cmp_list[jj];
+
+            if( curr_libid != next_cmp->m_lib_id )
+                break;
+
+            next_cmp->m_part = cmp->m_part;
+            ii = jj;
+        }
     }
 }
 
@@ -347,21 +386,32 @@ int SCH_COMPONENT::GetUnitCount() const
 
 
 void SCH_COMPONENT::Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-                          GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor,
+                          GR_DRAWMODE aDrawMode, COLOR4D aColor,
                           bool aDrawPinText )
 {
+    auto opts = PART_DRAW_OPTIONS::Default();
+    opts.draw_mode = aDrawMode;
+    opts.color = aColor;
+    opts.transform = m_transform;
+    opts.show_pin_text = aDrawPinText;
+    opts.draw_visible_fields = false;
+    opts.draw_hidden_fields = false;
+
     if( PART_SPTR part = m_part.lock() )
     {
         // Draw pin targets if part is being dragged
         bool dragging = aPanel->GetScreen()->GetCurItem() == this && aPanel->IsMouseCaptured();
 
-        part->Draw( aPanel, aDC, m_Pos + aOffset, m_unit, m_convert, aDrawMode, aColor,
-                    m_transform, aDrawPinText, false, false, dragging ? NULL : &m_isDangling );
+        if( !dragging )
+        {
+            opts.dangling = m_isDangling;
+        }
+
+        part->Draw( aPanel, aDC, m_Pos + aOffset, m_unit, m_convert, opts );
     }
     else    // Use dummy() part if the actual cannot be found.
     {
-        dummy()->Draw( aPanel, aDC, m_Pos + aOffset, 0, 0, aDrawMode, aColor,
-                       m_transform, aDrawPinText, false );
+        dummy()->Draw( aPanel, aDC, m_Pos + aOffset, 0, 0, opts );
     }
 
     SCH_FIELD* field = GetField( REFERENCE );
@@ -541,11 +591,11 @@ void SCH_COMPONENT::SetRef( const SCH_SHEET_PATH* sheet, const wxString& ref )
     SCH_FIELD* rf = GetField( REFERENCE );
 
     if( rf->GetText().IsEmpty()
-      || ( abs( rf->GetTextPosition().x - m_Pos.x ) +
-           abs( rf->GetTextPosition().y - m_Pos.y ) > 10000 ) )
+      || ( abs( rf->GetTextPos().x - m_Pos.x ) +
+           abs( rf->GetTextPos().y - m_Pos.y ) > 10000 ) )
     {
         // move it to a reasonable position
-        rf->SetTextPosition( m_Pos + wxPoint( 50, 50 ) );
+        rf->SetTextPos( m_Pos + wxPoint( 50, 50 ) );
     }
 
     rf->SetText( ref );  // for drawing.
@@ -722,7 +772,7 @@ void SCH_COMPONENT::SwapData( SCH_ITEM* aItem )
 
     SCH_COMPONENT* component = (SCH_COMPONENT*) aItem;
 
-    std::swap( m_part_name, component->m_part_name );
+    std::swap( m_lib_id, component->m_lib_id );
     std::swap( m_part, component->m_part );
     std::swap( m_Pos, component->m_Pos );
     std::swap( m_unit, component->m_unit );
@@ -1007,7 +1057,7 @@ void SCH_COMPONENT::Show( int nestLevel, std::ostream& os ) const
     NestedSpace( nestLevel, os ) << '<' << GetClass().Lower().mb_str()
                                  << " ref=\"" << TO_UTF8( GetField( 0 )->GetName() )
                                  << '"' << " chipName=\""
-                                 << TO_UTF8( GetPartName() ) << '"' << m_Pos
+                                 << GetLibId().Format() << '"' << m_Pos
                                  << " layer=\"" << m_Layer
                                  << '"' << ">\n";
 
@@ -1055,7 +1105,7 @@ bool SCH_COMPONENT::Save( FILE* f ) const
             name1 = toUTFTildaText( GetField( REFERENCE )->GetText() );
     }
 
-    wxString part_name = GetPartName();
+    wxString part_name = GetLibId().GetLibItemName();
 
     if( part_name.size() )
     {
@@ -1200,16 +1250,16 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
 
     if( partname != NULL_STRING )
     {
-        SetPartName( partname );
+        m_lib_id.SetLibItemName( partname, false );
 
         if( !newfmt )
             GetField( VALUE )->SetText( partname );
     }
     else
     {
-        m_part_name.Empty();
+        m_lib_id.clear();
         GetField( VALUE )->Empty();
-        GetField( VALUE )->SetOrientation( TEXT_ORIENT_HORIZ );
+        GetField( VALUE )->SetTextAngle( TEXT_ANGLE_HORIZ );
         GetField( VALUE )->SetVisible( false );
     }
 
@@ -1276,7 +1326,7 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
             for( int i = 0; i<GetFieldCount();  i++ )
             {
                 if( GetField( i )->GetText().IsEmpty() )
-                    GetField( i )->SetTextPosition( m_Pos );
+                    GetField( i )->SetTextPos( m_Pos );
             }
         }
         else if( line[0] == 'A' && line[1] == 'R' )
@@ -1386,17 +1436,17 @@ bool SCH_COMPONENT::Load( LINE_READER& aLine, wxString& aErrorMsg )
                 continue;
             }
 
-            GetField( fieldNdx )->SetTextPosition( wxPoint( x, y ) );
-            GetField( fieldNdx )->SetAttributes( attr );
+            GetField( fieldNdx )->SetTextPos( wxPoint( x, y ) );
+            GetField( fieldNdx )->SetVisible( !attr );
 
             if( (w == 0 ) || (ii == 4) )
                 w = GetDefaultTextSize();
 
-            GetField( fieldNdx )->SetSize( wxSize( w, w ) );
-            GetField( fieldNdx )->SetOrientation( TEXT_ORIENT_HORIZ );
+            GetField( fieldNdx )->SetTextSize( wxSize( w, w ) );
+            GetField( fieldNdx )->SetTextAngle( TEXT_ANGLE_HORIZ );
 
             if( char1[0] == 'V' )
-                GetField( fieldNdx )->SetOrientation( TEXT_ORIENT_VERT );
+                GetField( fieldNdx )->SetTextAngle( TEXT_ANGLE_VERT );
 
             if( ii >= 7 )
             {
@@ -1529,7 +1579,7 @@ void SCH_COMPONENT::GetMsgPanelInfo( MSG_PANEL_ITEMS& aList )
     // part and alias can differ if alias is not the root
     if( PART_SPTR part = m_part.lock() )
     {
-        LIB_ALIAS* alias = part->GetAlias( GetPartName() );
+        LIB_ALIAS* alias = part->GetAlias( GetLibId().GetLibItemName() );
 
         if( !alias )
             return;
@@ -1544,7 +1594,7 @@ void SCH_COMPONENT::GetMsgPanelInfo( MSG_PANEL_ITEMS& aList )
         aList.push_back( MSG_PANEL_ITEM( msg, GetField( VALUE )->GetShownText(), DARKCYAN ) );
 
         // Display component reference in library and library
-        aList.push_back( MSG_PANEL_ITEM( _( "Component" ), GetPartName(), BROWN ) );
+        aList.push_back( MSG_PANEL_ITEM( _( "Component" ), GetLibId().GetLibItemName(), BROWN ) );
 
         if( alias->GetName() != part->GetName() )
             aList.push_back( MSG_PANEL_ITEM( _( "Alias of" ), part->GetName(), BROWN ) );
@@ -1566,6 +1616,12 @@ void SCH_COMPONENT::GetMsgPanelInfo( MSG_PANEL_ITEMS& aList )
 }
 
 
+BITMAP_DEF SCH_COMPONENT::GetMenuImage() const
+{
+    return add_component_xpm;
+}
+
+
 void SCH_COMPONENT::MirrorY( int aYaxis_position )
 {
     int dx = m_Pos.x;
@@ -1577,9 +1633,9 @@ void SCH_COMPONENT::MirrorY( int aYaxis_position )
     for( int ii = 0; ii < GetFieldCount(); ii++ )
     {
         // Move the fields to the new position because the component itself has moved.
-        wxPoint pos = GetField( ii )->GetTextPosition();
+        wxPoint pos = GetField( ii )->GetTextPos();
         pos.x -= dx;
-        GetField( ii )->SetTextPosition( pos );
+        GetField( ii )->SetTextPos( pos );
     }
 }
 
@@ -1595,9 +1651,9 @@ void SCH_COMPONENT::MirrorX( int aXaxis_position )
     for( int ii = 0; ii < GetFieldCount(); ii++ )
     {
         // Move the fields to the new position because the component itself has moved.
-        wxPoint pos = GetField( ii )->GetTextPosition();
+        wxPoint pos = GetField( ii )->GetTextPos();
         pos.y -= dy;
-        GetField( ii )->SetTextPosition( pos );
+        GetField( ii )->SetTextPos( pos );
     }
 }
 
@@ -1613,10 +1669,10 @@ void SCH_COMPONENT::Rotate( wxPoint aPosition )
     for( int ii = 0; ii < GetFieldCount(); ii++ )
     {
         // Move the fields to the new position because the component itself has moved.
-        wxPoint pos = GetField( ii )->GetTextPosition();
+        wxPoint pos = GetField( ii )->GetTextPos();
         pos.x -= prev.x - m_Pos.x;
         pos.y -= prev.y - m_Pos.y;
-        GetField( ii )->SetTextPosition( pos );
+        GetField( ii )->SetTextPos( pos );
     }
 }
 
@@ -1783,7 +1839,7 @@ void SCH_COMPONENT::GetConnectionPoints( std::vector< wxPoint >& aPoints ) const
     {
         wxCHECK_RET( 0,
                  wxT( "Cannot add connection points to list.  Cannot find component <" ) +
-                 GetPartName() + wxT( "> in any of the loaded libraries." ) );
+                     GetLibId().GetLibItemName() + wxT( "> in any of the loaded libraries." ) );
     }
 }
 
@@ -1806,7 +1862,7 @@ wxString SCH_COMPONENT::GetSelectMenuText() const
 {
     wxString tmp;
     tmp.Printf( _( "Component %s, %s" ),
-                GetChars( GetPartName() ),
+                GetChars( GetLibId().GetLibItemName() ),
                 GetChars( GetField( REFERENCE )->GetShownText() ) );
     return tmp;
 }
@@ -1981,7 +2037,7 @@ SCH_ITEM& SCH_COMPONENT::operator=( const SCH_ITEM& aItem )
 
         SCH_COMPONENT* c = (SCH_COMPONENT*) &aItem;
 
-        m_part_name = c->m_part_name;
+        m_lib_id    = c->m_lib_id;
         m_part      = c->m_part;
         m_Pos       = c->m_Pos;
         m_unit      = c->m_unit;

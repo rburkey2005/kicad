@@ -42,7 +42,6 @@
 #include <wx/aui/aui.h>
 #include <wx/docview.h>
 
-#include <colors.h>
 #include <fctsys.h>
 #include <common.h>
 #include <layers_id_colors_and_visibility.h>
@@ -84,6 +83,7 @@ class TITLE_BLOCK;
 class MSG_PANEL_ITEM;
 class TOOL_MANAGER;
 class TOOL_DISPATCHER;
+class ACTIONS;
 
 
 enum id_librarytype {
@@ -209,7 +209,7 @@ public:
 
     bool Enable( bool enable ) override;
 
-    void SetAutoSaveInterval( int aInterval ) { m_autoSaveInterval = aInterval; }
+    void SetAutoSaveInterval( int aInterval );
 
     int GetAutoSaveInterval() const { return m_autoSaveInterval; }
 
@@ -406,6 +406,38 @@ public:
      * redraws the menus and what not in current language.
      */
     virtual void ShowChangedLanguage();
+
+    /**
+     * Function OnChangeIconsOptions
+     * Selects the current icons options in menus (or toolbars) in Kicad
+     * (the default for toolbars/menus is 26x26 pixels, and shows icons in menus).
+     */
+    virtual void OnChangeIconsOptions( wxCommandEvent& event );
+
+    /**
+     * Function ShowChangedIcons
+     * redraws items menus after a icon was changed option.
+     */
+    virtual void ShowChangedIcons();
+
+    /**
+     * Function AddMenuIconsOptions
+     * creates a menu list for icons in menu and icon sizes choice,
+     * and add it as submenu to \a MasterMenu.
+     *
+     * @param MasterMenu The main menu. The sub menu list will be accessible from the menu
+     *                   item with id ID_KICAD_SELECT_ICONS_OPTIONS
+     */
+    void AddMenuIconsOptions( wxMenu* MasterMenu );
+
+
+    /**
+     * Function PostCommandMenuEvent
+     *
+     * Post a menu event to the frame, which can be used to trigger actions
+     * bound to menu items.
+     */
+    bool PostCommandMenuEvent( int evt_type );
 };
 
 

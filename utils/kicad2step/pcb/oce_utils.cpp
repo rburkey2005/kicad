@@ -31,6 +31,7 @@
 
 #include "oce_utils.h"
 #include "kicadpad.h"
+#include "streamwrapper.h"
 
 #include <IGESCAFControl_Reader.hxx>
 #include <IGESCAFControl_Writer.hxx>
@@ -52,6 +53,7 @@
 
 #include <BRep_Tool.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepBuilderAPI.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -152,7 +154,7 @@ enum FormatType
 
 FormatType fileType( const char* aFileName )
 {
-    wxFileName lfile( aFileName );
+    wxFileName lfile( wxString::FromUTF8Unchecked( aFileName ) );
 
     if( !lfile.FileExists() )
     {
@@ -171,16 +173,15 @@ FormatType fileType( const char* aFileName )
     else if( ext == "emn" || ext == "EMN" )
         return FMT_EMN;     // PCB assembly
 
-    std::ifstream ifile;
-    ifile.open( aFileName );
+    OPEN_ISTREAM( ifile, aFileName );
 
-    if( !ifile.is_open() )
+    if( ifile.fail() )
         return FMT_NONE;
 
     char iline[82];
     memset( iline, 0, 82 );
     ifile.getline( iline, 82 );
-    ifile.close();
+    CLOSE_STREAM( ifile );
     iline[81] = 0;  // ensure NULL termination when string is too long
 
     // check for STEP in Part 21 format
@@ -218,6 +219,7 @@ PCBMODEL::PCBMODEL()
     m_thickness = THICKNESS_DEFAULT;
     m_minx = 1.0e10;    // absurdly large number; any valid PCB X value will be smaller
     m_mincurve = m_curves.end();
+    BRepBuilderAPI::Precision( 1.0e-6 );
     return;
 }
 

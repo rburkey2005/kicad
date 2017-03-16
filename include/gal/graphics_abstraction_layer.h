@@ -2,7 +2,7 @@
  * This program source code file is part of KICAD, a free EDA CAD application.
  *
  * Copyright (C) 2012 Torsten Hueter, torstenhtr <at> gmx.de
- * Copyright (C) 2016 Kicad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2016-2017 Kicad Developers, see change_log.txt for contributors.
  *
  * Graphics Abstraction Layer (GAL) - base class
  *
@@ -36,18 +36,14 @@
 #include <gal/color4d.h>
 #include <gal/definitions.h>
 #include <gal/stroke_font.h>
+#include <gal/gal_display_options.h>
 #include <newstroke_font.h>
+
+class SHAPE_LINE_CHAIN;
+class SHAPE_POLY_SET;
 
 namespace KIGFX
 {
-/**
- * GridStyle: Type definition of the grid style
- */
-enum GRID_STYLE
-{
-    GRID_STYLE_LINES,   ///< Use lines for the grid
-    GRID_STYLE_DOTS     ///< Use dots for the grid
-};
 
 /**
  * @brief Class GAL is the abstract interface for drawing on a 2D-surface.
@@ -59,11 +55,11 @@ enum GRID_STYLE
  * for drawing purposes these are transformed to screen units with this layer. So zooming is handled here as well.
  *
  */
-class GAL
+class GAL: GAL_DISPLAY_OPTIONS_OBSERVER
 {
 public:
     // Constructor / Destructor
-    GAL();
+    GAL( GAL_DISPLAY_OPTIONS& aOptions );
     virtual ~GAL();
 
     /// @brief Returns the initalization status for the canvas.
@@ -116,6 +112,7 @@ public:
      */
     virtual void DrawPolyline( const std::deque<VECTOR2D>& aPointList ) {};
     virtual void DrawPolyline( const VECTOR2D aPointList[], int aListSize ) {};
+    virtual void DrawPolyline( const SHAPE_LINE_CHAIN& aLineChain ) {};
 
     /**
      * @brief Draw a circle using world coordinates.
@@ -137,6 +134,23 @@ public:
     DrawArc( const VECTOR2D& aCenterPoint, double aRadius, double aStartAngle, double aEndAngle ) {};
 
     /**
+     * @brief Draw an arc segment.
+     *
+     * This method differs from DrawArc() in what happens when fill/stroke are on or off.
+     * DrawArc() draws a "pie piece" when fill is turned on, and a thick stroke when fill is off.
+     * DrawArcSegment() with fill *on* behaves like DrawArc() with fill *off*.
+     * DrawArcSegment() with fill *off* draws the outline of what it would have drawn with fill on.
+     *
+     * @param aCenterPoint  is the center point of the arc.
+     * @param aRadius       is the arc radius.
+     * @param aStartAngle   is the start angle of the arc.
+     * @param aEndAngle     is the end angle of the arc.
+     */
+    virtual void
+    DrawArcSegment( const VECTOR2D& aCenterPoint, double aRadius, double aStartAngle,
+                   double aEndAngle, double aWidth ) {};
+
+    /**
      * @brief Draw a rectangle.
      *
      * @param aStartPoint   is the start point of the rectangle.
@@ -151,6 +165,7 @@ public:
      */
     virtual void DrawPolygon( const std::deque<VECTOR2D>& aPointList ) {};
     virtual void DrawPolygon( const VECTOR2D aPointList[], int aListSize ) {};
+    virtual void DrawPolygon( const SHAPE_POLY_SET& aPolySet ) {};
 
     /**
      * @brief Draw a cubic bezier spline.
@@ -309,7 +324,15 @@ public:
                              double aRotationAngle )
     {
         // Fallback: use stroke font
+
+        // Handle flipped view
+        if( globalFlipX )
+            textProperties.m_mirrored = !textProperties.m_mirrored;
+
         StrokeText( aText, aPosition, aRotationAngle );
+
+        if( globalFlipX )
+            textProperties.m_mirrored = !textProperties.m_mirrored;
     }
 
     /**
@@ -690,16 +713,10 @@ public:
      */
     inline void SetFlip( bool xAxis, bool yAxis )
     {
-        if( xAxis )
-            flipX = -1.0;   // flipped
-        else
-            flipX = 1.0;    // regular
-
-        if( yAxis )
-            flipY = -1.0;   // flipped
-        else
-            flipY = 1.0;    // regular
+        globalFlipX = xAxis;
+        globalFlipY = yAxis;
     }
+
 
     // ---------------------------
     // Buffer manipulation methods
@@ -767,16 +784,6 @@ public:
     }
 
     /**
-     * @brief Set the threshold for grid drawing.
-     *
-     * @param aThreshold is the minimum grid cell size (in pixels) for which the grid is drawn.
-     */
-    inline void SetGridDrawThreshold( int aThreshold )
-    {
-        gridDrawThreshold = aThreshold;
-    }
-
-    /**
      * @brief Set the grid size.
      *
      * @param aGridSize is a vector containing the grid size in x and y direction.
@@ -810,6 +817,24 @@ public:
     }
 
     /**
+     * @brief Set the axes color.
+     *
+     * @param aAxesColor is the color to draw the axes if enabled.
+     */
+    inline void SetAxesColor( const COLOR4D& aAxesColor )
+    {
+        axesColor = aAxesColor;
+    }
+
+    /**
+     * @brief Enables drawing the axes.
+     */
+    inline void SetAxesEnabled( bool aAxesEnabled )
+    {
+        axesEnabled = aAxesEnabled;
+    }
+
+    /**
      * @brief Draw every tick line wider.
      *
      * @param aInterval increase the width of every aInterval line, if 0 do not use this feature.
@@ -829,16 +854,6 @@ public:
         return gridLineWidth;
     }
 
-    /**
-     * @brief Set the grid line width.
-     *
-     * @param aGridLineWidth is the rid line width.
-     */
-    inline void SetGridLineWidth( double aGridLineWidth )
-    {
-        gridLineWidth = aGridLineWidth;
-    }
-
     ///> @brief Draw the grid
     virtual void DrawGrid();
 
@@ -850,24 +865,6 @@ public:
      * @return The nearest grid point in world coordinates.
      */
     VECTOR2D GetGridPoint( const VECTOR2D& aPoint ) const;
-
-    /**
-     * @brief Change the grid display style.
-     *
-     * @param aGridStyle is the new style for grid.
-     */
-    virtual void SetGridStyle( GRID_STYLE aGridStyle )
-    {
-        gridStyle = aGridStyle;
-    }
-
-    /**
-     * @brief Returns the current grid drawing style.
-     */
-    virtual GRID_STYLE GetGridStyle() const
-    {
-        return gridStyle;
-    }
 
     /**
      * @brief Compute the point position in world coordinates from given screen coordinates.
@@ -899,6 +896,15 @@ public:
     inline void SetCursorEnabled( bool aCursorEnabled )
     {
         isCursorEnabled = aCursorEnabled;
+    }
+
+    /**
+     * @brief Returns information about cursor visibility.
+     * @return True if cursor is visible.
+     */
+    bool IsCursorEnabled() const
+    {
+        return isCursorEnabled;
     }
 
     /**
@@ -967,6 +973,10 @@ public:
     static const double METRIC_UNIT_LENGTH;
 
 protected:
+
+    GAL_DISPLAY_OPTIONS&    options;
+    UTIL::LINK              observerLink;
+
     std::stack<double> depthStack;             ///< Stored depth values
     VECTOR2I           screenSize;             ///< Screen size in screen coordinates
 
@@ -978,8 +988,9 @@ protected:
     MATRIX3x3D         worldScreenMatrix;      ///< World transformation
     MATRIX3x3D         screenWorldMatrix;      ///< Screen transformation
     double             worldScale;             ///< The scale factor world->screen
-    double             flipX;                  ///< Flag for X axis flipping
-    double             flipY;                  ///< Flag for Y axis flipping
+
+    bool globalFlipX;                          ///< Flag for X axis flipping
+    bool globalFlipY;                          ///< Flag for Y axis flipping
 
     double             lineWidth;              ///< The line width
 
@@ -999,9 +1010,11 @@ protected:
     VECTOR2D           gridOrigin;             ///< The grid origin
     VECTOR2D           gridOffset;             ///< The grid offset to compensate cursor position
     COLOR4D            gridColor;              ///< Color of the grid
+    COLOR4D            axesColor;              ///< Color of the axes
+    bool               axesEnabled;            ///< Should the axes be drawn
     int                gridTick;               ///< Every tick line gets the double width
     double             gridLineWidth;          ///< Line width of the grid
-    int                gridDrawThreshold;      ///< Minimum screen size of the grid (pixels)
+    int                gridMinSpacing;         ///< Minimum screen size of the grid (pixels)
                                                ///< below which the grid is not drawn
 
     // Cursor settings
@@ -1020,6 +1033,13 @@ protected:
     }
 
     /**
+     * @brief compute minimum grid spacing from the grid settings
+     *
+     * @return the minimum spacing to use for drawing the grid
+     */
+    double computeMinGridSpacing() const;
+
+    /**
      * @brief Draw a grid line (usually a simplified line function).
      *
      * @param aStartPoint is the start point of the line.
@@ -1033,6 +1053,25 @@ protected:
 
     /// Depth level on which the grid is drawn
     static const int GRID_DEPTH;
+
+    // ---------------
+    // Settings observer interface
+    // ---------------
+    /**
+     * Handler for observer settings changes
+     */
+    void OnGalDisplayOptionsChanged( const GAL_DISPLAY_OPTIONS& aOptions ) override;
+
+    /**
+     * Function updatedGalDisplayOptions
+     *
+     * @brief handler for updated display options. Derived classes
+     * should call up to this to set base-class methods.
+     *
+     * @return true if the new settings changed something. Derived classes
+     * can use this information to refresh themselves
+     */
+    virtual bool updatedGalDisplayOptions( const GAL_DISPLAY_OPTIONS& aOptions );
 
 private:
     struct TEXT_PROPERTIES

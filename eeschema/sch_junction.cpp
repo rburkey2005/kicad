@@ -34,6 +34,7 @@
 #include <common.h>
 #include <richio.h>
 #include <plot_common.h>
+#include <bitmaps.h>
 
 #include <sch_junction.h>
 #include <class_netlist_object.h>
@@ -110,14 +111,14 @@ const EDA_RECT SCH_JUNCTION::GetBoundingBox() const
 
 
 void SCH_JUNCTION::Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-                         GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor )
+                         GR_DRAWMODE aDrawMode, COLOR4D aColor )
 {
-    EDA_COLOR_T color;
+    COLOR4D color;
 
-    if( aColor >= 0 )
+    if( aColor != COLOR4D::UNSPECIFIED )
         color = aColor;
     else
-        color = GetLayerColor( m_Layer );
+        color = GetLayerColor( GetState( BRIGHTENED ) ? LAYER_BRIGHTENED : m_Layer );
 
     GRSetDrawMode( aDC, aDrawMode );
 
@@ -232,4 +233,9 @@ void SCH_JUNCTION::Plot( PLOTTER* aPlotter )
 {
     aPlotter->SetColor( GetLayerColor( GetLayer() ) );
     aPlotter->Circle( m_pos, GetSymbolSize(), FILLED_SHAPE );
+}
+
+BITMAP_DEF SCH_JUNCTION::GetMenuImage() const
+{
+    return add_junction_xpm;
 }

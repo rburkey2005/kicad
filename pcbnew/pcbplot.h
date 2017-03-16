@@ -1,7 +1,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -104,7 +104,7 @@ public:
     void SetLayerSet( LSET aLayerMask )     { m_layerMask = aLayerMask; }
     void Plot_Edges_Modules();
     void Plot_1_EdgeModule( EDGE_MODULE* aEdge );
-    void PlotTextModule( TEXTE_MODULE* aTextMod, EDA_COLOR_T aColor );
+    void PlotTextModule( TEXTE_MODULE* aTextMod, COLOR4D aColor );
 
     /*
      * Plot field of a module (footprint)
@@ -127,7 +127,7 @@ public:
      * and be drawn as a non filled item although the plot mode is filled
      * color and plot mode are needed by this function
      */
-    void PlotPad( D_PAD* aPad, EDA_COLOR_T aColor, EDA_DRAW_MODE_T aPlotMode );
+    void PlotPad( D_PAD* aPad, COLOR4D aColor, EDA_DRAW_MODE_T aPlotMode );
 
     /**
      * plot items like text and graphics,
@@ -151,7 +151,7 @@ public:
      * and in B&W mode, is plotted as white but other colors are plotted in BLACK
      * so the returned color is LIGHTGRAY when the layer color is WHITE
      */
-    EDA_COLOR_T getColor( LAYER_NUM aLayer );
+    COLOR4D getColor( LAYER_NUM aLayer );
 
 private:
     /** Helper function to plot a single drill mark. It compensate and clamp
@@ -264,12 +264,9 @@ const wxString GetGerberProtelExtension( LAYER_NUM aLayer );
  * the "%TF.FileFunction" attribute prefix and the "*%" suffix.
  * @param aBoard = the board, needed to get the total count of copper layers
  * @param aLayer = the layer number to create the attribute for
- * @param aUseX1CompatibilityMode = true to use a file function attribute like G04 comment
- *      , compatible with X1 (rx274) notation (G04#@!TF.FileFunction)
  * @return The attribute, as a text string
  */
-const wxString GetGerberFileFunctionAttribute( const BOARD *aBoard,
-                LAYER_NUM aLayer, bool aUseX1CompatibilityMode );
+const wxString GetGerberFileFunctionAttribute( const BOARD *aBoard, LAYER_NUM aLayer );
 
 /**
  * Function AddGerberX2Attribute
@@ -279,7 +276,11 @@ const wxString GetGerberFileFunctionAttribute( const BOARD *aBoard,
  * @param aPlotter, the current plotter.
  * @param aBoard = the board, needed to extract some info
  * @param aLayer = the layer number to create the attribute for
+ * @param aUseX1CompatibilityMode = false to generate X2 attributes, true to
+ * use X1 compatibility (X2 attributes added as structured comments,
+ * starting by "G04 #@! " followed by the X2 attribute
  */
-extern void AddGerberX2Attribute( PLOTTER * aPlotter, const BOARD *aBoard, LAYER_NUM aLayer );
+extern void AddGerberX2Attribute( PLOTTER * aPlotter, const BOARD *aBoard,
+                                  LAYER_NUM aLayer, bool aUseX1CompatibilityMode );
 
 #endif // PCBPLOT_H_

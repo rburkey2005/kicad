@@ -46,6 +46,10 @@ class MODULE;
 class TRACK;
 class MSG_PANEL_INFO;
 
+namespace KIGFX
+{
+    class VIEW;
+};
 
 // Helper class to store parameters used to draw a pad
 class PAD_DRAWINFO
@@ -53,10 +57,10 @@ class PAD_DRAWINFO
 public:
     EDA_DRAW_PANEL* m_DrawPanel;  // the EDA_DRAW_PANEL used to draw a PAD ; can be null
     GR_DRAWMODE m_DrawMode;       // the draw mode
-    EDA_COLOR_T m_Color;          // color used to draw the pad shape , from pad layers and
+    COLOR4D m_Color;              // color used to draw the pad shape , from pad layers and
                                   // visible layers
-    EDA_COLOR_T m_HoleColor;      // color used to draw the pad hole
-    EDA_COLOR_T m_NPHoleColor;    // color used to draw a pad Not Plated hole
+    COLOR4D m_HoleColor;          // color used to draw the pad hole
+    COLOR4D m_NPHoleColor;        // color used to draw a pad Not Plated hole
     int m_PadClearance;           // clearance value, used to draw the pad area outlines
     wxSize m_Mask_margin;         // margin, used to draw solder paste when only one layer is shown
     bool m_Display_padnum;        // true to show pad number
@@ -104,10 +108,18 @@ public:
     MODULE* GetParent() const { return (MODULE*) m_Parent; }
 
     /**
+     * Imports the pad settings from aMasterPad.
+     * The result is "this" has the same settinds (sizes, shapes ... )
+     * as aMasterPad
+     * @param aMasterPad = the template pad
+     */
+    void ImportSettingsFromMaster( const D_PAD& aMasterPad );
+
+    /**
      * @return true if the pad has a footprint parent flipped
      * (on the back/bottom layer)
      */
-    bool IsFlipped();
+    bool IsFlipped() const;
 
     /**
      * Set the pad name (sometimes called pad number, although
@@ -120,7 +132,7 @@ public:
      * @return the pad name
      * the pad name is limited to 4 ASCII chars
      */
-    const wxString GetPadName() const;
+    wxString GetPadName() const;
 
     /**
      * @return the pad name in a wxUint32 which is possible
@@ -128,7 +140,7 @@ public:
      * The packed pad name should be used only to compare 2
      * pad names, not to try to print this name
      */
-    const wxUint32 GetPackedPadName() const { return m_NumPadName; }
+    wxUint32 GetPackedPadName() const { return m_NumPadName; }
 
     /**
      * Function IncrementPadName
@@ -426,7 +438,7 @@ public:
         return m_boundingRadius;
     }
 
-    const wxPoint ShapePos() const;
+    wxPoint ShapePos() const;
 
     /**
      * has meaning only for rounded rect pads
@@ -435,7 +447,7 @@ public:
      * Cannot be > 0.5
      * the normalized IPC-7351C value is 0.25
      */
-    double GetRoundRectRadiusRatio()
+    double GetRoundRectRadiusRatio() const
     {
         return m_padRoundRectRadiusScale;
     }
@@ -502,7 +514,7 @@ public:
 
     wxString GetSelectMenuText() const override;
 
-    BITMAP_DEF GetMenuImage() const override { return pad_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     /**
      * Function ShowPadShape
@@ -540,7 +552,7 @@ public:
     virtual void ViewGetLayers( int aLayers[], int& aCount ) const override;
 
     /// @copydoc VIEW_ITEM::ViewGetLOD()
-    virtual unsigned int ViewGetLOD( int aLayer ) const override;
+    virtual unsigned int ViewGetLOD( int aLayer, KIGFX::VIEW* aView ) const override;
 
     /// @copydoc VIEW_ITEM::ViewBBox()
     virtual const BOX2I ViewBBox() const override;

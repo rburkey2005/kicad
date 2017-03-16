@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 Chris Pavlina <pavlina.chris@gmail.com>
- * Copyright (C) 2015-2016 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2015-2017 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -44,31 +44,19 @@ typedef std::pair<SCH_COMPONENT*, wxString> COMPONENT_NAME_PAIR;
  * Function save_library
  * writes the library out to disk. Returns true on success.
  *
- * @param aFileName - Filename to receive the library
  * @param aLibrary - Library to write
  * @param aEditFrame - the calling SCH_EDIT_FRAME
  */
-static bool save_library( const wxString& aFileName, PART_LIB* aLibrary, SCH_EDIT_FRAME* aEditFrame )
+static bool save_library( PART_LIB* aLibrary, SCH_EDIT_FRAME* aEditFrame )
 {
     try
     {
-        FILE_OUTPUTFORMATTER formatter( aFileName );
-
-        if( !aLibrary->Save( formatter ) )
-        {
-            wxString msg = wxString::Format( _(
-                "An error occurred attempting to save component library '%s'." ),
-                GetChars( aFileName )
-                );
-            DisplayError( aEditFrame, msg );
-            return false;
-        }
+        aLibrary->Save( false );
     }
     catch( ... /* IO_ERROR ioe */ )
     {
-        wxString msg = wxString::Format( _(
-            "Failed to create component library file '%s'" ),
-            GetChars( aFileName )
+        wxString msg = wxString::Format( _( "Failed to create component library file '%s'" ),
+                                         GetChars( aLibrary->GetFullFileName() )
             );
         DisplayError( aEditFrame, msg );
         return false;
@@ -145,6 +133,11 @@ static bool insert_library( PROJECT *aProject, PART_LIB *aLibrary, size_t aIndex
     }
     aProject->SetElem( PROJECT::ELEM_SCH_PART_LIBS, libs );
 
+    // Update the schematic symbol library links since the library list has changed.
+    SCH_SCREENS schematic;
+
+    schematic.UpdateSymbolLinks();
+
     return true;
 }
 
@@ -152,21 +145,36 @@ static bool insert_library( PROJECT *aProject, PART_LIB *aLibrary, size_t aIndex
 /**
  * Function get_components
  * Fills a vector with all of the project's components, to ease iterating over them.
+ * The list is sorted by lib id, therefore components using the same library
+ * symbol are grouped, allowing later faster calculations (one library search by group
+ * of symbols)
  *
  * @param aComponents - a vector that will take the components
  */
+// Helper sort function, used in get_components, to sort a component list by lib_id
+static bool sort_by_libid( const SCH_COMPONENT* ref, SCH_COMPONENT* cmp )
+{
+    return ref->GetLibId() < cmp->GetLibId();
+}
+
 static void get_components( std::vector<SCH_COMPONENT*>& aComponents )
 {
     SCH_SCREENS screens;
+
+    // Get the full list
     for( SCH_SCREEN* screen = screens.GetFirst(); screen; screen = screens.GetNext() )
     {
         for( SCH_ITEM* item = screen->GetDrawItems(); item; item = item->Next() )
         {
-            if( item->Type() != SCH_COMPONENT_T ) continue;
-            SCH_COMPONENT* component = dynamic_cast<SCH_COMPONENT*>( item );
+            if( item->Type() != SCH_COMPONENT_T )
+                continue;
+            SCH_COMPONENT* component = static_cast<SCH_COMPONENT*>( item );
             aComponents.push_back( component );
         }
     }
+
+    // sort aComponents by lib part. Components will be grouped by same lib part.
+    std::sort( aComponents.begin(), aComponents.end(), sort_by_libid );
 }
 
 
@@ -247,13 +255,32 @@ public:
         typedef std::map<wxString, RESCUE_CASE_CANDIDATE> candidate_map_t;
         candidate_map_t candidate_map;
 
+        // Remember the list of components is sorted by part name.
+        // So a search in libraries is made only once by group
+        LIB_ALIAS* case_sensitive_match = nullptr;
+        std::vector<LIB_ALIAS*> case_insensitive_matches;
+
+        wxString last_part_name;
+
         for( SCH_COMPONENT* each_component : *( aRescuer.GetComponents() ) )
         {
-            wxString part_name( each_component->GetPartName() );
+            wxString part_name( each_component->GetLibId().GetLibItemName() );
 
-            LIB_ALIAS* case_sensitive_match = aRescuer.GetLibs()->FindLibraryAlias( part_name );
-            std::vector<LIB_ALIAS*> case_insensitive_matches;
-            aRescuer.GetLibs()->FindLibraryNearEntries( case_insensitive_matches, part_name );
+            if( last_part_name != part_name )
+            {
+                // A new part name is found (a new group starts here).
+                // Search the symbol names candidates only once for this group:
+                last_part_name = part_name;
+                case_insensitive_matches.clear();
+
+                LIB_ID id( wxEmptyString, part_name );
+
+                case_sensitive_match = aRescuer.GetLibs()->FindLibraryAlias( id );
+
+                if( !case_sensitive_match )
+                    // the case sensitive match failed. Try a case insensitive match
+                    aRescuer.GetLibs()->FindLibraryNearEntries( case_insensitive_matches, part_name );
+            }
 
             if( case_sensitive_match || !( case_insensitive_matches.size() ) )
                 continue;
@@ -261,6 +288,7 @@ public:
             RESCUE_CASE_CANDIDATE candidate(
                 part_name, case_insensitive_matches[0]->GetName(),
                 case_insensitive_matches[0]->GetPart() );
+
             candidate_map[part_name] = candidate;
         }
 
@@ -299,8 +327,13 @@ public:
     {
         for( SCH_COMPONENT* each_component : *aRescuer->GetComponents() )
         {
-            if( each_component->GetPartName() != m_requested_name ) continue;
-            each_component->SetPartName( m_new_name );
+            if( each_component->GetLibId().GetLibItemName() != UTF8( m_requested_name ) )
+                continue;
+
+            LIB_ID libId;
+
+            libId.SetLibItemName( m_new_name, false );
+            each_component->SetLibId( libId );
             each_component->ClearFlags();
             aRescuer->LogRescue( each_component, m_requested_name, m_new_name );
         }
@@ -317,7 +350,6 @@ class RESCUE_CACHE_CANDIDATE: public RESCUE_CANDIDATE
     LIB_PART* m_lib_candidate;
 
     static std::unique_ptr<PART_LIB> m_rescue_lib;
-    static wxFileName m_library_fn;
 
 public:
     /**
@@ -331,27 +363,42 @@ public:
         typedef std::map<wxString, RESCUE_CACHE_CANDIDATE> candidate_map_t;
         candidate_map_t candidate_map;
 
+        // Remember the list of components is sorted by part name.
+        // So a search in libraries is made only once by group
+        LIB_PART* cache_match = nullptr;
+        LIB_PART* lib_match = nullptr;
+        wxString old_part_name;
+
         wxString part_name_suffix = aRescuer.GetPartNameSuffix();
 
         for( SCH_COMPONENT* each_component : *( aRescuer.GetComponents() ) )
         {
-            wxString part_name( each_component->GetPartName() );
+            wxString part_name( each_component->GetLibId().GetLibItemName() );
 
-            LIB_PART* cache_match = find_component( part_name, aRescuer.GetLibs(), /* aCached */ true );
-            LIB_PART* lib_match = aRescuer.GetLibs()->FindLibPart( part_name );
+            if( old_part_name != part_name )
+            {
+                // A new part name is found (a new group starts here).
+                // Search the symbol names candidates only once for this group:
+                old_part_name = part_name;
+                cache_match = find_component( part_name, aRescuer.GetLibs(), /* aCached */ true );
+                LIB_ID id( wxEmptyString, part_name );
+                lib_match = aRescuer.GetLibs()->FindLibPart( id );
 
-            // Test whether there is a conflict
-            if( !cache_match || !lib_match )
-                continue;
-            if( !cache_match->PinsConflictWith( *lib_match, /* aTestNums */ true,
-                    /* aTestNames */ true, /* aTestType */ true, /* aTestOrientation */ true,
-                    /* aTestLength */ false ))
-                continue;
+                // Test whether there is a conflict
+                if( !cache_match || !lib_match )
+                    continue;
 
-            RESCUE_CACHE_CANDIDATE candidate(
-                part_name, part_name + part_name_suffix,
-                cache_match, lib_match );
-            candidate_map[part_name] = candidate;
+                if( !cache_match->PinsConflictWith( *lib_match, /* aTestNums */ true,
+                        /* aTestNames */ true, /* aTestType */ true, /* aTestOrientation */ true,
+                        /* aTestLength */ false ))
+                    continue;
+
+                RESCUE_CACHE_CANDIDATE candidate(
+                    part_name, part_name + part_name_suffix,
+                    cache_match, lib_match );
+
+                candidate_map[part_name] = candidate;
+            }
         }
 
         // Now, dump the map into aCandidates
@@ -398,14 +445,12 @@ public:
         wxFileName fn( g_RootSheet->GetScreen()->GetFileName() );
         fn.SetName( fn.GetName() + wxT( "-rescue" ) );
         fn.SetExt( SchematicLibraryFileExtension );
-        m_library_fn.SetPath( fn.GetPath() );
-        m_library_fn.SetName( fn.GetName() );
-        m_library_fn.SetExt( wxT( "lib" ) );
 
         std::unique_ptr<PART_LIB> rescue_lib( new PART_LIB( LIBRARY_TYPE_EESCHEMA,
-                        fn.GetFullPath() ) );
+                                                            fn.GetFullPath() ) );
 
         m_rescue_lib = std::move( rescue_lib );
+        m_rescue_lib->EnableBuffering();
     }
 
     virtual bool PerformAction( RESCUER* aRescuer ) override
@@ -417,8 +462,13 @@ public:
 
         for( SCH_COMPONENT* each_component : *aRescuer->GetComponents() )
         {
-            if( each_component->GetPartName() != m_requested_name ) continue;
-            each_component->SetPartName( m_new_name );
+            if( each_component->GetLibId().GetLibItemName() != UTF8( m_requested_name ) )
+                continue;
+
+            LIB_ID libId;
+
+            libId.SetLibItemName( m_new_name, false );
+            each_component->SetLibId( libId );
             each_component->ClearFlags();
             aRescuer->LogRescue( each_component, m_requested_name, m_new_name );
         }
@@ -433,15 +483,15 @@ public:
      */
     static bool WriteRescueLibrary( SCH_EDIT_FRAME *aEditFrame, PROJECT* aProject )
     {
-
-        if( !save_library( m_library_fn.GetFullPath(), m_rescue_lib.get(), aEditFrame ) )
+        if( !save_library( m_rescue_lib.get(), aEditFrame ) )
             return false;
         return insert_library( aProject, m_rescue_lib.get(), 0 );
     }
 };
 
+
 std::unique_ptr<PART_LIB> RESCUE_CACHE_CANDIDATE::m_rescue_lib;
-wxFileName RESCUE_CACHE_CANDIDATE::m_library_fn;
+
 
 RESCUER::RESCUER( SCH_EDIT_FRAME& aEditFrame, PROJECT& aProject )
 {
@@ -491,7 +541,10 @@ void RESCUER::UndoRescues()
 {
     for( RESCUE_LOG& each_logitem : m_rescue_log )
     {
-        each_logitem.component->SetPartName( each_logitem.old_name );
+        LIB_ID libId;
+
+        libId.SetLibItemName( each_logitem.old_name, false );
+        each_logitem.component->SetLibId( libId );
         each_logitem.component->ClearFlags();
     }
 }
