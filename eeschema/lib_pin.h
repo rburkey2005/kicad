@@ -32,15 +32,17 @@
 
 class SCH_COMPONENT;
 
+#include <class_eda_rect.h>
 #include <lib_draw_item.h>
 
 #include "pin_shape.h"
 #include "pin_type.h"
 
-#define TARGET_PIN_RADIUS   12  // Circle diameter drawn at the active end of pins
+// Circle diameter drawn at the active end of pins:
+#define TARGET_PIN_RADIUS   12
 
-/* Pin visibility flag bit. */
-#define PIN_INVISIBLE 1    /* Set makes pin invisible */
+// Pin visibility flag bit:
+#define PIN_INVISIBLE 1    // Set makes pin invisible
 
 
 /**
@@ -57,6 +59,8 @@ enum LibPinDrawFlags {
     PIN_DRAW_TEXTS = 1,
     PIN_DRAW_DANGLING = 2,      // Draw this pin with a 'dangling' indicator
     PIN_DANGLING_HIDDEN = 4,    // Draw (only!) the dangling indicator if the pin is hidden
+    PIN_DRAW_ELECTRICAL_TYPE_NAME = 8   // Draw the pin electrical type name
+                                        // used only in component editor and component viewer
 };
 
 
@@ -82,16 +86,17 @@ class LIB_PIN : public LIB_ITEM
      * @param aPanel DrawPanel to use (can be null) mainly used for clipping purposes.
      * @param aDC Device Context (can be null)
      * @param aOffset Offset to draw
-     * @param aColor -1 to use the normal body item color, or use this color if >= 0
+     * @param aColor COLOR4D::UNSPECIFIED to use the normal body item color, or else use this color
      * @param aDrawMode GR_OR, GR_XOR, ...
      * @param aData = used here as uintptr_t containing bitwise OR'd flags:
      *      PIN_DRAW_TEXTS,     -- false to draw only pin shape, useful for fast mode
      *      PIN_DRAW_DANGLING,  -- true to draw the pin with its target
      *      PIN_DANGLING_HIDDEN -- draw the target even if the pin is hidden
+     *      PIN_DRAW_ELECTRICAL_TYPE_NAME -- Draw the pin electrical type name
      * @param aTransform Transform Matrix (rotation, mirror ..)
      */
     void drawGraphic( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aOffset,
-                      EDA_COLOR_T aColor, GR_DRAWMODE aDrawMode, void* aData,
+                      COLOR4D aColor, GR_DRAWMODE aDrawMode, void* aData,
                       const TRANSFORM& aTransform ) override;
 
 public:
@@ -381,7 +386,7 @@ public:
      */
     void DrawPinSymbol( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint& aPosition,
                         int aOrientation, GR_DRAWMODE aDrawMode,
-                        EDA_COLOR_T aColor = UNSPECIFIED_COLOR,
+                        COLOR4D aColor = COLOR4D::UNSPECIFIED,
                         bool aDrawDangling = true,
                         bool aOnlyTarget = false );
 
@@ -397,7 +402,15 @@ public:
      */
     void DrawPinTexts( EDA_DRAW_PANEL* aPanel, wxDC* aDC, wxPoint& aPosition,
                        int aOrientation, int TextInside, bool DrawPinNum, bool DrawPinName,
-                       EDA_COLOR_T aColor, GR_DRAWMODE aDrawMode );
+                       COLOR4D aColor, GR_DRAWMODE aDrawMode );
+
+    /**
+     * Function DrawPinElectricalTypeName
+     * draws the electrical type text of the pin (only for the footprint editor)
+     * aDrawMode = GR_OR, XOR ...
+     */
+    void DrawPinElectricalTypeName( EDA_DRAW_PANEL* aPanel, wxDC* aDC, wxPoint& aPosition,
+                       int aOrientation, COLOR4D aColor, GR_DRAWMODE aDrawMode );
 
     /**
      * Function PlotPinTexts

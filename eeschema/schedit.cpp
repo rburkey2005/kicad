@@ -299,7 +299,7 @@ void SCH_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         {
             if( PART_LIBS* libs = Prj().SchLibs() )
             {
-                LIB_ALIAS* entry = libs->FindLibraryAlias( ( (SCH_COMPONENT*) item )->GetPartName() );
+                LIB_ALIAS* entry = libs->FindLibraryAlias( ( (SCH_COMPONENT*) item )->GetLibId() );
 
                 if( entry && !!entry->GetDocFileName() )
                 {
@@ -529,6 +529,10 @@ void SCH_EDIT_FRAME::OnSelectTool( wxCommandEvent& aEvent )
         SetToolID( id, m_canvas->GetDefaultCursor(), _( "No tool selected" ) );
         break;
 
+    case ID_HIGHLIGHT:
+        SetToolID( id, wxCURSOR_HAND, _("Highlight net") );
+        break;
+
     case ID_ZOOM_SELECTION:
         SetToolID( id, wxCURSOR_MAGNIFIER, _( "Zoom to selection" ) );
         break;
@@ -704,7 +708,7 @@ static void moveItemWithMouseCursor( EDA_DRAW_PANEL* aPanel, wxDC* aDC,
     if( aErase )
     {
         if( cmp )   // Use fast mode (do not draw pin texts)
-            cmp->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode, UNSPECIFIED_COLOR, false );
+            cmp->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode, COLOR4D::UNSPECIFIED, false );
         else
             item->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode );
     }
@@ -719,7 +723,7 @@ static void moveItemWithMouseCursor( EDA_DRAW_PANEL* aPanel, wxDC* aDC,
     item->SetWireImage();  // While moving, the item may choose to render differently
 
     if( cmp )   // Use fast mode (do not draw pin texts)
-        cmp->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode, UNSPECIFIED_COLOR, false );
+        cmp->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode, COLOR4D::UNSPECIFIED, false );
     else
         item->Draw( aPanel, aDC, wxPoint( 0, 0 ), g_XorMode );
 }

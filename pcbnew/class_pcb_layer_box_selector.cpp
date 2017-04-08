@@ -41,7 +41,7 @@
 #include <class_pcb_layer_box_selector.h>
 
 // translate aLayer to its hotkey
-static int layer2hotkey_id( LAYER_ID aLayer )
+static int layer2hotkey_id( PCB_LAYER_ID aLayer )
 {
     switch( aLayer )
     {
@@ -90,7 +90,7 @@ void PCB_LAYER_BOX_SELECTOR::Resync()
 
     for( LSEQ seq = show.UIOrder();  seq;  ++seq )
     {
-        LAYER_ID   layerid = *seq;
+        PCB_LAYER_ID   layerid = *seq;
 
         if( !m_showNotEnabledBrdlayers && !activated[layerid] )
             continue;
@@ -146,7 +146,7 @@ LSET PCB_LAYER_BOX_SELECTOR::getEnabledLayers() const
 
 
 // Returns a color index from the layer id
-EDA_COLOR_T PCB_LAYER_BOX_SELECTOR::GetLayerColor( LAYER_NUM aLayer ) const
+COLOR4D PCB_LAYER_BOX_SELECTOR::GetLayerColor( LAYER_NUM aLayer ) const
 {
     wxASSERT( m_boardFrame );
     BOARD* board = m_boardFrame->GetBoard();

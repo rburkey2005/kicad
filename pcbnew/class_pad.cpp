@@ -35,6 +35,7 @@
 #include <macros.h>
 #include <msgpanel.h>
 #include <base_units.h>
+#include <bitmaps.h>
 
 #include <pcbnew.h>
 
@@ -44,6 +45,14 @@
 #include <convert_to_biu.h>
 #include <convert_basic_shapes_to_polygon.h>
 
+
+/**
+ * Helper function
+ * Return a string (to be shown to the user) describing a layer mask.
+ * Useful for showing where is a pad.
+ * The BOARD is needed because layer names are (somewhat) customizable
+ */
+static wxString LayerMaskDescribe( const BOARD* aBoard, LSET aMask );
 
 int D_PAD::m_PadSketchModePenSize = 0;      // Pen size used to draw pads in sketch mode
 
@@ -112,7 +121,7 @@ LSET D_PAD::UnplatedHoleMask()
     return saved;
 }
 
-bool D_PAD::IsFlipped()
+bool D_PAD::IsFlipped() const
 {
     if( GetParent() &&  GetParent()->GetLayer() == B_Cu )
         return true;
@@ -355,7 +364,7 @@ void D_PAD::AppendConfigs( PARAM_CFG_ARRAY* aResult )
 
 
 // Returns the position of the pad.
-const wxPoint D_PAD::ShapePos() const
+wxPoint D_PAD::ShapePos() const
 {
     if( m_Offset.x == 0 && m_Offset.y == 0 )
         return m_Pos;
@@ -370,7 +379,7 @@ const wxPoint D_PAD::ShapePos() const
 }
 
 
-const wxString D_PAD::GetPadName() const
+wxString D_PAD::GetPadName() const
 {
     wxString name;
 
@@ -827,8 +836,8 @@ int D_PAD::Compare( const D_PAD* padref, const D_PAD* padcmp )
 void D_PAD::Rotate( const wxPoint& aRotCentre, double aAngle )
 {
     RotatePoint( &m_Pos, aRotCentre, aAngle );
-    m_Orient += aAngle;
-    NORMALIZE_ANGLE_360( m_Orient );
+
+    m_Orient = NormalizeAngle360( m_Orient + aAngle );
 
     SetLocalCoord();
 }
@@ -904,6 +913,12 @@ wxString D_PAD::GetSelectMenuText() const
 }
 
 
+BITMAP_DEF D_PAD::GetMenuImage() const
+{
+    return pad_xpm;
+}
+
+
 EDA_ITEM* D_PAD::Clone() const
 {
     return new D_PAD( *this );
@@ -916,31 +931,31 @@ void D_PAD::ViewGetLayers( int aLayers[], int& aCount ) const
 
     // These types of pads contain a hole
     if( m_Attribute == PAD_ATTRIB_STANDARD || m_Attribute == PAD_ATTRIB_HOLE_NOT_PLATED )
-        aLayers[aCount++] = ITEM_GAL_LAYER( PADS_HOLES_VISIBLE );
+        aLayers[aCount++] = LAYER_PADS_HOLES;
 
     if( IsOnLayer( F_Cu ) && IsOnLayer( B_Cu ) )
     {
         // Multi layer pad
-        aLayers[aCount++] = ITEM_GAL_LAYER( PADS_VISIBLE );
-        aLayers[aCount++] = NETNAMES_GAL_LAYER( PADS_NETNAMES_VISIBLE );
+        aLayers[aCount++] = LAYER_PADS;
+        aLayers[aCount++] = LAYER_PADS_NETNAMES;
     }
     else if( IsOnLayer( F_Cu ) )
     {
-        aLayers[aCount++] = ITEM_GAL_LAYER( PAD_FR_VISIBLE );
-        aLayers[aCount++] = NETNAMES_GAL_LAYER( PAD_FR_NETNAMES_VISIBLE );
+        aLayers[aCount++] = LAYER_PAD_FR;
+        aLayers[aCount++] = LAYER_PAD_FR_NETNAMES;
     }
     else if( IsOnLayer( B_Cu ) )
     {
-        aLayers[aCount++] = ITEM_GAL_LAYER( PAD_BK_VISIBLE );
-        aLayers[aCount++] = NETNAMES_GAL_LAYER( PAD_BK_NETNAMES_VISIBLE );
+        aLayers[aCount++] = LAYER_PAD_BK;
+        aLayers[aCount++] = LAYER_PAD_BK_NETNAMES;
     }
 
     // Check non-copper layers. This list should include all the layers that the
     // footprint editor allows a pad to be placed on.
-    static const LAYER_ID layers_mech[] = { F_Mask, B_Mask, F_Paste, B_Paste,
+    static const PCB_LAYER_ID layers_mech[] = { F_Mask, B_Mask, F_Paste, B_Paste,
         F_Adhes, B_Adhes, F_SilkS, B_SilkS, Dwgs_User, Eco1_User, Eco2_User };
 
-    for( LAYER_ID each_layer : layers_mech )
+    for( PCB_LAYER_ID each_layer : layers_mech )
     {
         if( IsOnLayer( each_layer ) )
             aLayers[aCount++] = each_layer;
@@ -959,17 +974,19 @@ void D_PAD::ViewGetLayers( int aLayers[], int& aCount ) const
 }
 
 
-unsigned int D_PAD::ViewGetLOD( int aLayer ) const
+unsigned int D_PAD::ViewGetLOD( int aLayer, KIGFX::VIEW* aView ) const
 {
     // Netnames will be shown only if zoom is appropriate
     if( IsNetnameLayer( aLayer ) )
     {
-        // Pad sizes can be zero briefly when someone is typing a number like "0.5" in the pad properties dialog.
-        // Fail gracefully if this happens.
-        if( ( m_Size.x == 0 ) && ( m_Size.y == 0 ) )
+        int divisor = std::max( m_Size.x, m_Size.y );
+
+        // Pad sizes can be zero briefly when someone is typing a number like "0.5"
+        // in the pad properties dialog
+        if( divisor == 0 )
             return UINT_MAX;
 
-        return ( Millimeter2iu( 100 ) / std::max( m_Size.x, m_Size.y ) );
+        return ( Millimeter2iu( 100 ) / divisor );
     }
 
     // Other layers are shown without any conditions
@@ -990,4 +1007,97 @@ const BOX2I D_PAD::ViewBBox() const
 
     return BOX2I( VECTOR2I( bbox.GetOrigin() ) - VECTOR2I( xMargin, yMargin ),
                   VECTOR2I( bbox.GetSize() ) + VECTOR2I( 2 * xMargin, 2 * yMargin ) );
+}
+
+
+wxString LayerMaskDescribe( const BOARD *aBoard, LSET aMask )
+{
+    // Try the single or no- layer case (easy)
+    PCB_LAYER_ID layer = aMask.ExtractLayer();
+
+    switch( (int) layer )
+    {
+    case UNSELECTED_LAYER:
+        return _( "No layers" );
+
+    case UNDEFINED_LAYER:
+        break;
+
+    default:
+        return aBoard->GetLayerName( layer );
+    }
+
+    // Try to be smart and useful, starting with outer copper
+    // (which are more important than internal ones)
+    wxString layerInfo;
+
+    if( aMask[F_Cu] )
+        AccumulateDescription( layerInfo, aBoard->GetLayerName( F_Cu ) );
+
+    if( aMask[B_Cu] )
+        AccumulateDescription( layerInfo, aBoard->GetLayerName( B_Cu ) );
+
+    if( ( aMask & LSET::InternalCuMask() ).any() )
+        AccumulateDescription( layerInfo, _("Internal" ) );
+
+    if( ( aMask & LSET::AllNonCuMask() ).any() )
+        AccumulateDescription( layerInfo, _("Non-copper" ) );
+
+    return layerInfo;
+}
+
+
+void D_PAD::ImportSettingsFromMaster( const D_PAD& aMasterPad )
+{
+    SetShape( aMasterPad.GetShape() );
+    SetLayerSet( aMasterPad.GetLayerSet() );
+    SetAttribute( aMasterPad.GetAttribute() );
+
+    // The pad orientation, for historical reasons is the
+    // pad rotation + parent rotation.
+    // So we have to manage this parent rotation
+    double pad_rot = aMasterPad.GetOrientation();
+
+    if( aMasterPad.GetParent() )
+        pad_rot -= aMasterPad.GetParent()->GetOrientation();
+
+    if( GetParent() )
+        pad_rot += GetParent()->GetOrientation();
+
+    SetOrientation( pad_rot );
+
+    SetSize( aMasterPad.GetSize() );
+    SetDelta( wxSize( 0, 0 ) );
+    SetOffset( aMasterPad.GetOffset() );
+    SetDrillSize( aMasterPad.GetDrillSize() );
+    SetDrillShape( aMasterPad.GetDrillShape() );
+    SetRoundRectRadiusRatio( aMasterPad.GetRoundRectRadiusRatio() );
+
+    switch( aMasterPad.GetShape() )
+    {
+    case PAD_SHAPE_TRAPEZOID:
+        SetDelta( aMasterPad.GetDelta() );
+        break;
+
+    case PAD_SHAPE_CIRCLE:
+        // ensure size.y == size.x
+        SetSize( wxSize( GetSize().x, GetSize().x ) );
+        break;
+
+    default:
+        ;
+    }
+
+    switch( aMasterPad.GetAttribute() )
+    {
+    case PAD_ATTRIB_SMD:
+    case PAD_ATTRIB_CONN:
+        // These pads do not have hole (they are expected to be only on one
+        // external copper layer)
+        SetDrillSize( wxSize( 0, 0 ) );
+        break;
+
+    default:
+        ;
+    }
 }

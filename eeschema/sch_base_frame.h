@@ -4,7 +4,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2015-2016 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2015-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -114,36 +114,63 @@ public:
 
     // Virtual from EDA_DRAW_FRAME
     // the background color of the draw canvas:
-    EDA_COLOR_T GetDrawBgColor() const override;
-    void SetDrawBgColor( EDA_COLOR_T aColor) override;
+    COLOR4D GetDrawBgColor() const override;
+    void SetDrawBgColor( COLOR4D aColor) override;
 
     const TITLE_BLOCK& GetTitleBlock() const override;
     void SetTitleBlock( const TITLE_BLOCK& aTitleBlock ) override;
 
     void UpdateStatusBar() override;
 
+
+    struct COMPONENT_SELECTION
+    {
+        wxString    Name;
+        int         Unit;
+        int         Convert;
+
+        std::vector<std::pair<int, wxString>>   Fields;
+
+        COMPONENT_SELECTION():
+            Name(""),
+            Unit(1),
+            Convert(1)
+        {}
+    };
+
+    typedef std::vector<COMPONENT_SELECTION> HISTORY_LIST;
+
     /**
      * Function SelectComponentFromLib
      * Calls the library viewer to select component to import into schematic.
      * if the library viewer is currently running, it is closed and reopened
      * in modal mode.
+     *
+     * aAllowFields chooses whether or not features that permit the user to edit
+     * fields (e.g. footprint selection) should be enabled. This should be false
+     * when they would have no effect, for example loading a part into libedit.
+     *
      * @param aFilter is a SCHLIB_FILTER filter to pass the allowed library names
      *  and/or the library name to load the component from and/or some other filter
      *          if NULL, no filtering.
-     * @param aHistoryList       list of previously loaded components
-     * @param aHistoryLastUnit   remembering last unit in last component.
+     * @param aHistoryList       list of previously loaded components - will be edited
      * @param aUseLibBrowser     bool to call the library viewer to select the component
-     * @param aUnit              a pointer to int to return the selected unit (if any)
-     * @param aConvert           a pointer to int to return the selected De Morgan shape (if any)
+     * @param aUnit              preselected unit
+     * @param aConvert           preselected De Morgan shape
+     * @param aHighlight         name of component to highlight in the list.
+     *                           highlights none if there isn't one by that name
+     * @param aAllowFields       whether to allow field editing in the dialog
      *
-     * @return the component name
+     * @return the selected component
      */
-    wxString SelectComponentFromLibrary( const SCHLIB_FILTER* aFilter,
-                                         wxArrayString&  aHistoryList,
-                                         int&            aHistoryLastUnit,
-                                         bool            aUseLibBrowser,
-                                         int*            aUnit,
-                                         int*            aConvert );
+    COMPONENT_SELECTION SelectComponentFromLibrary(
+            const SCHLIB_FILTER*                aFilter,
+            std::vector<COMPONENT_SELECTION>&   aHistoryList,
+            bool                                aUseLibBrowser,
+            int                                 aUnit,
+            int                                 aConvert,
+            const wxString& aHighlight = wxEmptyString,
+            bool                                aAllowFields = true );
 
 protected:
 
@@ -155,15 +182,14 @@ protected:
      * @param aFilter is a filter to pass the allowed library names
      *          and/or some other filter
      * @param aPreselectedAlias Preselected component alias. NULL if none.
-     * @param aUnit            Pointer to Unit-number. Input is the pre-selected unit, output
-     *                         is the finally selected unit by the user. Can be NULL.
-     * @param aConvert         Pointer to deMorgan conversion. Input is what is pre-selected,
-     *                         output is the finally selected deMorgan type by the user.
-     * @return the component name
+     * @param aUnit             preselected unit
+     * @param aConvert          preselected deMorgan conversion
+     * @return the selected component
      */
-    wxString SelectComponentFromLibBrowser( const SCHLIB_FILTER* aFilter,
-                                            LIB_ALIAS* aPreselectedAlias,
-                                            int* aUnit, int* aConvert );
+    COMPONENT_SELECTION SelectComponentFromLibBrowser(
+            const SCHLIB_FILTER* aFilter,
+            LIB_ALIAS* aPreselectedAlias,
+            int aUnit, int aConvert );
 
     /**
      * Function OnOpenLibraryViewer

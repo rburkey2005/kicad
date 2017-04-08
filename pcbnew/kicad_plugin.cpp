@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2012 CERN
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -300,7 +300,7 @@ void FP_CACHE::Load()
             MODULE*     footprint = (MODULE*) m_owner->m_parser->Parse();
 
             // The footprint name is the file name without the extension.
-            footprint->SetFPID( FPID( fullPath.GetName() ) );
+            footprint->SetFPID( LIB_ID( fullPath.GetName() ) );
             m_modules.insert( name, new FP_CACHE_ITEM( footprint, fullPath ) );
 
         } while( dir.GetNext( &fpFileName ) );
@@ -501,7 +501,7 @@ void PCB_IO::formatLayer( const BOARD_ITEM* aItem ) const
 {
     if( m_ctl & CTL_STD_LAYER_NAMES )
     {
-        LAYER_ID layer = aItem->GetLayer();
+        PCB_LAYER_ID layer = aItem->GetLayer();
 
         // English layer names should never need quoting.
         m_out->Print( 0, " (layer %s)", TO_UTF8( BOARD::GetStandardLayerName( layer ) ) );
@@ -523,11 +523,10 @@ void PCB_IO::format( BOARD* aBoard, int aNestLevel ) const
     m_out->Print( aNestLevel+1, "(no_connects %d)\n", aBoard->GetUnconnectedNetCount() );
 
     // Write Bounding box info
+    EDA_RECT bbox = aBoard->GetBoundingBox();
     m_out->Print( aNestLevel+1,  "(area %s %s %s %s)\n",
-                  FMTIU( aBoard->GetBoundingBox().GetX() ).c_str(),
-                  FMTIU( aBoard->GetBoundingBox().GetY() ).c_str(),
-                  FMTIU( aBoard->GetBoundingBox().GetRight() ).c_str(),
-                  FMTIU( aBoard->GetBoundingBox().GetBottom() ).c_str() );
+                  FMTIU( bbox.GetX() ).c_str(), FMTIU( bbox.GetY() ).c_str(),
+                  FMTIU( bbox.GetRight() ).c_str(), FMTIU( bbox.GetBottom() ).c_str() );
     m_out->Print( aNestLevel+1, "(thickness %s)\n",
                   FMTIU( dsnSettings.GetBoardThickness() ).c_str() );
 
@@ -549,7 +548,7 @@ void PCB_IO::format( BOARD* aBoard, int aNestLevel ) const
 
     for( LSEQ cu = aBoard->GetEnabledLayers().CuStack();  cu;  ++cu )
     {
-        LAYER_ID layer = *cu;
+        PCB_LAYER_ID layer = *cu;
 
         m_out->Print( aNestLevel+1, "(%d %s %s", layer,
                       m_out->Quotew( aBoard->GetLayerName( layer ) ).c_str(),
@@ -563,7 +562,7 @@ void PCB_IO::format( BOARD* aBoard, int aNestLevel ) const
 
     // Save used non-copper layers in the order they are defined.
     // desired sequence for non Cu BOARD layers.
-    static const LAYER_ID non_cu[] = {
+    static const PCB_LAYER_ID non_cu[] = {
         B_Adhes,        // 32
         F_Adhes,
         B_Paste,
@@ -586,7 +585,7 @@ void PCB_IO::format( BOARD* aBoard, int aNestLevel ) const
 
     for( LSEQ seq = aBoard->GetEnabledLayers().Seq( non_cu, DIM( non_cu ) );  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
         m_out->Print( aNestLevel+1, "(%d %s user", layer,
                       m_out->Quotew( aBoard->GetLayerName( layer ) ).c_str() );
@@ -1212,15 +1211,15 @@ void PCB_IO::formatLayers( LSET aLayerMask, int aNestLevel ) const
 
     wxString layerName;
 
-    for( LAYER_NUM layer = 0; layer < LAYER_ID_COUNT; ++layer )
+    for( LAYER_NUM layer = 0; layer < PCB_LAYER_ID_COUNT; ++layer )
     {
         if( aLayerMask[layer] )
         {
             if( m_board && !( m_ctl & CTL_STD_LAYER_NAMES ) )
-                layerName = m_board->GetLayerName( LAYER_ID( layer ) );
+                layerName = m_board->GetLayerName( PCB_LAYER_ID( layer ) );
 
             else    // I am being called from FootprintSave()
-                layerName = BOARD::GetStandardLayerName( LAYER_ID( layer ) );
+                layerName = BOARD::GetStandardLayerName( PCB_LAYER_ID( layer ) );
 
             output += ' ';
             output += m_out->Quotew( layerName );
@@ -1355,10 +1354,10 @@ void PCB_IO::format( TEXTE_PCB* aText, int aNestLevel ) const
 {
     m_out->Print( aNestLevel, "(gr_text %s (at %s",
                   m_out->Quotew( aText->GetText() ).c_str(),
-                  FMT_IU( aText->GetTextPosition() ).c_str() );
+                  FMT_IU( aText->GetTextPos() ).c_str() );
 
-    if( aText->GetOrientation() != 0.0 )
-        m_out->Print( 0, " %s", FMT_ANGLE( aText->GetOrientation() ).c_str() );
+    if( aText->GetTextAngle() != 0.0 )
+        m_out->Print( 0, " %s", FMT_ANGLE( aText->GetTextAngle() ).c_str() );
 
     m_out->Print( 0, ")" );
 
@@ -1378,26 +1377,43 @@ void PCB_IO::format( TEXTE_PCB* aText, int aNestLevel ) const
 void PCB_IO::format( TEXTE_MODULE* aText, int aNestLevel ) const
     throw( IO_ERROR )
 {
-    MODULE*  parent = (MODULE*) aText->GetParent();
-    double   orient = aText->GetOrientation();
     wxString type;
 
     switch( aText->GetType() )
     {
-    case TEXTE_MODULE::TEXT_is_REFERENCE: type = wxT( "reference" );     break;
-    case TEXTE_MODULE::TEXT_is_VALUE:     type = wxT( "value" );         break;
-    case TEXTE_MODULE::TEXT_is_DIVERS:    type = wxT( "user" );
+    case TEXTE_MODULE::TEXT_is_REFERENCE: type = "reference";   break;
+    case TEXTE_MODULE::TEXT_is_VALUE:     type = "value";       break;
+    case TEXTE_MODULE::TEXT_is_DIVERS:    type = "user";
     }
-
-    // Due to the Pcbnew history, m_Orient is saved in screen value
-    // but it is handled as relative to its parent footprint
-    if( parent )
-        orient += parent->GetOrientation();
 
     m_out->Print( aNestLevel, "(fp_text %s %s (at %s",
                   m_out->Quotew( type ).c_str(),
                   m_out->Quotew( aText->GetText() ).c_str(),
                   FMT_IU( aText->GetPos0() ).c_str() );
+
+    // Due to Pcbnew history, fp_text angle is saved as an absolute on screen angle,
+    // but internally the angle is held relative to its parent footprint.  parent
+    // may be NULL when saving a footprint outside a BOARD.
+    double   orient = aText->GetTextAngle();
+    MODULE*  parent = (MODULE*) aText->GetParent();
+
+    if( parent )
+    {
+        // GetTextAngle() is always in -360..+360 range because of
+        // TEXTE_MODULE::SetTextAngle(), but summing that angle with an
+        // additional board angle could kick sum up >= 360 or <= -360, so to have
+        // consistent results, normalize again for the BOARD save.  A footprint
+        // save does not use this code path since parent is NULL.
+#if 0
+        // This one could be considered reasonable if you like positive angles
+        // in your board text.
+        orient = NormalizeAnglePos( orient + parent->GetOrientation() );
+#else
+        // Choose compatibility for now, even though this is only a 720 degree clamp
+        // with two possible values for every angle.
+        orient = NormalizeAngle360( orient + parent->GetOrientation() );
+#endif
+    }
 
     if( orient != 0.0 )
         m_out->Print( 0, " %s", FMT_ANGLE( orient ).c_str() );
@@ -1410,7 +1426,7 @@ void PCB_IO::format( TEXTE_MODULE* aText, int aNestLevel ) const
 
     m_out->Print( 0, "\n" );
 
-    aText->EDA_TEXT::Format( m_out, aNestLevel, m_ctl );
+    aText->EDA_TEXT::Format( m_out, aNestLevel, m_ctl | CTL_OMIT_HIDE );
 
     m_out->Print( aNestLevel, ")\n" );
 }
@@ -1421,7 +1437,7 @@ void PCB_IO::format( TRACK* aTrack, int aNestLevel ) const
 {
     if( aTrack->Type() == PCB_VIA_T )
     {
-        LAYER_ID  layer1, layer2;
+        PCB_LAYER_ID  layer1, layer2;
 
         const VIA*  via = static_cast<const VIA*>(aTrack);
         BOARD*      board = (BOARD*) via->GetParent();
@@ -1502,13 +1518,13 @@ void PCB_IO::format( ZONE_CONTAINER* aZone, int aNestLevel ) const
     switch( aZone->GetHatchStyle() )
     {
     default:
-    case CPolyLine::NO_HATCH:       hatch = "none";    break;
-    case CPolyLine::DIAGONAL_EDGE:  hatch = "edge";    break;
-    case CPolyLine::DIAGONAL_FULL:  hatch = "full";    break;
+    case ZONE_CONTAINER::NO_HATCH:       hatch = "none";    break;
+    case ZONE_CONTAINER::DIAGONAL_EDGE:  hatch = "edge";    break;
+    case ZONE_CONTAINER::DIAGONAL_FULL:  hatch = "full";    break;
     }
 
     m_out->Print( 0, " (hatch %s %s)\n", hatch.c_str(),
-                  FMT_IU( aZone->Outline()->GetHatchPitch() ).c_str() );
+                  FMT_IU( aZone->GetHatchPitch() ).c_str() );
 
     if( aZone->GetPriority() > 0 )
         m_out->Print( aNestLevel+1, "(priority %d)\n", aZone->GetPriority() );
@@ -1590,22 +1606,30 @@ void PCB_IO::format( ZONE_CONTAINER* aZone, int aNestLevel ) const
 
     m_out->Print( 0, ")\n" );
 
-    const CPOLYGONS_LIST& cv = aZone->Outline()->m_CornersList;
     int newLine = 0;
 
-    if( cv.GetCornersCount() )
+    if( aZone->GetNumCorners() )
     {
-        m_out->Print( aNestLevel+1, "(polygon\n");
-        m_out->Print( aNestLevel+2, "(pts\n" );
+        bool new_polygon = true;
+        bool is_closed = false;
 
-        for( unsigned it = 0; it < cv.GetCornersCount(); ++it )
+        for( auto iterator = aZone->IterateWithHoles(); iterator; iterator++ )
         {
+            if( new_polygon )
+            {
+                newLine = 0;
+                m_out->Print( aNestLevel+1, "(polygon\n" );
+                m_out->Print( aNestLevel+2, "(pts\n" );
+                new_polygon = false;
+                is_closed = false;
+            }
+
             if( newLine == 0 )
                 m_out->Print( aNestLevel+3, "(xy %s %s)",
-                              FMT_IU( cv.GetX( it ) ).c_str(), FMT_IU( cv.GetY( it ) ).c_str() );
+                              FMT_IU( iterator->x ).c_str(), FMT_IU( iterator->y ).c_str() );
             else
                 m_out->Print( 0, " (xy %s %s)",
-                              FMT_IU( cv.GetX( it ) ).c_str(), FMT_IU( cv.GetY( it ) ).c_str() );
+                              FMT_IU( iterator->x ).c_str(), FMT_IU( iterator->y ).c_str() );
 
             if( newLine < 4 )
             {
@@ -1617,37 +1641,44 @@ void PCB_IO::format( ZONE_CONTAINER* aZone, int aNestLevel ) const
                 m_out->Print( 0, "\n" );
             }
 
-            if( cv.IsEndContour( it ) )
+            if( iterator.IsEndContour() )
             {
+                is_closed = true;
+
                 if( newLine != 0 )
                     m_out->Print( 0, "\n" );
 
                 m_out->Print( aNestLevel+2, ")\n" );
-
-                if( it+1 != cv.GetCornersCount() )
-                {
-                    newLine = 0;
-                    m_out->Print( aNestLevel+1, ")\n" );
-                    m_out->Print( aNestLevel+1, "(polygon\n" );
-                    m_out->Print( aNestLevel+2, "(pts" );
-                }
+                m_out->Print( aNestLevel+1, ")\n" );
+                new_polygon = true;
             }
         }
 
-        m_out->Print( aNestLevel+1, ")\n" );
+        if( !is_closed )    // Should not happen, but...
+            m_out->Print( aNestLevel+1, ")\n" );
+
     }
 
-    // Save the PolysList
+    // Save the PolysList (filled areas)
     const SHAPE_POLY_SET& fv = aZone->GetFilledPolysList();
     newLine = 0;
 
     if( !fv.IsEmpty() )
     {
-        m_out->Print( aNestLevel+1, "(filled_polygon\n" );
-        m_out->Print( aNestLevel+2, "(pts\n" );
+        bool new_polygon = true;
+        bool is_closed = false;
 
-        for( SHAPE_POLY_SET::CONST_ITERATOR it = fv.CIterate(); it; ++it )
+        for( auto it = fv.CIterate(); it; ++it )
         {
+            if( new_polygon )
+            {
+                newLine = 0;
+                m_out->Print( aNestLevel+1, "(filled_polygon\n" );
+                m_out->Print( aNestLevel+2, "(pts\n" );
+                new_polygon = false;
+                is_closed = false;
+            }
+
             if( newLine == 0 )
                 m_out->Print( aNestLevel+3, "(xy %s %s)",
                               FMT_IU( it->x ).c_str(), FMT_IU( it->y ).c_str() );
@@ -1667,22 +1698,19 @@ void PCB_IO::format( ZONE_CONTAINER* aZone, int aNestLevel ) const
 
             if( it.IsEndContour() )
             {
+                is_closed = true;
+
                 if( newLine != 0 )
                     m_out->Print( 0, "\n" );
 
                 m_out->Print( aNestLevel+2, ")\n" );
-
-                if( !it.IsLastContour() )
-                {
-                    newLine = 0;
-                    m_out->Print( aNestLevel+1, ")\n" );
-                    m_out->Print( aNestLevel+1, "(filled_polygon\n" );
-                    m_out->Print( aNestLevel+2, "(pts\n" );
-                }
+                m_out->Print( aNestLevel+1, ")\n" );
+                new_polygon = true;
             }
         }
 
-        m_out->Print( aNestLevel+1, ")\n" );
+        if( !is_closed )    // Should not happen, but...
+            m_out->Print( aNestLevel+1, ")\n" );
     }
 
     // Save the filling segments list
@@ -1879,12 +1907,13 @@ void PCB_IO::FootprintSave( const wxString& aLibraryPath, const MODULE* aFootpri
         THROW_IO_ERROR( msg );
     }
 
-    std::string footprintName = aFootprint->GetFPID().GetFootprintName();
+    std::string footprintName = aFootprint->GetFPID().GetLibItemName();
 
     MODULE_MAP& mods = m_cache->GetModules();
 
     // Quietly overwrite module and delete module file from path for any by same name.
-    wxFileName fn( aLibraryPath, aFootprint->GetFPID().GetFootprintName(), KiCadFootprintFileExtension );
+    wxFileName fn( aLibraryPath, FROM_UTF8( aFootprint->GetFPID().GetLibItemName() ),
+                   KiCadFootprintFileExtension );
 
     if( !fn.IsOk() )
     {

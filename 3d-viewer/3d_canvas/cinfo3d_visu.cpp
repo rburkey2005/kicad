@@ -120,9 +120,9 @@ CINFO3D_VISU::~CINFO3D_VISU()
 }
 
 
-bool CINFO3D_VISU::Is3DLayerEnabled( LAYER_ID aLayer ) const
+bool CINFO3D_VISU::Is3DLayerEnabled( PCB_LAYER_ID aLayer ) const
 {
-    wxASSERT( aLayer < LAYER_ID_COUNT );
+    wxASSERT( aLayer < PCB_LAYER_ID_COUNT );
 
     DISPLAY3D_FLG flg;
 
@@ -372,7 +372,7 @@ void CINFO3D_VISU::InitSettings( REPORTER *aStatusTextReporter )
 
     // calculate z position for each non copper layer
     // Solder mask and Solder paste have the same Z position
-    for( int layer_id = MAX_CU_LAYERS; layer_id < LAYER_ID_COUNT; ++layer_id )
+    for( int layer_id = MAX_CU_LAYERS; layer_id < PCB_LAYER_ID_COUNT; ++layer_id )
     {
         float zposTop;
         float zposBottom;
@@ -475,21 +475,17 @@ void CINFO3D_VISU::createBoardPolygon()
 {
     m_board_poly.RemoveAllContours();
 
-    // Create board outlines and board holes
-    SHAPE_POLY_SET allLayerHoles;
-
     wxString errmsg;
 
-    if( !m_board->GetBoardPolygonOutlines( m_board_poly, allLayerHoles, &errmsg ) )
+    if( !m_board->GetBoardPolygonOutlines( m_board_poly, /*allLayerHoles,*/ &errmsg ) )
     {
         errmsg.append( wxT( "\n\n" ) );
-        errmsg.append( _( "Unable to calculate the board outlines." ) );
-        errmsg.append( wxT( "\n" ) );
-        errmsg.append( _( "Therefore use the board boundary box." ) );
+        errmsg.append( _( "Cannot determine the board outline." ) );
         wxLogMessage( errmsg );
     }
 
-    m_board_poly.BooleanSubtract( allLayerHoles, SHAPE_POLY_SET::PM_FAST );
+    // Be sure the polygon is strictly simple to avoid issues.
+    m_board_poly.Simplify( SHAPE_POLY_SET::PM_STRICTLY_SIMPLE );
 
     Polygon_Calc_BBox_3DU( m_board_poly, m_board2dBBox3DU, m_biuTo3Dunits );
 }
@@ -530,20 +526,13 @@ void CINFO3D_VISU::CameraSetType( CAMERA_TYPE aCameraType )
 }
 
 
-SFVEC3F CINFO3D_VISU::GetLayerColor( LAYER_ID aLayerId ) const
+SFVEC3F CINFO3D_VISU::GetLayerColor( PCB_LAYER_ID aLayerId ) const
 {
-    wxASSERT( aLayerId < LAYER_ID_COUNT );
+    wxASSERT( aLayerId < PCB_LAYER_ID_COUNT );
 
-    const EDA_COLOR_T color = g_ColorsSettings.GetLayerColor( aLayerId );
-    const StructColors &colordata = g_ColorRefs[ColorGetBase( color )];
+    const COLOR4D color = g_ColorsSettings.GetLayerColor( aLayerId );
 
-    static const float inv_255 = 1.0f / 255.0f;
-
-    const float red     = colordata.m_Red   * inv_255;
-    const float green   = colordata.m_Green * inv_255;
-    const float blue    = colordata.m_Blue  * inv_255;
-
-    return SFVEC3F( red, green, blue );
+    return SFVEC3F( color.r, color.g, color.b );
 }
 
 
@@ -553,15 +542,7 @@ SFVEC3F CINFO3D_VISU::GetItemColor( int aItemId ) const
 }
 
 
-SFVEC3F CINFO3D_VISU::GetColor( EDA_COLOR_T aColor ) const
+SFVEC3F CINFO3D_VISU::GetColor( COLOR4D aColor ) const
 {
-    const StructColors &colordata = g_ColorRefs[ColorGetBase( aColor )];
-
-    static const float inv_255 = 1.0f / 255.0f;
-
-    const float red     = colordata.m_Red   * inv_255;
-    const float green   = colordata.m_Green * inv_255;
-    const float blue    = colordata.m_Blue  * inv_255;
-
-    return SFVEC3F( red, green, blue );
+    return SFVEC3F( aColor.r, aColor.g, aColor.b );
 }

@@ -1,10 +1,10 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2014-2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2014-2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2007-2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -40,14 +40,15 @@
 #include <wx/fileconf.h>
 
 #include <richio.h>
-#include <colors.h>
+#include <gal/color4d.h>
 
 #include <atomic>
 
+// C++11 "polyfill" for the C++14 std::make_unique function
+#include "make_unique.h"
 
 class wxAboutDialogInfo;
 class SEARCH_STACK;
-class wxSingleInstanceChecker;
 class REPORTER;
 
 
@@ -85,31 +86,10 @@ enum pseudokeys {
 
 #define ESC 27
 
-// TODO Executable names TODO
-#ifdef __WINDOWS__
-#define CVPCB_EXE           wxT( "cvpcb.exe" )
-#define PCBNEW_EXE          wxT( "pcbnew.exe" )
-#define EESCHEMA_EXE        wxT( "eeschema.exe" )
-#define GERBVIEW_EXE        wxT( "gerbview.exe" )
-#define BITMAPCONVERTER_EXE wxT( "bitmap2component.exe" )
-#define PCB_CALCULATOR_EXE  wxT( "pcb_calculator.exe" )
-#define PL_EDITOR_EXE       wxT( "pl_editor.exe" )
-#else
-#define CVPCB_EXE           wxT( "cvpcb" )
-#define PCBNEW_EXE          wxT( "pcbnew" )
-#define EESCHEMA_EXE        wxT( "eeschema" )
-#define GERBVIEW_EXE        wxT( "gerbview" )
-#define BITMAPCONVERTER_EXE wxT( "bitmap2component" )
-#define PCB_CALCULATOR_EXE  wxT( "pcb_calculator" )
-#define PL_EDITOR_EXE       wxT( "pl_editor" )
-#endif
-
-
-// Graphic Texts Orientation in 0.1 degree
-#define TEXT_ORIENT_HORIZ 0
-#define TEXT_ORIENT_VERT  900
-
-
+/// Frequent text rotations, used with {Set,Get}TextAngle(),
+/// in 0.1 degrees for now, hoping to migrate to degrees eventually.
+#define TEXT_ANGLE_HORIZ    0
+#define TEXT_ANGLE_VERT     900
 
 //-----<KiROUND KIT>------------------------------------------------------------
 
@@ -161,14 +141,6 @@ static inline int kiRound_( double v, int line, const char* filename )
 //-----</KiROUND KIT>-----------------------------------------------------------
 
 
-
-/// Convert mm to mils.
-inline int Mm2mils( double x ) { return KiROUND( x * 1000./25.4 ); }
-
-/// Convert mils to mm.
-inline int Mils2mm( double x ) { return KiROUND( x * 25.4 / 1000. ); }
-
-
 enum EDA_UNITS_T {
     INCHES = 0,
     MILLIMETRES = 1,
@@ -180,7 +152,7 @@ enum EDA_UNITS_T {
 extern EDA_UNITS_T  g_UserUnit;     ///< display units
 
 /// Draw color for moving objects.
-extern EDA_COLOR_T  g_GhostColor;
+extern KIGFX::COLOR4D  g_GhostColor;
 
 
 /**
@@ -261,31 +233,6 @@ int GetCommandOptions( const int argc, const char** argv,
                        int* optind );
 
 /**
- * Returns the units symbol.
- *
- * @param aUnits - Units type, default is current units setting.
- * @param aFormatString - A formatting string to embed the units symbol into.  Note:
- *                        the format string must contain the %s format specifier.
- * @return The formatted units symbol.
- */
-wxString ReturnUnitSymbol( EDA_UNITS_T aUnits = g_UserUnit,
-                           const wxString& aFormatString = _( " (%s):" ) );
-
-/**
- * Get a human readable units string.
- *
- * The strings returned are full text name and not abbreviations or symbolic
- * representations of the units.  Use ReturnUnitSymbol() for that.
- *
- * @param aUnits - The units text to return.
- * @return The human readable units string.
- */
-wxString GetUnitsLabel( EDA_UNITS_T aUnits );
-wxString GetAbbreviatedUnitsLabel( EDA_UNITS_T aUnit = g_UserUnit );
-
-void AddUnitSymbol( wxStaticText& Stext, EDA_UNITS_T aUnit = g_UserUnit );
-
-/**
  * Round to the nearest precision.
  *
  * Try to approximate a coordinate using a given precision to prevent
@@ -303,24 +250,6 @@ double RoundTo0( double x, double precision );
  * @param aSplitter is the 'split' character
  */
 void wxStringSplit( const wxString& aText, wxArrayString& aStrings, wxChar aSplitter );
-
-/**
- * Function GetRunningMicroSecs
- * returns an ever increasing indication of elapsed microseconds.  Use this
- * by computing differences between two calls.
- * @author Dick Hollenbeck
- */
-unsigned GetRunningMicroSecs();
-
-
-/**
- * Function SystemDirsAppend
- * appends system places to aSearchStack in a platform specific way, and pertinent
- * to KiCad programs.  It seems to be a place to collect bad ideas and keep them
- * out of view.
- */
-void SystemDirsAppend( SEARCH_STACK* aSearchStack );
-
 
 /**
  * Function SearchHelpFileFullPath
@@ -357,14 +286,6 @@ bool EnsureFileDirectoryExists( wxFileName*     aTargetFullFileName,
                                   const wxString& aBaseFilename,
                                   REPORTER*       aReporter = NULL );
 
-/**
- * Function LockFile
- * tests to see if aFileName can be locked (is not already locked) and only then
- * returns a wxSingleInstanceChecker protecting aFileName.  Caller owns the return value.
- */
-wxSingleInstanceChecker* LockFile( const wxString& aFileName );
-
-
 /// Put aPriorityPath in front of all paths in the value of aEnvVar.
 const wxString PrePendPath( const wxString& aEnvVar, const wxString& aPriorityPath );
 
@@ -384,11 +305,6 @@ const wxString PrePendPath( const wxString& aEnvVar, const wxString& aPriorityPa
  */
 wxConfigBase* GetNewConfig( const wxString& aProgName );
 
-/**
- * Function GetKicadLockFilePath
- * @return A wxString containing the path for lockfiles in Kicad
- */
-wxString GetKicadLockFilePath();
 
 /**
  * Function GetKicadConfigPath

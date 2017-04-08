@@ -2,8 +2,8 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2004-2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2008-2017 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2004-2017 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,11 +31,13 @@
 #define CLASS_LIBENTRY_H
 
 #include <general.h>
+#include <lib_id.h>
 #include <lib_draw_item.h>
 #include <lib_field.h>
 #include <vector>
 #include <memory>
 
+class EDA_RECT;
 class LINE_READER;
 class OUTPUTFORMATTER;
 class PART_LIB;
@@ -173,6 +175,42 @@ extern bool operator<( const LIB_ALIAS& aItem1, const LIB_ALIAS& aItem2 );
 extern int LibraryEntryCompare( const LIB_ALIAS* aItem1, const LIB_ALIAS* aItem2 );
 
 
+struct PART_DRAW_OPTIONS
+{
+    GR_DRAWMODE draw_mode;      ///< Device context drawing mode, see wxDC
+    COLOR4D color;              ///< Color to draw part in
+    TRANSFORM transform;        ///< Coordinate adjustment settings
+    bool show_pin_text;         ///< Whether to show pin texts
+    bool draw_visible_fields;   ///< Whether to draw "visible" fields
+    bool draw_hidden_fields;    ///< Whether to draw "hidden" fields
+    bool only_selected;         ///< Draws only the body items that are selected, for block moves
+    std::vector<bool> dangling; ///< which pins should display as dangling, or empty for All
+    bool show_elec_type;        ///< Whether to show the pin electrical type
+
+    static PART_DRAW_OPTIONS Default()
+    {
+        PART_DRAW_OPTIONS def;
+        def.draw_mode = GR_DEFAULT_DRAWMODE;
+        def.color     = COLOR4D::UNSPECIFIED;
+        def.transform = DefaultTransform;
+        def.show_pin_text       = true;
+        def.draw_visible_fields = true;
+        def.draw_hidden_fields  = true;
+        def.only_selected       = false;
+        def.show_elec_type      = false;
+        return def;
+    }
+
+    bool PinIsDangling( size_t aPin ) const
+    {
+        if( aPin < dangling.size() )
+            return dangling[aPin];
+        else
+            return true;
+    }
+};
+
+
 /**
  * Class LIB_PART
  * defines a library part object.
@@ -188,6 +226,7 @@ class LIB_PART : public EDA_ITEM
 
     PART_SPTR           m_me;               ///< http://www.boost.org/doc/libs/1_55_0/libs/smart_ptr/sp_techniques.html#weak_without_shared
     wxString            m_name;
+    LIB_ID              m_libId;
     int                 m_pinNameOffset;    ///< The offset in mils to draw the pin name.  Set to 0
                                             ///< to draw the pin name above the pin.
     bool                m_unitsLocked;      ///< True if part has multiple units and changing
@@ -235,7 +274,10 @@ public:
 
     virtual void SetName( const wxString& aName );
 
-    const wxString& GetName()       { return m_name; }
+    const wxString& GetName() const { return m_name; }
+
+    const LIB_ID& GetLibId() const { return m_libId; }
+    void SetLibId( const LIB_ID& aLibId ) { m_libId = aLibId; }
 
     const wxString GetLibraryName();
 
@@ -403,28 +445,11 @@ public:
      * @param aOffset - Position of part.
      * @param aMulti - unit if multiple units per part.
      * @param aConvert - Component conversion (DeMorgan) if available.
-     * @param aDrawMode - Device context drawing mode, see wxDC.
-     * @param aColor - Color to draw part.
-     * @param aTransform - Coordinate adjustment settings.
-     * @param aShowPinText - Show pin text if true.
-     * @param aDrawFields - Draw field text if true otherwise just draw
-     *                      body items (useful to draw a body in schematic,
-     *                      because fields of schematic components replace
-     *                      the lib part fields).
-     * @param aOnlySelected - Draws only the body items that are selected.
-     *                        Used for block move redraws.
-     * @param aPinsDangling - if not NULL, this should be a pointer to
-     *              vector<bool> exactly the same length as the number of pins,
-     *              indicating whether each pin is dangling. If NULL, all pins
-     *              will be drawn as if they were dangling.
+     * @param aOpts - Drawing options
      */
     void Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDc, const wxPoint& aOffset,
-               int aMulti, int aConvert, GR_DRAWMODE aDrawMode,
-               EDA_COLOR_T aColor = UNSPECIFIED_COLOR,
-               const TRANSFORM& aTransform = DefaultTransform,
-               bool aShowPinText = true, bool aDrawFields = true,
-               bool aOnlySelected = false,
-               const std::vector<bool>* aPinsDangling = NULL );
+               int aMulti, int aConvert,
+               const PART_DRAW_OPTIONS& aOpts );
 
     /**
      * Plot lib part to plotter.

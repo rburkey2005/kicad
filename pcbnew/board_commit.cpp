@@ -29,10 +29,10 @@
 #include <ratsnest_data.h>
 #include <view/view.h>
 #include <board_commit.h>
-
-#include <boost/bind.hpp>
-
 #include <tools/pcb_tool.h>
+
+#include <functional>
+using namespace std::placeholders;
 
 BOARD_COMMIT::BOARD_COMMIT( PCB_TOOL* aTool )
 {
@@ -53,7 +53,7 @@ BOARD_COMMIT::~BOARD_COMMIT()
 }
 
 
-void BOARD_COMMIT::Push( const wxString& aMessage )
+void BOARD_COMMIT::Push( const wxString& aMessage, bool aCreateUndoEntry )
 {
     // Objects potentially interested in changes:
     PICKED_ITEMS_LIST undoList;
@@ -91,10 +91,13 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
                 assert( ent.m_item->Type() == PCB_MODULE_T );
                 assert( ent.m_copy->Type() == PCB_MODULE_T );
 
-                ITEM_PICKER itemWrapper( ent.m_item, UR_CHANGED );
-                itemWrapper.SetLink( ent.m_copy );
-                undoList.PushItem( itemWrapper );
-                frame->SaveCopyInUndoList( undoList, UR_CHANGED );
+                if( aCreateUndoEntry )
+                {
+                    ITEM_PICKER itemWrapper( ent.m_item, UR_CHANGED );
+                    itemWrapper.SetLink( ent.m_copy );
+                    undoList.PushItem( itemWrapper );
+                    frame->SaveCopyInUndoList( undoList, UR_CHANGED );
+                }
 
                 savedModules.insert( ent.m_item );
                 static_cast<MODULE*>( ent.m_item )->SetLastEditTime();
@@ -107,7 +110,10 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
             {
                 if( !m_editModules )
                 {
-                    undoList.PushItem( ITEM_PICKER( boardItem, UR_NEW ) );
+                    if( aCreateUndoEntry )
+                    {
+                        undoList.PushItem( ITEM_PICKER( boardItem, UR_NEW ) );
+                    }
 
                     if( !( changeFlags & CHT_DONE ) )
                         board->Add( boardItem );
@@ -117,7 +123,7 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
                     if( boardItem->Type() == PCB_MODULE_T )
                     {
                         MODULE* mod = static_cast<MODULE*>( boardItem );
-                        mod->RunOnChildren( boost::bind( &KIGFX::VIEW::Add, view, _1 ) );
+                        mod->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1, -1 ) );
                     }
                 }
                 else
@@ -135,7 +141,7 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
 
             case CHT_REMOVE:
             {
-                if( !m_editModules )
+                if( !m_editModules && aCreateUndoEntry )
                 {
                     undoList.PushItem( ITEM_PICKER( boardItem, UR_DELETED ) );
                 }
@@ -220,7 +226,7 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
 
                     MODULE* module = static_cast<MODULE*>( boardItem );
                     module->ClearFlags();
-                    module->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove, view, _1 ) );
+                    module->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, view, _1 ) );
 
                     view->Remove( module );
 
@@ -241,7 +247,7 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
 
             case CHT_MODIFY:
             {
-                if( !m_editModules )
+                if( !m_editModules && aCreateUndoEntry )
                 {
                     ITEM_PICKER itemWrapper( boardItem, UR_CHANGED );
                     assert( ent.m_copy );
@@ -249,7 +255,13 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
                     undoList.PushItem( itemWrapper );
                 }
 
-                boardItem->ViewUpdate( KIGFX::VIEW_ITEM::ALL );
+                if( boardItem->Type() == PCB_MODULE_T )
+                {
+                    MODULE* module = static_cast<MODULE*>( boardItem );
+                    module->RunOnChildren( [&view] ( BOARD_ITEM* aItem ) { view->Update( aItem ); } );
+                }
+
+                view->Update ( boardItem );
                 ratsnest->Update( boardItem );
                 break;
             }
@@ -260,8 +272,11 @@ void BOARD_COMMIT::Push( const wxString& aMessage )
         }
     }
 
-    if( !m_editModules )
+    if( !m_editModules && aCreateUndoEntry )
         frame->SaveCopyInUndoList( undoList, UR_UNSPECIFIED );
+
+    if( TOOL_MANAGER* toolMgr = frame->GetToolManager() )
+        toolMgr->PostEvent( { TC_MESSAGE, TA_MODEL_CHANGE, AS_GLOBAL } );
 
     ratsnest->Recalculate();
     frame->OnModify();
@@ -306,7 +321,7 @@ void BOARD_COMMIT::Revert()
             if( item->Type() == PCB_MODULE_T )
             {
                 MODULE* oldModule = static_cast<MODULE*>( item );
-                oldModule->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove, view, _1 ) );
+                oldModule->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, view, _1 ) );
             }
 
             view->Remove( item );
@@ -317,8 +332,8 @@ void BOARD_COMMIT::Revert()
             if( item->Type() == PCB_MODULE_T )
             {
                 MODULE* newModule = static_cast<MODULE*>( item );
-                newModule->RunOnChildren( boost::bind( &EDA_ITEM::ClearFlags, _1, SELECTED ) );
-                newModule->RunOnChildren( boost::bind( &KIGFX::VIEW::Add, view, _1 ) );
+                newModule->RunOnChildren( std::bind( &EDA_ITEM::ClearFlags, _1, SELECTED ) );
+                newModule->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1, -1 ) );
             }
 
             view->Add( item );
@@ -330,7 +345,7 @@ void BOARD_COMMIT::Revert()
             if( item->Type() == PCB_MODULE_T )
             {
                 MODULE* oldModule = static_cast<MODULE*>( item );
-                oldModule->RunOnChildren( boost::bind( &KIGFX::VIEW::Remove, view, _1 ) );
+                oldModule->RunOnChildren( std::bind( &KIGFX::VIEW::Remove, view, _1 ) );
             }
 
             view->Remove( item );
@@ -345,8 +360,8 @@ void BOARD_COMMIT::Revert()
             if( item->Type() == PCB_MODULE_T )
             {
                 MODULE* newModule = static_cast<MODULE*>( item );
-                newModule->RunOnChildren( boost::bind( &EDA_ITEM::ClearFlags, _1, SELECTED ) );
-                newModule->RunOnChildren( boost::bind( &KIGFX::VIEW::Add, view, _1 ) );
+                newModule->RunOnChildren( std::bind( &EDA_ITEM::ClearFlags, _1, SELECTED ) );
+                newModule->RunOnChildren( std::bind( &KIGFX::VIEW::Add, view, _1, -1 ) );
             }
 
             view->Add( item );

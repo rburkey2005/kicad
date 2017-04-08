@@ -411,6 +411,16 @@ public:
     void Remove( int aStartIndex, int aEndIndex );
 
     /**
+     * Function Remove()
+     * removes the aIndex-th point from the line chain.
+     * @param aIndex is the index of the point to be removed.
+     */
+    void Remove( int aIndex )
+    {
+        Remove( aIndex, aIndex );
+    }
+
+    /**
      * Function Split()
      *
      * Inserts the point aP belonging to one of the our segments, splitting the adjacent
@@ -571,7 +581,7 @@ public:
         return false;
     }
 
-    bool CompareGeometry( const SHAPE_LINE_CHAIN & aOther ) const;
+    bool CompareGeometry( const SHAPE_LINE_CHAIN& aOther ) const;
 
     void Move( const VECTOR2I& aVector ) override
     {
@@ -583,6 +593,8 @@ public:
     {
         return false;
     }
+
+    const VECTOR2I PointAlong( int aPathLength ) const;
 
 private:
     /// array of vertices

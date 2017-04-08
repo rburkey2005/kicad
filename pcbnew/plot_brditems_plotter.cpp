@@ -54,16 +54,16 @@
  * and a group of board items
  */
 
-EDA_COLOR_T BRDITEMS_PLOTTER::getColor( LAYER_NUM aLayer )
+COLOR4D BRDITEMS_PLOTTER::getColor( LAYER_NUM aLayer )
 {
-    EDA_COLOR_T color = m_board->GetLayerColor( ToLAYER_ID( aLayer ) );
-    if (color == WHITE)
-        color = LIGHTGRAY;
+    COLOR4D color = m_board->GetLayerColor( ToLAYER_ID( aLayer ) );
+    if( color == COLOR4D::WHITE )
+        color = COLOR4D( LIGHTGRAY );
     return color;
 }
 
 
-void BRDITEMS_PLOTTER::PlotPad( D_PAD* aPad, EDA_COLOR_T aColor, EDA_DRAW_MODE_T aPlotMode )
+void BRDITEMS_PLOTTER::PlotPad( D_PAD* aPad, COLOR4D aColor, EDA_DRAW_MODE_T aPlotMode )
 {
     wxPoint shape_pos = aPad->ShapePos();
     GBR_METADATA gbr_metadata;
@@ -199,7 +199,7 @@ bool BRDITEMS_PLOTTER::PlotAllTextsModule( MODULE* aModule )
     TEXTE_MODULE* textModule = &aModule->Reference();
     LAYER_NUM     textLayer = textModule->GetLayer();
 
-    if( textLayer >= LAYER_ID_COUNT )       // how will this ever be true?
+    if( textLayer >= PCB_LAYER_ID_COUNT )       // how will this ever be true?
         return false;
 
     if( !m_layerMask[textLayer] )
@@ -211,7 +211,7 @@ bool BRDITEMS_PLOTTER::PlotAllTextsModule( MODULE* aModule )
     textModule = &aModule->Value();
     textLayer = textModule->GetLayer();
 
-    if( textLayer > LAYER_ID_COUNT )        // how will this ever be true?
+    if( textLayer > PCB_LAYER_ID_COUNT )        // how will this ever be true?
         return false;
 
     if( !m_layerMask[textLayer] )
@@ -223,7 +223,7 @@ bool BRDITEMS_PLOTTER::PlotAllTextsModule( MODULE* aModule )
     // Plot text fields, if allowed
     if( trace_ref )
     {
-        if( GetReferenceColor() == UNSPECIFIED_COLOR )
+        if( GetReferenceColor() == COLOR4D::UNSPECIFIED )
             PlotTextModule( &aModule->Reference(), getColor( textLayer ) );
         else
             PlotTextModule( &aModule->Reference(), GetReferenceColor() );
@@ -231,7 +231,7 @@ bool BRDITEMS_PLOTTER::PlotAllTextsModule( MODULE* aModule )
 
     if( trace_val )
     {
-        if( GetValueColor() == UNSPECIFIED_COLOR )
+        if( GetValueColor() == COLOR4D::UNSPECIFIED )
             PlotTextModule( &aModule->Value(), getColor( textLayer ) );
         else
             PlotTextModule( &aModule->Value(), GetValueColor() );
@@ -249,7 +249,7 @@ bool BRDITEMS_PLOTTER::PlotAllTextsModule( MODULE* aModule )
 
         textLayer = textModule->GetLayer();
 
-        if( textLayer >= LAYER_ID_COUNT )
+        if( textLayer >= PCB_LAYER_ID_COUNT )
             return false;
 
         if( !m_layerMask[textLayer] )
@@ -292,21 +292,21 @@ void BRDITEMS_PLOTTER::PlotBoardGraphicItems()
     }
 }
 
-void BRDITEMS_PLOTTER::PlotTextModule( TEXTE_MODULE* pt_texte, EDA_COLOR_T aColor )
+void BRDITEMS_PLOTTER::PlotTextModule( TEXTE_MODULE* pt_texte, COLOR4D aColor )
 {
     wxSize  size;
     wxPoint pos;
     double  orient;
     int     thickness;
 
-    if( aColor == WHITE )
-        aColor = LIGHTGRAY;
+    if( aColor == COLOR4D::WHITE )
+        aColor = COLOR4D( LIGHTGRAY );
 
     m_plotter->SetColor( aColor );
 
     // calculate some text parameters :
-    size = pt_texte->GetSize();
-    pos = pt_texte->GetTextPosition();
+    size = pt_texte->GetTextSize();
+    pos = pt_texte->GetTextPos();
 
     orient = pt_texte->GetDrawRotation();
 
@@ -344,7 +344,7 @@ void BRDITEMS_PLOTTER::PlotDimension( DIMENSION* aDim )
     draw.SetWidth( aDim->GetWidth() );
     draw.SetLayer( aDim->GetLayer() );
 
-    EDA_COLOR_T color = aDim->GetBoard()->GetLayerColor( aDim->GetLayer() );
+    COLOR4D color = aDim->GetBoard()->GetLayerColor( aDim->GetLayer() );
 
     // Set plot color (change WHITE to LIGHTGRAY because
     // the white items are not seen on a white paper or screen
@@ -565,9 +565,9 @@ void BRDITEMS_PLOTTER::PlotTextePcb( TEXTE_PCB* pt_texte )
 
     m_plotter->SetColor( getColor( pt_texte->GetLayer() ) );
 
-    size      = pt_texte->GetSize();
-    pos       = pt_texte->GetTextPosition();
-    orient    = pt_texte->GetOrientation();
+    size      = pt_texte->GetTextSize();
+    pos       = pt_texte->GetTextPos();
+    orient    = pt_texte->GetTextAngle();
     thickness = pt_texte->GetThickness();
 
     if( pt_texte->IsMirrored() )
@@ -591,14 +591,14 @@ void BRDITEMS_PLOTTER::PlotTextePcb( TEXTE_PCB* pt_texte )
         for( unsigned ii = 0; ii <  strings_list.Count(); ii++ )
         {
             wxString& txt =  strings_list.Item( ii );
-            m_plotter->Text( positions[ii], UNSPECIFIED_COLOR, txt, orient, size,
+            m_plotter->Text( positions[ii], COLOR4D::UNSPECIFIED, txt, orient, size,
                              pt_texte->GetHorizJustify(), pt_texte->GetVertJustify(),
                              thickness, pt_texte->IsItalic(), allow_bold, false, &gbr_metadata );
         }
     }
     else
     {
-        m_plotter->Text( pos, UNSPECIFIED_COLOR, shownText, orient, size,
+        m_plotter->Text( pos, COLOR4D::UNSPECIFIED, shownText, orient, size,
                          pt_texte->GetHorizJustify(), pt_texte->GetVertJustify(),
                          thickness, pt_texte->IsItalic(), allow_bold, false, &gbr_metadata );
     }
@@ -646,7 +646,7 @@ void BRDITEMS_PLOTTER::PlotFilledAreas( ZONE_CONTAINER* aZone )
      *
      * in non filled mode the outline is plotted, but not the filling items
      */
-    for( SHAPE_POLY_SET::CONST_ITERATOR ic =  polysList.CIterate(); ic; ++ic )
+    for( auto ic = polysList.CIterate(); ic; ++ic )
     {
         wxPoint pos( ic->x, ic->y );
         cornerList.push_back( pos );

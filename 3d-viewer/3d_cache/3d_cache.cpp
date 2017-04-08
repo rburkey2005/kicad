@@ -42,7 +42,6 @@
 #include "common.h"
 #include "3d_cache.h"
 #include "3d_info.h"
-#include "common.h"
 #include "sg/scenegraph.h"
 #include "3d_filename_resolver.h"
 #include "3d_plugin_manager.h"
@@ -391,7 +390,11 @@ bool S3D_CACHE::getSHA1( const wxString& aFileName, unsigned char* aSHA1Sum )
         return false;
     }
 
+    #ifdef WIN32
+    FILE* fp = _wfopen( aFileName.wc_str(), L"rb" );
+    #else
     FILE* fp = fopen( aFileName.ToUTF8(), "rb" );
+    #endif
 
     if( NULL == fp )
         return false;

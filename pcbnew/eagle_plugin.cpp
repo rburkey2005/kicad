@@ -1391,7 +1391,7 @@ void EAGLE_PLUGIN::loadLayerDefs( CPTREE& aLayers )
         {
             // some eagle boards do not have contiguous layer number sequences.
 
-#if 0   // pre LAYER_ID & LSET:
+#if 0   // pre PCB_LAYER_ID & LSET:
             m_cu_map[it->number] = cu.size() - 1 - ki_layer_count;
 #else
             m_cu_map[it->number] = ki_layer_count;
@@ -1414,7 +1414,7 @@ void EAGLE_PLUGIN::loadLayerDefs( CPTREE& aLayers )
 
         for( EITER it = cu.begin();  it != cu.end();  ++it )
         {
-            LAYER_ID layer =  kicad_layer( it->number );
+            PCB_LAYER_ID layer =  kicad_layer( it->number );
 
             // these function provide their own protection against UNDEFINED_LAYER:
             m_board->SetLayerName( layer, FROM_UTF8( it->name.c_str() ) );
@@ -1437,8 +1437,8 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
         {
             m_xpath->push( "wire" );
 
-            EWIRE       w( gr->second );
-            LAYER_ID    layer = kicad_layer( w.layer );
+            EWIRE        w( gr->second );
+            PCB_LAYER_ID layer = kicad_layer( w.layer );
 
             wxPoint start( kicad_x( w.x1 ), kicad_y( w.y1 ) );
             wxPoint end(   kicad_x( w.x2 ), kicad_y( w.y2 ) );
@@ -1471,17 +1471,10 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
         }
         else if( gr->first == "text" )
         {
-#if defined(DEBUG)
-            if( gr->second.data() == "ATMEGA328" )
-            {
-                int breakhere = 1;
-                (void) breakhere;
-            }
-#endif
             m_xpath->push( "text" );
 
-            ETEXT       t( gr->second );
-            LAYER_ID    layer = kicad_layer( t.layer );
+            ETEXT        t( gr->second );
+            PCB_LAYER_ID layer = kicad_layer( t.layer );
 
             if( layer != UNDEFINED_LAYER )
             {
@@ -1491,9 +1484,9 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
                 pcbtxt->SetLayer( layer );
                 pcbtxt->SetTimeStamp( timeStamp( gr->second ) );
                 pcbtxt->SetText( FROM_UTF8( t.text.c_str() ) );
-                pcbtxt->SetTextPosition( wxPoint( kicad_x( t.x ), kicad_y( t.y ) ) );
+                pcbtxt->SetTextPos( wxPoint( kicad_x( t.x ), kicad_y( t.y ) ) );
 
-                pcbtxt->SetSize( kicad_fontz( t.size ) );
+                pcbtxt->SetTextSize( kicad_fontz( t.size ) );
 
                 double  ratio = t.ratio ? *t.ratio : 8;     // DTD says 8 is default
 
@@ -1509,12 +1502,12 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
                     double degrees = t.rot->degrees;
 
                     if( degrees == 90 || t.rot->spin )
-                        pcbtxt->SetOrientation( sign * t.rot->degrees * 10 );
+                        pcbtxt->SetTextAngle( sign * t.rot->degrees * 10 );
                     else if( degrees == 180 )
                         align = ETEXT::TOP_RIGHT;
                     else if( degrees == 270 )
                     {
-                        pcbtxt->SetOrientation( sign * 90 * 10 );
+                        pcbtxt->SetTextAngle( sign * 90 * 10 );
                         align = ETEXT::TOP_RIGHT;
                     }
                 }
@@ -1568,8 +1561,8 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
         {
             m_xpath->push( "circle" );
 
-            ECIRCLE     c( gr->second );
-            LAYER_ID    layer = kicad_layer( c.layer );
+            ECIRCLE      c( gr->second );
+            PCB_LAYER_ID layer = kicad_layer( c.layer );
 
             if( layer != UNDEFINED_LAYER )       // unsupported layer
             {
@@ -1591,8 +1584,8 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
             // net related info on it from the DTD.
             m_xpath->push( "rectangle" );
 
-            ERECT       r( gr->second );
-            LAYER_ID    layer = kicad_layer( r.layer );
+            ERECT        r( gr->second );
+            PCB_LAYER_ID layer = kicad_layer( r.layer );
 
             if( IsCopperLayer( layer ) )
             {
@@ -1604,17 +1597,15 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
                 zone->SetLayer( layer );
                 zone->SetNetCode( NETINFO_LIST::UNCONNECTED );
 
-                CPolyLine::HATCH_STYLE outline_hatch = CPolyLine::DIAGONAL_EDGE;
+                ZONE_CONTAINER::HATCH_STYLE outline_hatch = ZONE_CONTAINER::DIAGONAL_EDGE;
 
-                zone->Outline()->Start( layer, kicad_x( r.x1 ), kicad_y( r.y1 ), outline_hatch );
+                zone->AppendCorner( wxPoint( kicad_x( r.x1 ), kicad_y( r.y1 ) ) );
                 zone->AppendCorner( wxPoint( kicad_x( r.x2 ), kicad_y( r.y1 ) ) );
                 zone->AppendCorner( wxPoint( kicad_x( r.x2 ), kicad_y( r.y2 ) ) );
                 zone->AppendCorner( wxPoint( kicad_x( r.x1 ), kicad_y( r.y2 ) ) );
-                zone->Outline()->CloseLastContour();
 
                 // this is not my fault:
-                zone->Outline()->SetHatch(
-                        outline_hatch, Mils2iu( zone->Outline()->GetDefaultHatchPitchMils() ), true );
+                zone->SetHatch( outline_hatch, Mils2iu( zone->GetDefaultHatchPitchMils() ), true );
             }
 
             m_xpath->pop();
@@ -1681,10 +1672,10 @@ void EAGLE_PLUGIN::loadPlain( CPTREE& aGraphics )
             // The origin and end are assumed to always be in this order from eagle
             dimension->SetOrigin( wxPoint( kicad_x( d.x1 ), kicad_y( d.y1 ) ) );
             dimension->SetEnd( wxPoint( kicad_x( d.x2 ), kicad_y( d.y2 ) ) );
-            dimension->Text().SetSize( m_board->GetDesignSettings().m_PcbTextSize );
+            dimension->Text().SetTextSize( m_board->GetDesignSettings().m_PcbTextSize );
 
             int width = m_board->GetDesignSettings().m_PcbTextWidth;
-            int maxThickness = Clamp_Text_PenSize( width, dimension->Text().GetSize() );
+            int maxThickness = Clamp_Text_PenSize( width, dimension->Text().GetTextSize() );
 
             if( width > maxThickness )
                 width = maxThickness;
@@ -1729,13 +1720,6 @@ void EAGLE_PLUGIN::loadLibrary( CPTREE& aLib, const string* aLibName )
 
         ReplaceIllegalFileNameChars( &pack_name );
 
-#if 0 && defined(DEBUG)
-        if( pack_name == "TO220H" )
-        {
-            int breakhere = 1;
-            (void) breakhere;
-        }
-#endif
         m_xpath->Value( pack_name.c_str() );
 
         string key = aLibName ? makeKey( *aLibName, pack_name ) : pack_name;
@@ -1820,13 +1804,6 @@ void EAGLE_PLUGIN::loadElements( CPTREE& aElements )
             THROW_IO_ERROR( emsg );
         }
 
-#if defined(DEBUG)
-        if( e.name == "ARM_C8" )
-        {
-            int breakhere = 1;
-            (void) breakhere;
-        }
-#endif
         // copy constructor to clone the template
         MODULE* m = new MODULE( *mi->second );
         m_board->Add( m, ADD_APPEND );
@@ -2031,18 +2008,18 @@ void EAGLE_PLUGIN::orientModuleText( MODULE* m, const EELEMENT& e,
         if( a.x && a.y )    // boost::optional
         {
             wxPoint pos( kicad_x( *a.x ), kicad_y( *a.y ) );
-            txt->SetTextPosition( pos );
+            txt->SetTextPos( pos );
         }
 
         // Even though size and ratio are both optional, I am not seeing
         // a case where ratio is present but size is not.
         double  ratio = 8;
-        wxSize  fontz = txt->GetSize();
+        wxSize  fontz = txt->GetTextSize();
 
         if( a.size )
         {
             fontz = kicad_fontz( *a.size );
-            txt->SetSize( fontz );
+            txt->SetTextSize( fontz );
 
             if( a.ratio )
                 ratio = *a.ratio;
@@ -2073,24 +2050,24 @@ void EAGLE_PLUGIN::orientModuleText( MODULE* m, const EELEMENT& e,
         if( degrees == 90 || degrees == 0 || spin )
         {
             orient = degrees - m->GetOrientation() / 10;
-            txt->SetOrientation( sign * orient * 10 );
+            txt->SetTextAngle( sign * orient * 10 );
         }
         else if( degrees == 180 )
         {
             orient = 0 - m->GetOrientation() / 10;
-            txt->SetOrientation( sign * orient * 10 );
+            txt->SetTextAngle( sign * orient * 10 );
             align = ETEXT::TOP_RIGHT;
         }
         else if( degrees == 270 )
         {
             orient = 90 - m->GetOrientation() / 10;
             align = ETEXT::TOP_RIGHT;
-            txt->SetOrientation( sign * orient * 10 );
+            txt->SetTextAngle( sign * orient * 10 );
         }
         else
         {
             orient = 90 - degrees - m->GetOrientation() / 10;
-            txt->SetOrientation( sign * orient * 10 );
+            txt->SetTextAngle( sign * orient * 10 );
         }
 
         switch( align )
@@ -2111,7 +2088,7 @@ void EAGLE_PLUGIN::orientModuleText( MODULE* m, const EELEMENT& e,
     }
     else    // Part is not smash so use Lib default for NAME/VALUE // the text is per the original package, sans <attribute>
     {
-        double degrees = ( txt->GetOrientation() + m->GetOrientation() ) / 10;
+        double degrees = ( txt->GetTextAngle() + m->GetOrientation() ) / 10;
 
         // @todo there are a few more cases than these to contend with:
         if( (!txt->IsMirrored() && ( abs( degrees ) == 180 || abs( degrees ) == 270 ))
@@ -2128,7 +2105,7 @@ MODULE* EAGLE_PLUGIN::makeModule( CPTREE& aPackage, const string& aPkgName ) con
 {
     std::unique_ptr<MODULE>   m( new MODULE( m_board ) );
 
-    m->SetFPID( FPID( aPkgName ) );
+    m->SetFPID( LIB_ID( aPkgName ) );
 
     opt_string description = aPackage.get_optional<string>( "description" );
     if( description )
@@ -2169,8 +2146,8 @@ MODULE* EAGLE_PLUGIN::makeModule( CPTREE& aPackage, const string& aPkgName ) con
 
 void EAGLE_PLUGIN::packageWire( MODULE* aModule, CPTREE& aTree ) const
 {
-    EWIRE       w( aTree );
-    LAYER_ID    layer = kicad_layer( w.layer );
+    EWIRE        w( aTree );
+    PCB_LAYER_ID layer = kicad_layer( w.layer );
 
     if( IsNonCopperLayer( layer ) )     // only valid non-copper wires, skip copper package wires
     {
@@ -2296,8 +2273,8 @@ void EAGLE_PLUGIN::packagePad( MODULE* aModule, CPTREE& aTree ) const
 
 void EAGLE_PLUGIN::packageText( MODULE* aModule, CPTREE& aTree ) const
 {
-    ETEXT       t( aTree );
-    LAYER_ID    layer = kicad_layer( t.layer );
+    ETEXT        t( aTree );
+    PCB_LAYER_ID layer = kicad_layer( t.layer );
 
     if( layer == UNDEFINED_LAYER )
     {
@@ -2322,12 +2299,11 @@ void EAGLE_PLUGIN::packageText( MODULE* aModule, CPTREE& aTree ) const
 
     wxPoint pos( kicad_x( t.x ), kicad_y( t.y ) );
 
-    txt->SetTextPosition( pos );
+    txt->SetTextPos( pos );
     txt->SetPos0( pos - aModule->GetPosition() );
 
     txt->SetLayer( layer );
-
-    txt->SetSize( kicad_fontz( t.size ) );
+    txt->SetTextSize( kicad_fontz( t.size ) );
 
     double ratio = t.ratio ? *t.ratio : 8;  // DTD says 8 is default
 
@@ -2346,13 +2322,13 @@ void EAGLE_PLUGIN::packageText( MODULE* aModule, CPTREE& aTree ) const
         double degrees = t.rot->degrees;
 
         if( degrees == 90 || t.rot->spin )
-            txt->SetOrientation( sign * degrees * 10 );
+            txt->SetTextAngle( sign * degrees * 10 );
         else if( degrees == 180 )
             align = ETEXT::TOP_RIGHT;
         else if( degrees == 270 )
         {
             align = ETEXT::TOP_RIGHT;
-            txt->SetOrientation( sign * 90 * 10 );
+            txt->SetTextAngle( sign * 90 * 10 );
         }
     }
 
@@ -2403,8 +2379,8 @@ void EAGLE_PLUGIN::packageText( MODULE* aModule, CPTREE& aTree ) const
 
 void EAGLE_PLUGIN::packageRectangle( MODULE* aModule, CPTREE& aTree ) const
 {
-    ERECT       r( aTree );
-    LAYER_ID    layer = kicad_layer( r.layer );
+    ERECT        r( aTree );
+    PCB_LAYER_ID layer = kicad_layer( r.layer );
 
     if( IsNonCopperLayer( layer ) )  // skip copper "package.rectangle"s
     {
@@ -2437,7 +2413,7 @@ void EAGLE_PLUGIN::packageRectangle( MODULE* aModule, CPTREE& aTree ) const
 void EAGLE_PLUGIN::packagePolygon( MODULE* aModule, CPTREE& aTree ) const
 {
     EPOLYGON    p( aTree );
-    LAYER_ID    layer = kicad_layer( p.layer );
+    PCB_LAYER_ID    layer = kicad_layer( p.layer );
 
     if( IsNonCopperLayer( layer ) )  // skip copper "package.rectangle"s
     {
@@ -2486,7 +2462,7 @@ void EAGLE_PLUGIN::packagePolygon( MODULE* aModule, CPTREE& aTree ) const
 void EAGLE_PLUGIN::packageCircle( MODULE* aModule, CPTREE& aTree ) const
 {
     ECIRCLE         e( aTree );
-    LAYER_ID        layer = kicad_layer( e.layer );
+    PCB_LAYER_ID    layer = kicad_layer( e.layer );
     EDGE_MODULE*    gr = new EDGE_MODULE( aModule, S_CIRCLE );
 
     aModule->GraphicalItems().PushBack( gr );
@@ -2544,8 +2520,8 @@ void EAGLE_PLUGIN::packageHole( MODULE* aModule, CPTREE& aTree ) const
 
 void EAGLE_PLUGIN::packageSMD( MODULE* aModule, CPTREE& aTree ) const
 {
-    ESMD        e( aTree );
-    LAYER_ID    layer = kicad_layer( e.layer );
+    ESMD         e( aTree );
+    PCB_LAYER_ID layer = kicad_layer( e.layer );
 
     if( !IsCopperLayer( layer ) )
     {
@@ -2626,21 +2602,14 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
 
         m_xpath->Value( nname.c_str() );
 
-#if defined(DEBUG)
-        if( netName == wxT( "N$8" ) )
-        {
-            int breakhere = 1;
-            (void) breakhere;
-        }
-#endif
         // (contactref | polygon | wire | via)*
         for( CITER it = net->second.begin();  it != net->second.end();  ++it )
         {
             if( it->first == "wire" )
             {
                 m_xpath->push( "wire" );
-                EWIRE   w( it->second );
-                LAYER_ID  layer = kicad_layer( w.layer );
+                EWIRE        w( it->second );
+                PCB_LAYER_ID layer = kicad_layer( w.layer );
 
                 if( IsCopperLayer( layer ) )
                 {
@@ -2674,8 +2643,8 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
                 m_xpath->push( "via" );
                 EVIA    v( it->second );
 
-                LAYER_ID  layer_front_most = kicad_layer( v.layer_front_most );
-                LAYER_ID  layer_back_most  = kicad_layer( v.layer_back_most );
+                PCB_LAYER_ID  layer_front_most = kicad_layer( v.layer_front_most );
+                PCB_LAYER_ID  layer_back_most  = kicad_layer( v.layer_back_most );
 
                 if( IsCopperLayer( layer_front_most ) &&
                     IsCopperLayer( layer_back_most ) )
@@ -2751,8 +2720,8 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
             {
                 m_xpath->push( "polygon" );
 
-                EPOLYGON    p( it->second );
-                LAYER_ID    layer = kicad_layer( p.layer );
+                EPOLYGON     p( it->second );
+                PCB_LAYER_ID layer = kicad_layer( p.layer );
 
                 if( IsCopperLayer( layer ) )
                 {
@@ -2765,7 +2734,6 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
                     zone->SetLayer( layer );
                     zone->SetNetCode( netCode );
 
-                    bool first = true;
                     for( CITER vi = it->second.begin();  vi != it->second.end();  ++vi )
                     {
                         if( vi->first != "vertex" )     // skip <xmlattr> node
@@ -2773,32 +2741,21 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
 
                         EVERTEX v( vi->second );
 
-                        // the ZONE_CONTAINER API needs work, as you can see:
-                        if( first )
-                        {
-                            zone->Outline()->Start( layer,  kicad_x( v.x ), kicad_y( v.y ),
-                                                    CPolyLine::NO_HATCH);
-                            first = false;
-                        }
-                        else
-                            zone->AppendCorner( wxPoint( kicad_x( v.x ), kicad_y( v.y ) ) );
+                        // Append the corner
+                        zone->AppendCorner( wxPoint( kicad_x( v.x ), kicad_y( v.y ) ) );
                     }
-
-                    zone->Outline()->CloseLastContour();
 
                     // If the pour is a cutout it needs to be set to a keepout
                     if( p.pour == EPOLYGON::CUTOUT )
                     {
                         zone->SetIsKeepout( true );
                         zone->SetDoNotAllowCopperPour( true );
-                        zone->Outline()->SetHatchStyle( CPolyLine::NO_HATCH );
+                        zone->SetHatchStyle( ZONE_CONTAINER::NO_HATCH );
                     }
 
                     // if spacing is set the zone should be hatched
                     if( p.spacing )
-                        zone->Outline()->SetHatch( CPolyLine::DIAGONAL_EDGE,
-                                                   *p.spacing,
-                                                   true );
+                        zone->SetHatch( ZONE_CONTAINER::DIAGONAL_EDGE, *p.spacing, true );
 
                     // clearances, etc.
                     zone->SetArcSegmentCount( 32 );     // @todo: should be a constructor default?
@@ -2850,7 +2807,7 @@ void EAGLE_PLUGIN::loadSignals( CPTREE& aSignals )
 }
 
 
-LAYER_ID EAGLE_PLUGIN::kicad_layer( int aEagleLayer ) const
+PCB_LAYER_ID EAGLE_PLUGIN::kicad_layer( int aEagleLayer ) const
 {
     /* will assume this is a valid mapping for all eagle boards until I get paid more:
 
@@ -2956,6 +2913,7 @@ LAYER_ID EAGLE_PLUGIN::kicad_layer( int aEagleLayer ) const
         case 34:    kiLayer = B_Mask;       break;
         case 35:    kiLayer = F_Adhes;      break;
         case 36:    kiLayer = B_Adhes;      break;
+        case 48:    kiLayer = Cmts_User;    break;
         case 49:    kiLayer = Cmts_User;    break;
         case 50:    kiLayer = Cmts_User;    break;
 
@@ -2977,7 +2935,7 @@ LAYER_ID EAGLE_PLUGIN::kicad_layer( int aEagleLayer ) const
         }
     }
 
-    return LAYER_ID( kiLayer );
+    return PCB_LAYER_ID( kiLayer );
 }
 
 
@@ -2991,7 +2949,7 @@ void EAGLE_PLUGIN::centerBoard()
         if( m_props->Value( "page_width",  &page_width ) &&
             m_props->Value( "page_height", &page_height ) )
         {
-            EDA_RECT bbbox = m_board->ComputeBoundingBox( true );
+            EDA_RECT bbbox = m_board->GetBoardEdgesBoundingBox();
 
             int w = atoi( page_width.c_str() );
             int h = atoi( page_height.c_str() );

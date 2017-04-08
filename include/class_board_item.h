@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2004 Jean-Pierre Charras, jaen-pierre.charras@gipsa-lab.inpg.com
- * Copyright (C) 1992-2011 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -40,6 +40,7 @@
 #define FMT_ANGLE  BOARD_ITEM::FormatAngle
 
 class BOARD;
+class BOARD_ITEM_CONTAINER;
 class EDA_DRAW_PANEL;
 
 
@@ -76,7 +77,7 @@ class BOARD_ITEM : public EDA_ITEM
     void SetBack( EDA_ITEM* aBack )       { Pback = aBack; }
 
 protected:
-    LAYER_ID    m_Layer;
+    PCB_LAYER_ID    m_Layer;
 
     static int getTrailingInt( wxString aStr );
     static int getNextNumberInSequence( const std::set<int>& aSeq, bool aFillSequenceGaps );
@@ -122,13 +123,13 @@ public:
 
     BOARD_ITEM* Next() const { return static_cast<BOARD_ITEM*>( Pnext ); }
     BOARD_ITEM* Back() const { return static_cast<BOARD_ITEM*>( Pback ); }
-    BOARD_ITEM* GetParent() const { return (BOARD_ITEM*) m_Parent; }
+    BOARD_ITEM_CONTAINER* GetParent() const { return (BOARD_ITEM_CONTAINER*) m_Parent; }
 
     /**
      * Function GetLayer
      * returns the primary layer this item is on.
      */
-    LAYER_ID GetLayer() const { return m_Layer; }
+    PCB_LAYER_ID GetLayer() const { return m_Layer; }
 
     /**
      * Function GetLayerSet
@@ -145,7 +146,7 @@ public:
      * is virtual because some items (in fact: class DIMENSION)
      * have a slightly different initialization
      */
-    virtual void SetLayer( LAYER_ID aLayer )
+    virtual void SetLayer( PCB_LAYER_ID aLayer )
     {
         // trap any invalid layers, then go find the caller and fix it.
         // wxASSERT( unsigned( aLayer ) < unsigned( NB_PCB_LAYERS ) );
@@ -178,7 +179,7 @@ public:
      * @param aLayer The layer to test for.
      * @return bool - true if on given layer, else false.
      */
-    virtual bool IsOnLayer( LAYER_ID aLayer ) const
+    virtual bool IsOnLayer( PCB_LAYER_ID aLayer ) const
     {
         return m_Layer == aLayer;
     }
@@ -224,13 +225,7 @@ public:
      * Function DeleteStructure
      * deletes this object after UnLink()ing it from its owner if it has one.
      */
-    void DeleteStructure()
-    {
-        if( GetList() != NULL )
-            UnLink();
-
-        delete this;
-    }
+    void DeleteStructure();
 
     /**
      * Function ShowShape

@@ -103,22 +103,23 @@ public:
         return HitTestMarker( aPosition );
     }
 
-    bool IsOnLayer( LAYER_ID aLayer ) const override;
+    bool IsOnLayer( PCB_LAYER_ID aLayer ) const override;
 
     void GetMsgPanelInfo( std::vector< MSG_PANEL_ITEM >& aList ) override;
 
     wxString GetSelectMenuText() const override;
 
-    BITMAP_DEF GetMenuImage() const override { return  drc_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
-    ///> @copydoc VIEW_ITEM::ViewBBox()
-    virtual const BOX2I ViewBBox() const override
+    const BOX2I ViewBBox() const override
     {
-        return GetParent()->ViewBBox();
+        // The following is based on the PCB_PAINTER::draw( const MARKER_PCB* )
+        return BOX2I( m_Pos, VECTOR2I( 1300000, 1300000 ) );
     }
 
-    ///> @copydoc VIEW_ITEM::ViewGetLayers()
-    virtual void ViewGetLayers( int aLayers[], int& aCount ) const override;
+    const EDA_RECT GetBoundingBox() const override;
+
+    void ViewGetLayers( int aLayers[], int& aCount ) const override;
 
 #if defined(DEBUG)
     void Show( int nestLevel, std::ostream& os ) const override { ShowDummy( os ); }

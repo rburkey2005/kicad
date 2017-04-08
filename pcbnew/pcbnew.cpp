@@ -1,9 +1,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -35,12 +35,13 @@
 #include <fctsys.h>
 #include <pgm_base.h>
 #include <kiface_i.h>
+#include <kiface_ids.h>
 #include <confirm.h>
 #include <macros.h>
+#include <make_unique.h>
 #include <class_drawpanel.h>
 #include <wxPcbStruct.h>
 #include <eda_dde.h>
-#include <pcbcommon.h>
 #include <colors_selection.h>
 #include <wx/stdpaths.h>
 
@@ -53,28 +54,31 @@
 #include <hotkeys.h>
 #include <wildcards_and_files_ext.h>
 #include <class_board.h>
+#include <class_draw_panel_gal.h>
 #include <fp_lib_table.h>
 #include <module_editor_frame.h>
 #include <modview_frame.h>
 #include <footprint_wizard_frame.h>
+#include <footprint_preview_panel.h>
+#include <footprint_info_impl.h>
 #include <gl_context_mgr.h>
 extern bool IsWxPythonLoaded();
 
 // Colors for layers and items
 COLORS_DESIGN_SETTINGS g_ColorsSettings;
 
-bool        g_Drc_On = true;
-bool        g_AutoDeleteOldTrack = true;
-bool        g_Raccord_45_Auto = true;
-bool        g_Alternate_Track_Posture = false;
-bool        g_Track_45_Only_Allowed = true;  // True to allow horiz, vert. and 45deg only tracks
-bool        g_Segments_45_Only;              // True to allow horiz, vert. and 45deg only graphic segments
-bool        g_TwoSegmentTrackBuild = true;
+bool         g_Drc_On = true;
+bool         g_AutoDeleteOldTrack = true;
+bool         g_Raccord_45_Auto = true;
+bool         g_Alternate_Track_Posture = false;
+bool         g_Track_45_Only_Allowed = true;  // True to allow horiz, vert. and 45deg only tracks
+bool         g_Segments_45_Only;              // True to allow horiz, vert. and 45deg only graphic segments
+bool         g_TwoSegmentTrackBuild = true;
 
-LAYER_ID    g_Route_Layer_TOP;
-LAYER_ID    g_Route_Layer_BOTTOM;
-int         g_MagneticPadOption   = capture_cursor_in_track_tool;
-int         g_MagneticTrackOption = capture_cursor_in_track_tool;
+PCB_LAYER_ID g_Route_Layer_TOP;
+PCB_LAYER_ID g_Route_Layer_BOTTOM;
+int          g_MagneticPadOption   = CAPTURE_CURSOR_IN_TRACK_TOOL;
+int          g_MagneticTrackOption = CAPTURE_CURSOR_IN_TRACK_TOOL;
 
 wxPoint     g_Offset_Module;     // module offset used when moving a footprint
 
@@ -145,6 +149,10 @@ static struct IFACE : public KIFACE_I
                                                                            FRAME_T( aClassId ) ) );
             break;
 
+        case FRAME_PCB_FOOTPRINT_PREVIEW:
+            frame = dynamic_cast< wxWindow* >( FOOTPRINT_PREVIEW_PANEL::New( aKiway, aParent ) );
+            break;
+
         default:
             break;
         }
@@ -165,7 +173,17 @@ static struct IFACE : public KIFACE_I
      */
     void* IfaceOrAddress( int aDataId ) override
     {
-        return NULL;
+        switch( aDataId )
+        {
+        case KIFACE_NEW_FOOTPRINT_LIST:
+            return (void*) static_cast<FOOTPRINT_LIST*>( new FOOTPRINT_LIST_IMPL() );
+
+        case KIFACE_G_FOOTPRINT_TABLE:
+            return (void*) new FP_LIB_TABLE( &GFootprintTable );
+
+        default:
+            return nullptr;
+        }
     }
 
 } kiface( "pcbnew", KIWAY::FACE_PCB );
@@ -201,58 +219,33 @@ PGM_BASE& Pgm()
 #if defined( KICAD_SCRIPTING )
 static bool scriptingSetup()
 {
-    wxString path_frag;
 
-#if defined( __MINGW32__ )
-    // force python environment under Windows:
-    const wxString python_us( wxT( "python27_us" ) );
+#if defined( __WINDOWS__ )
+    // If our python.exe (in kicad/bin) exists, force our kicad python environment
+    wxString kipython = FindKicadFile( "python.exe" );
 
-    // Build our python path inside kicad
-    wxString kipython =  FindKicadFile( python_us + wxT( "/python.exe" ) );
-
-    //we need only the path:
-    wxFileName fn( kipython );
+    // we need only the path:
+    wxFileName fn( kipython  );
     kipython = fn.GetPath();
 
     // If our python install is existing inside kicad, use it
+    // Note: this is usefull only when an other python version is installed
     if( wxDirExists( kipython ) )
     {
+        // clear any PYTHONPATH and PYTHONHOME env var definition: the default
+        // values work fine inside Kicad:
+        wxSetEnv( wxT( "PYTHONPATH" ), wxEmptyString );
+        wxSetEnv( wxT( "PYTHONHOME" ), wxEmptyString );
+
+        // Add our python executable path in first position:
         wxString ppath;
+        wxGetEnv( wxT( "PATH" ), &ppath );
 
-        if( !wxGetEnv( wxT( "PYTHONPATH" ), &ppath ) || !ppath.Contains( python_us ) )
-        {
-            ppath << kipython << wxT( "/pylib;" );
-            ppath << kipython << wxT( "/lib;" );
-            ppath << kipython << wxT( "/dll" );
-            wxSetEnv( wxT( "PYTHONPATH" ), ppath );
-            // DBG( std::cout << "set PYTHONPATH to "  << TO_UTF8( ppath ) << "\n"; )
-
-            // Add python executable path:
-            wxGetEnv( wxT( "PATH" ), &ppath );
-
-            if( !ppath.Contains( python_us ) )
-            {
-                kipython << wxT( ";" ) << ppath;
-                wxSetEnv( wxT( "PATH" ), kipython );
-                // DBG( std::cout << "set PATH to " << TO_UTF8( kipython ) << "\n"; )
-            }
-        }
+        kipython << wxT( ";" ) << ppath;
+        wxSetEnv( wxT( "PATH" ), kipython );
     }
 
-    // wizard plugins are stored in ../share/kicad/scripting/plugins.
-    // so add the base scripting path to python scripting default search paths
-    // which are ( [KICAD_PATH] is an environment variable to define)
-    // [KICAD_PATH]/scripting
-    // [KICAD_PATH]/scripting/plugins
-    // Add this default search path:
-    path_frag = Pgm().GetExecutablePath() + wxT( "../share/kicad/scripting" );
-
 #elif defined( __WXMAC__ )
-
-    // This path is given to LoadPlugins() from kicadplugins.i, which
-    // only supports one path, the bundle scripting path for now.
-    // All other paths are determined by the pcbnew.py initialisation code
-    path_frag = GetOSXKicadDataDir() + wxT( "/scripting" );
 
     // Add default paths to PYTHONPATH
     wxString pypath;
@@ -290,21 +283,36 @@ static bool scriptingSetup()
 
     wxSetEnv( wxT( "PYTHONPATH" ), pypath );
 
-    // Add this default search path:
-    path_frag = Pgm().GetExecutablePath() + wxT( "../share/kicad/scripting" );
 #endif
 
-    // path_frag is the path to the bundled scripts and plugins, all other paths are
-    // determined by the python pcbnew.py initialisation code.
-    if( !pcbnewInitPythonScripting( TO_UTF8( path_frag ) ) )
+    if( !pcbnewInitPythonScripting( TO_UTF8( PyScriptingPath() ) ) )
     {
-        wxLogError( wxT( "pcbnewInitPythonScripting() failed." ) );
+        wxLogError( "pcbnewInitPythonScripting() failed." );
         return false;
     }
 
     return true;
 }
 #endif  // KICAD_SCRIPTING
+
+
+void PythonPluginsReloadBase()
+{
+#if defined(KICAD_SCRIPTING)
+    //Reload plugin list: reload Python plugins if they are newer than
+    // the already loaded, and load new plugins
+    char cmd[1024];
+
+    snprintf( cmd, sizeof(cmd),
+            "pcbnew.LoadPlugins(\"%s\")", TO_UTF8( PyScriptingPath() ) );
+
+    PyLOCK lock;
+
+    // ReRun the Python method pcbnew.LoadPlugins
+    // (already called when starting Pcbnew)
+    PyRun_SimpleString( cmd );
+#endif
+}
 
 
 /// The global footprint library table.  This is not dynamically allocated because
@@ -340,7 +348,7 @@ bool IFACE::OnKifaceStart( PGM_BASE* aProgram, int aCtlBits )
                 "table or created an empty table in the kicad configuration folder.\n"
                 "You must first configure the library "
                 "table to include all footprint libraries you want to use.\n"
-                "See the \"Footprint Library  Table\" section of "
+                "See the \"Footprint Library Table\" section of "
                 "the CvPcb or Pcbnew documentation for more information." ) );
         }
     }

@@ -32,7 +32,6 @@
 #define __WX_VIEW_CONTROLS_H
 
 #include <wx/wx.h>
-#include <wx/event.h>
 
 #include <view/view_controls.h>
 
@@ -77,13 +76,6 @@ public:
      *
      * @param aEnabled says whether the option should enabled or disabled.
      */
-    void SetAutoPan( bool aEnabled ) override
-    {
-        m_autoPanEnabled = aEnabled;
-
-        if( m_state == AUTO_PANNING )
-            m_state = IDLE;
-    }
 
     /// @copydoc VIEW_CONTROLS::GetMousePosition()
     VECTOR2I GetMousePosition() const override;
@@ -147,6 +139,9 @@ private:
 
     /// Ratio used for scaling world coordinates to scrollbar position.
     VECTOR2D    m_scrollScale;
+
+    /// Current scrollbar position
+    VECTOR2I    m_scrollPos;
 };
 } // namespace KIGFX
 

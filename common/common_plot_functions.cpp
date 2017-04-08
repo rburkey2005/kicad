@@ -79,7 +79,7 @@ void PlotWorkSheet( PLOTTER* plotter, const TITLE_BLOCK& aTitleBlock,
      */
     double   iusPerMil = plotter->GetIUsPerDecimil() * 10.0;
 
-    EDA_COLOR_T plotColor = plotter->GetColorMode() ? RED : BLACK;
+    COLOR4D plotColor = plotter->GetColorMode() ? COLOR4D( RED ) : COLOR4D::BLACK;
     plotter->SetColor( plotColor );
     WS_DRAW_ITEM_LIST drawList;
 
@@ -128,9 +128,9 @@ void PlotWorkSheet( PLOTTER* plotter, const TITLE_BLOCK& aTitleBlock,
         case WS_DRAW_ITEM_BASE::wsg_text:
             {
                 WS_DRAW_ITEM_TEXT* text = (WS_DRAW_ITEM_TEXT*) item;
-                plotter->Text( text->GetTextPosition(), text->GetColor(),
-                               text->GetShownText(), text->GetOrientation(),
-                               text->GetSize(),
+                plotter->Text( text->GetTextPos(), text->GetColor(),
+                               text->GetShownText(), text->GetTextAngle(),
+                               text->GetTextSize(),
                                text->GetHorizJustify(), text->GetVertJustify(),
                                text->GetPenWidth(),
                                text->IsItalic(), text->IsBold(),

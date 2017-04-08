@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras wanadoo.fr
  * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -119,6 +119,7 @@ class SCH_EDIT_FRAME : public SCH_BASE_FRAME
 private:
     SCH_SHEET_PATH*         m_CurrentSheet;    ///< which sheet we are presently working on.
     wxString                m_DefaultSchematicFileName;
+    wxString                m_SelectedNetName;
 
     PARAM_CFG_ARRAY         m_projectFileParams;
     PARAM_CFG_ARRAY         m_configSettings;
@@ -456,6 +457,18 @@ public:
      */
     bool DeleteItemAtCrossHair( wxDC* aDC );
 
+
+    /**
+     * Function HighlightConnectionAtPosition
+     * Highlight the connection found at aPosition.
+     * If no connection to highlight is found, clear the current highlighted connect (if any).
+     *
+     * @param aPosition is the location of the test point (usually cross hair position).
+     * @return true if ok, false if there was an issue to build the netlist
+     * needed to highlight a connection.
+     */
+    bool HighlightConnectionAtPosition( wxPoint aPosition );
+
     /**
      * Function FindComponentAndItem
      * finds a component in the schematic and an item in this component.
@@ -475,24 +488,27 @@ public:
     /**
      * Function SendMessageToPcbnew
      * send a remote to Pcbnew via a socket connection.
-     * @param objectToSync Item to be located on board (footprint, pad or text)
-     * @param LibItem Component in library if objectToSync is a sub item of a component
+     * @param aObjectToSync = item to be located on board
+     *      (footprint, pad, text or schematic sheet)
+     * @param aPart = component if objectToSync is a sub item of a symbol (like a pin)
      * <p>
      * Commands are
      * $PART: reference   put cursor on footprint anchor
      * $PIN: number $PART: reference put cursor on the footprint pad
+     * $SHEET: time_stamp  select all footprints of components is the schematic sheet path
      * </p>
      */
-    void SendMessageToPCBNEW( EDA_ITEM* objectToSync, SCH_COMPONENT*  LibItem );
+    void SendMessageToPCBNEW( EDA_ITEM* aObjectToSync, SCH_COMPONENT* aPart );
 
     /**
      * BuildNetListBase
      * netlist generation:
      * Creates a flat list which stores all connected objects, and mainly
      * pins and labels.
+     * @param updateStatusText = decides if window StatusText should be modified
      * @return NETLIST_OBJECT_LIST* - caller owns the object.
      */
-    NETLIST_OBJECT_LIST* BuildNetListBase();
+    NETLIST_OBJECT_LIST* BuildNetListBase( bool updateStatusText = true );
 
     /**
      * Function CreateNetlist
@@ -616,6 +632,15 @@ public:
      * draws the current sheet on the display.
      */
     void DisplayCurrentSheet();
+
+    /**
+     * Function SetCurrentSheetHighlightFlags
+     * Set/reset the BRIGHTENED of connected objects inside the current sheet,
+     * according to the highligthed net name.
+     * @return true if the flags are correctly set, and false if something goes wrong
+     * (duplicate sheet names)
+     */
+    bool SetCurrentSheetHighlightFlags();
 
     /**
      * Function GetUniqueFilenameForCurrentSheet
@@ -1068,17 +1093,15 @@ private:
      * to load the component from and/or some other filters
      *          if NULL, no filtering.
      * @param aHistoryList     list remembering recently used component names.
-     * @param aHistoryLastUnit remembering last unit in last component.
      * @param aUseLibBrowser is the flag to determine if the library browser should be launched.
      * @return a pointer the SCH_COMPONENT object selected or NULL if no component was selected.
      * (TODO(hzeller): This really should be a class doing history, but didn't
      *  want to change too much while other refactoring is going on)
      */
-    SCH_COMPONENT* Load_Component( wxDC*           aDC,
-                                   const SCHLIB_FILTER*  aFilter,
-                                   wxArrayString&  aHistoryList,
-                                   int&            aHistoryLastUnit,
-                                   bool            aUseLibBrowser );
+    SCH_COMPONENT* Load_Component( wxDC*                            aDC,
+                                   const SCHLIB_FILTER*             aFilter,
+                                   SCH_BASE_FRAME::HISTORY_LIST&    aHistoryList,
+                                   bool                             aUseLibBrowser );
 
     /**
      * Function EditComponent

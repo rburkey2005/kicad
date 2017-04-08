@@ -62,7 +62,7 @@ private:
     LSET            m_printMaskLayer;
     // the list of existing board layers in wxCheckListBox, with the
     // board layers id:
-    std::pair<wxCheckListBox*, int> m_boxSelectLayer[LAYER_ID_COUNT];
+    std::pair<wxCheckListBox*, int> m_boxSelectLayer[PCB_LAYER_ID_COUNT];
     bool            m_printBW;
     wxString        m_outputDirectory;
     bool            m_printMirror;
@@ -160,7 +160,7 @@ void DIALOG_SVG_PRINT::initDialog()
 
     for(  ;  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
         int checkIndex;
 
         if( IsCopperLayer( layer ) )
@@ -286,7 +286,7 @@ void DIALOG_SVG_PRINT::ExportSVGFile( bool aOnlyOneFile )
 
     for( LSEQ seq = all_selected.Seq();  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
         wxFileName fn( boardFilename );
 
@@ -336,7 +336,7 @@ bool DIALOG_SVG_PRINT::CreateSVGFile( const wxString& aFullFileName, bool aOnlyO
     plot_opts.SetMirror( m_printMirror );
     plot_opts.SetFormat( PLOT_FORMAT_SVG );
 
-    EDA_COLOR_T color = UNSPECIFIED_COLOR;      // Used layer color to plot ref and value
+    COLOR4D color = COLOR4D::UNSPECIFIED;      // Used layer color to plot ref and value
 
     plot_opts.SetReferenceColor( color );
     plot_opts.SetValueColor( color );

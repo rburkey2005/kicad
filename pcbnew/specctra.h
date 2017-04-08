@@ -1260,7 +1260,7 @@ public:
 typedef boost::ptr_vector<LAYER>    LAYERS;
 
 
-class LAYER_PAIR : public ELEM
+class SPECCTRA_LAYER_PAIR : public ELEM
 {
     friend class SPECCTRA_DB;
 
@@ -1270,7 +1270,7 @@ class LAYER_PAIR : public ELEM
     double          layer_weight;
 
 public:
-    LAYER_PAIR( ELEM* aParent ) :
+    SPECCTRA_LAYER_PAIR( ELEM* aParent ) :
         ELEM( T_layer_pair, aParent )
     {
         layer_weight = 0.0;
@@ -1287,14 +1287,14 @@ public:
                layer_weight );
     }
 };
-typedef boost::ptr_vector<LAYER_PAIR>  LAYER_PAIRS;
+typedef boost::ptr_vector<SPECCTRA_LAYER_PAIR>  SPECCTRA_LAYER_PAIRS;
 
 
 class LAYER_NOISE_WEIGHT : public ELEM
 {
     friend class SPECCTRA_DB;
 
-    LAYER_PAIRS     layer_pairs;
+    SPECCTRA_LAYER_PAIRS     layer_pairs;
 
 public:
 
@@ -1307,7 +1307,7 @@ public:
     {
         out->Print( nestLevel, "(%s\n", Name() );
 
-        for( LAYER_PAIRS::iterator i=layer_pairs.begin(); i!=layer_pairs.end();  ++i )
+        for( SPECCTRA_LAYER_PAIRS::iterator i=layer_pairs.begin(); i!=layer_pairs.end();  ++i )
             i->Format( out, nestLevel+1 );
 
         out->Print( nestLevel, ")\n" );
@@ -3622,7 +3622,7 @@ class SPECCTRA_DB : public SPECCTRA_LEXER
     std::vector<int> kicadLayer2pcb;
 
     /// maps PCB layer number to BOARD layer numbers
-    std::vector<LAYER_ID>   pcbLayer2kicad;
+    std::vector<PCB_LAYER_ID>   pcbLayer2kicad;
 
     /// used during FromSESSION() only, memory for it is not owned here.
     UNIT_RES*       routeResolution;
@@ -3701,7 +3701,7 @@ class SPECCTRA_DB : public SPECCTRA_LEXER
     void doSTRUCTURE( STRUCTURE* growth ) throw( IO_ERROR, boost::bad_pointer );
     void doSTRUCTURE_OUT( STRUCTURE_OUT* growth ) throw( IO_ERROR, boost::bad_pointer );
     void doLAYER_NOISE_WEIGHT( LAYER_NOISE_WEIGHT* growth ) throw( IO_ERROR, boost::bad_pointer );
-    void doLAYER_PAIR( LAYER_PAIR* growth ) throw( IO_ERROR );
+    void doSPECCTRA_LAYER_PAIR( SPECCTRA_LAYER_PAIR* growth ) throw( IO_ERROR );
     void doBOUNDARY( BOUNDARY* growth ) throw( IO_ERROR, boost::bad_pointer );
     void doRECTANGLE( RECTANGLE* growth ) throw( IO_ERROR );
     void doPATH( PATH* growth ) throw( IO_ERROR );
@@ -3973,26 +3973,6 @@ public:
      * flips the modules which were on the back side of the board back to the back.
      */
     void RevertMODULEs( BOARD* aBoard );
-
-    /**
-     * Function GetBoardPolygonOutlines
-     * Is not used in SPECCTRA export, but uses a lot of functions from it
-     * and is used to extract a board outlines (3D view, automatic zones build ...)
-     * makes the board perimeter by filling the BOUNDARY element
-     * any closed outline inside the main outline is a hole
-     * All contours should be closed, i.e. have valid vertices to build a closed polygon
-     * @param aBoard The BOARD to get information from in order to make the outlines.
-     * @param aOutlines The SHAPE_POLY_SET to fill in with main outlines.
-     * @param aHoles The empty SHAPE_POLY_SET to fill in with holes, if any.
-     * @param aErrorText = a wxString reference to display an error message
-     *          with the coordinate of the point which creates the error
-     *          (default = NULL , no message returned on error)
-     * @return true if success, false if a contour is not valid
-     */
-    bool GetBoardPolygonOutlines( BOARD* aBoard,
-                                  SHAPE_POLY_SET& aOutlines,
-                                  SHAPE_POLY_SET& aHoles,
-                                  wxString* aErrorText = NULL );
 };
 
 

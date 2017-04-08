@@ -45,6 +45,7 @@ class MSG_PANEL_ITEM;
 
 
 // Via types
+// Note that this enum must be synchronized to GAL_LAYER_ID
 enum VIATYPE_T
 {
     VIA_THROUGH      = 3,      /* Always a through hole via */
@@ -232,7 +233,7 @@ public:
      * @param aLayer The layer to match, pass -1 for a don't care.
      * @return A pointer to a VIA object if found, else NULL.
      */
-    VIA* GetVia( const wxPoint& aPosition, LAYER_ID aLayer = UNDEFINED_LAYER );
+    VIA* GetVia( const wxPoint& aPosition, PCB_LAYER_ID aLayer = UNDEFINED_LAYER );
 
     /**
      * Function GetVia
@@ -294,7 +295,7 @@ public:
 
     virtual wxString GetSelectMenuText() const override;
 
-    virtual BITMAP_DEF GetMenuImage() const override { return  showtrack_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     virtual EDA_ITEM* Clone() const override;
 
@@ -302,7 +303,7 @@ public:
     virtual void ViewGetLayers( int aLayers[], int& aCount ) const override;
 
     /// @copydoc VIEW_ITEM::ViewGetLOD()
-    virtual unsigned int ViewGetLOD( int aLayer ) const override;
+    virtual unsigned int ViewGetLOD( int aLayer, KIGFX::VIEW* aView ) const override;
 
 #if defined (DEBUG)
     virtual void Show( int nestLevel, std::ostream& os ) const override { ShowDummy( os ); }
@@ -332,7 +333,7 @@ protected:
     /**
      * Helper for drawing the short netname in tracks */
     void DrawShortNetname( EDA_DRAW_PANEL* panel, wxDC* aDC, GR_DRAWMODE aDrawMode,
-            EDA_COLOR_T aBgColor );
+            COLOR4D aBgColor );
 
     int         m_Width;            ///< Thickness of track, or via diameter
     wxPoint     m_Start;            ///< Line start point
@@ -366,7 +367,7 @@ public:
     void Draw( EDA_DRAW_PANEL* panel, wxDC* DC,
                GR_DRAWMODE aDrawMode, const wxPoint& aOffset = ZeroOffset ) override;
 
-    BITMAP_DEF GetMenuImage() const override { return  add_zone_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     EDA_ITEM* Clone() const override;
 
@@ -390,7 +391,7 @@ public:
     void Draw( EDA_DRAW_PANEL* panel, wxDC* DC,
                GR_DRAWMODE aDrawMode, const wxPoint& aOffset = ZeroOffset ) override;
 
-    bool IsOnLayer( LAYER_ID aLayer ) const override;
+    bool IsOnLayer( PCB_LAYER_ID aLayer ) const override;
 
     virtual LSET GetLayerSet() const override;
 
@@ -401,7 +402,7 @@ public:
      * @param aTopLayer = first layer connected by the via
      * @param aBottomLayer = last layer connected by the via
      */
-    void SetLayerPair( LAYER_ID aTopLayer, LAYER_ID aBottomLayer );
+    void SetLayerPair( PCB_LAYER_ID aTopLayer, PCB_LAYER_ID aBottomLayer );
 
     /**
      * Function LayerPair
@@ -410,7 +411,7 @@ public:
      *  @param top_layer = pointer to the first layer (can be null)
      *  @param bottom_layer = pointer to the last layer (can be null)
      */
-    void LayerPair( LAYER_ID* top_layer, LAYER_ID* bottom_layer ) const;
+    void LayerPair( PCB_LAYER_ID* top_layer, PCB_LAYER_ID* bottom_layer ) const;
 
     const wxPoint& GetPosition() const override {  return m_Start; }
     void SetPosition( const wxPoint& aPoint ) override { m_Start = aPoint;  m_End = aPoint; }
@@ -426,7 +427,7 @@ public:
 
     wxString GetSelectMenuText() const override;
 
-    BITMAP_DEF GetMenuImage() const override { return  via_sketch_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     EDA_ITEM* Clone() const override;
 
@@ -481,7 +482,7 @@ protected:
 
 private:
     /// The bottom layer of the via (the top layer is in m_Layer)
-    LAYER_ID  m_BottomLayer;
+    PCB_LAYER_ID  m_BottomLayer;
 
     VIATYPE_T m_ViaType;        // Type of via
 

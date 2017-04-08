@@ -58,7 +58,7 @@
 #include <dialog_move_exact.h>
 
 #include <tool/tool_manager.h>
-#include <tools/common_actions.h>
+#include <tools/pcb_actions.h>
 
 // Handles the selection of command events.
 void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
@@ -99,8 +99,8 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
     case ID_POPUP_PCB_SELECT_CU_LAYER_AND_PLACE_BLIND_BURIED_VIA:
     case ID_POPUP_PCB_PLACE_MICROVIA:
     case ID_POPUP_PCB_SWITCH_TRACK_POSTURE:
-    case ID_POPUP_PCB_IMPORT_PAD_SETTINGS:
-    case ID_POPUP_PCB_EXPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_APPLY_PAD_SETTINGS:
+    case ID_POPUP_PCB_COPY_PAD_SETTINGS:
     case ID_POPUP_PCB_GLOBAL_IMPORT_PAD_SETTINGS:
     case ID_POPUP_PCB_STOP_CURRENT_EDGE_ZONE:
     case ID_POPUP_PCB_DELETE_ZONE_LAST_CREATED_CORNER:
@@ -439,7 +439,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
 
                 wxGetMousePosition( &dlgPosition.x, &dlgPosition.y );
 
-                LAYER_ID layer = SelectLayer( GetActiveLayer(), LSET::AllNonCuMask(), dlgPosition );
+                PCB_LAYER_ID layer = SelectLayer( GetActiveLayer(), LSET::AllNonCuMask(), dlgPosition );
 
                 m_canvas->SetIgnoreMouseEvents( false );
                 m_canvas->MoveCursorToCrossHair();
@@ -613,7 +613,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
              * and start move the new corner
              */
             zone_cont->Draw( m_canvas, &dc, GR_XOR );
-            zone_cont->Outline()->InsertCorner( zone_cont->GetSelectedCorner(), pos.x, pos.y );
+            zone_cont->Outline()->InsertVertex( zone_cont->GetSelectedCorner(), pos );
             zone_cont->SetSelectedCorner( zone_cont->GetSelectedCorner() + 1 );
             zone_cont->Draw( m_canvas, &dc, GR_XOR );
             m_canvas->SetAutoPanRequest( true );
@@ -938,7 +938,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         m_canvas->MoveCursorToCrossHair();
         break;
 
-    case ID_POPUP_PCB_IMPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_APPLY_PAD_SETTINGS:
         m_canvas->MoveCursorToCrossHair();
         SaveCopyInUndoList( GetCurItem()->GetParent(), UR_CHANGED );
         Import_Pad_Settings( (D_PAD*) GetCurItem(), true );
@@ -949,7 +949,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
         DlgGlobalChange_PadSettings( (D_PAD*) GetCurItem(), true );
         break;
 
-    case ID_POPUP_PCB_EXPORT_PAD_SETTINGS:
+    case ID_POPUP_PCB_COPY_PAD_SETTINGS:
         m_canvas->MoveCursorToCrossHair();
         Export_Pad_Settings( (D_PAD*) GetCurItem() );
         break;
@@ -988,7 +988,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
 
     case ID_POPUP_PCB_SELECT_LAYER:
         {
-            LAYER_ID itmp = SelectLayer( GetActiveLayer() );
+            PCB_LAYER_ID itmp = SelectLayer( GetActiveLayer() );
 
             if( itmp >= 0 )
             {
@@ -1011,7 +1011,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
 
     case ID_POPUP_PCB_SELECT_NO_CU_LAYER:
         {
-            LAYER_ID itmp = SelectLayer( GetActiveLayer(), LSET::AllCuMask() );
+            PCB_LAYER_ID itmp = SelectLayer( GetActiveLayer(), LSET::AllCuMask() );
 
             if( itmp >= 0 )
                 SetActiveLayer( itmp );
@@ -1022,7 +1022,7 @@ void PCB_EDIT_FRAME::Process_Special_Functions( wxCommandEvent& event )
 
     case ID_POPUP_PCB_SELECT_CU_LAYER:
         {
-            LAYER_ID itmp = SelectLayer( GetActiveLayer(), LSET::AllNonCuMask() );
+            PCB_LAYER_ID itmp = SelectLayer( GetActiveLayer(), LSET::AllNonCuMask() );
 
             if( itmp >= 0 )
                 SetActiveLayer( itmp );
@@ -1347,9 +1347,9 @@ void PCB_EDIT_FRAME::RemoveStruct( BOARD_ITEM* Item, wxDC* DC )
 }
 
 
-void PCB_EDIT_FRAME::SwitchLayer( wxDC* DC, LAYER_ID layer )
+void PCB_EDIT_FRAME::SwitchLayer( wxDC* DC, PCB_LAYER_ID layer )
 {
-    LAYER_ID curLayer = GetActiveLayer();
+    PCB_LAYER_ID curLayer = GetActiveLayer();
     DISPLAY_OPTIONS* displ_opts = (DISPLAY_OPTIONS*)GetDisplayOptions();
 
     // Check if the specified layer matches the present layer
@@ -1524,6 +1524,11 @@ void PCB_EDIT_FRAME::OnSelectTool( wxCommandEvent& aEvent )
         if( ( GetBoard()->m_Status_Pcb & LISTE_RATSNEST_ITEM_OK ) == 0 )
             Compile_Ratsnest( &dc, true );
 
+        break;
+
+    // collect GAL-only tools here
+    case ID_PCB_MEASUREMENT_TOOL:
+        SetToolID( id, wxCURSOR_DEFAULT, _( "Unsupported tool in this canvas" ) );
         break;
     }
 }

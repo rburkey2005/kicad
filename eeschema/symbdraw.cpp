@@ -147,7 +147,7 @@ static void AbortSymbolTraceOn( EDA_DRAW_PANEL* Panel, wxDC* DC )
 }
 
 
-LIB_ITEM* LIB_EDIT_FRAME::CreateGraphicItem( LIB_PART*      LibEntry, wxDC* DC )
+LIB_ITEM* LIB_EDIT_FRAME::CreateGraphicItem( LIB_PART* LibEntry, wxDC* DC )
 {
     m_canvas->SetMouseCapture( SymbolDisplayDraw, AbortSymbolTraceOn );
     wxPoint drawPos = GetCrossHairPosition( true );
@@ -176,24 +176,25 @@ LIB_ITEM* LIB_EDIT_FRAME::CreateGraphicItem( LIB_PART*      LibEntry, wxDC* DC )
 
     case ID_LIBEDIT_BODY_TEXT_BUTT:
         {
-            LIB_TEXT* Text = new LIB_TEXT( LibEntry );
-            Text->SetSize( wxSize( m_textSize, m_textSize ) );
-            Text->SetOrientation( m_textOrientation );
+            LIB_TEXT* text = new LIB_TEXT( LibEntry );
+            text->SetTextSize( wxSize( m_textSize, m_textSize ) );
+            text->SetTextAngle( m_current_text_angle );
 
             // Enter the graphic text info
             m_canvas->SetIgnoreMouseEvents( true );
-            EditSymbolText( NULL, Text );
+            EditSymbolText( NULL, text );
+
             m_canvas->SetIgnoreMouseEvents( false );
             m_canvas->MoveCursorToCrossHair();
 
-            if( Text->GetText().IsEmpty() )
+            if( text->GetText().IsEmpty() )
             {
-                delete Text;
+                delete text;
                 m_drawItem = NULL;
             }
             else
             {
-                m_drawItem = Text;
+                m_drawItem = text;
             }
         }
         break;
@@ -239,7 +240,7 @@ void LIB_EDIT_FRAME::GraphicItemBeginDraw( wxDC* DC )
 
     if( m_drawItem->ContinueEdit( pos ) )
     {
-        m_drawItem->Draw( m_canvas, DC, pos, UNSPECIFIED_COLOR, g_XorMode, NULL, DefaultTransform );
+        m_drawItem->Draw( m_canvas, DC, pos, COLOR4D::UNSPECIFIED, g_XorMode, NULL, DefaultTransform );
         return;
     }
 
@@ -269,12 +270,12 @@ static void RedrawWhileMovingCursor( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wx
         wxString    text = ((LIB_FIELD*)item)->GetFullText( unit );
 
         item->Draw( aPanel, aDC, aPanel->GetParent()->GetCrossHairPosition( true ),
-                    UNSPECIFIED_COLOR, g_XorMode, &text,
+                    COLOR4D::UNSPECIFIED, g_XorMode, &text,
                     DefaultTransform );
     }
     else
         item->Draw( aPanel, aDC, aPanel->GetParent()->GetCrossHairPosition( true ),
-                    UNSPECIFIED_COLOR, g_XorMode, NULL,
+                    COLOR4D::UNSPECIFIED, g_XorMode, NULL,
                     DefaultTransform );
 }
 
@@ -322,7 +323,7 @@ static void SymbolDisplayDraw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint&
         return;
 
     item->SetEraseLastDrawItem( aErase );
-    item->Draw( aPanel, aDC, aPanel->GetParent()->GetCrossHairPosition( true ), UNSPECIFIED_COLOR, g_XorMode, NULL,
+    item->Draw( aPanel, aDC, aPanel->GetParent()->GetCrossHairPosition( true ), COLOR4D::UNSPECIFIED, g_XorMode, NULL,
                 DefaultTransform );
 }
 

@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2016-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -165,6 +165,18 @@ wxArrayString GITHUB_PLUGIN::FootprintEnumerate(
 }
 
 
+void GITHUB_PLUGIN::PrefetchLib(
+        const wxString& aLibraryPath, const PROPERTIES* aProperties )
+{
+    if( m_lib_path != aLibraryPath )
+    {
+        m_zip_image.clear();
+    }
+
+    remoteGetZip( aLibraryPath );
+}
+
+
 MODULE* GITHUB_PLUGIN::FootprintLoad( const wxString& aLibraryPath,
         const wxString& aFootprintName, const PROPERTIES* aProperties )
 {
@@ -181,7 +193,7 @@ MODULE* GITHUB_PLUGIN::FootprintLoad( const wxString& aLibraryPath,
         if( local )
         {
             // It has worked, see <src>/scripts/test_kicad_plugin.py.  So this was not firing:
-            // wxASSERT( aFootprintName == FROM_UTF8( local->GetFPID().GetFootprintName().c_str() ) );
+            // wxASSERT( aFootprintName == FROM_UTF8( local->GetFPID().GetLibItemName().c_str() ) );
             // Moving it to higher API layer FP_LIB_TABLE::FootprintLoad().
 
             return local;
@@ -370,8 +382,13 @@ void GITHUB_PLUGIN::cacheLib( const wxString& aLibraryPath, const PROPERTIES* aP
     {
         delete m_gh_cache;
         m_gh_cache = 0;
-
         m_pretty_dir.clear();
+
+        if( !m_lib_path.empty() )
+        {
+            // Library path wasn't empty before - it's been changed. Flush out the prefetch cache.
+            m_zip_image.clear();
+        }
 
         if( aProperties )
         {
@@ -381,7 +398,7 @@ void GITHUB_PLUGIN::cacheLib( const wxString& aLibraryPath, const PROPERTIES* aP
             {
                 wxString    wx_pretty_dir = pretty_dir;
 
-                wx_pretty_dir = FP_LIB_TABLE::ExpandSubstitutions( wx_pretty_dir );
+                wx_pretty_dir = LIB_TABLE::ExpandSubstitutions( wx_pretty_dir );
 
                 wxFileName wx_pretty_fn = wx_pretty_dir;
 
@@ -516,6 +533,9 @@ void GITHUB_PLUGIN::remoteGetZip( const wxString& aRepoURL ) throw( IO_ERROR )
 {
     std::string  zip_url;
 
+    if( !m_zip_image.empty() )
+        return;
+
     if( !repoURL_zipURL( aRepoURL, &zip_url ) )
     {
         wxString msg = wxString::Format( _( "Unable to parse URL:\n'%s'" ), GetChars( aRepoURL ) );
@@ -554,9 +574,10 @@ void GITHUB_PLUGIN::remoteGetZip( const wxString& aRepoURL ) throw( IO_ERROR )
         THROW_IO_ERROR( msg );
     }
 
-    // If the zip archive is not existing, the received data is "Not Found",
+    // If the zip archive is not existing, the received data is "Not Found" or "404: Not Found",
     // and no error is returned by kcurl.Perform().
-    if( m_zip_image.compare( 0, 9, "Not Found" ) == 0 )
+    if( ( m_zip_image.compare( 0, 9, "Not Found", 9 ) == 0 ) ||
+        ( m_zip_image.compare( 0, 14, "404: Not Found", 14 ) == 0 ) )
     {
         UTF8 fmt( _( "Cannot download library '%s'.\nThe library does not exist on the server" ) );
         std::string msg = StrPrintf( fmt.c_str(), TO_UTF8( aRepoURL ) );

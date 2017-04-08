@@ -33,6 +33,7 @@
 #include <confirm.h>
 #include <pcbnew.h>
 #include <wxPcbStruct.h>
+#include <class_zone.h>
 #include <zones.h>
 #include <base_units.h>
 
@@ -83,7 +84,7 @@ private:
      * creates the colored rectangle bitmaps used in the layer selection widget.
      * @param aColor is the color to fill the rectangle with.
      */
-    wxBitmap makeLayerBitmap( EDA_COLOR_T aColor );
+    wxBitmap makeLayerBitmap( COLOR4D aColor );
 };
 
 
@@ -131,15 +132,15 @@ void DIALOG_KEEPOUT_AREA_PROPERTIES::initDialog()
 
     switch( m_zonesettings.m_Zone_HatchingStyle )
     {
-    case CPolyLine::NO_HATCH:
+    case ZONE_CONTAINER::NO_HATCH:
         m_OutlineAppearanceCtrl->SetSelection( 0 );
         break;
 
-    case CPolyLine::DIAGONAL_EDGE:
+    case ZONE_CONTAINER::DIAGONAL_EDGE:
         m_OutlineAppearanceCtrl->SetSelection( 1 );
         break;
 
-    case CPolyLine::DIAGONAL_FULL:
+    case ZONE_CONTAINER::DIAGONAL_FULL:
         m_OutlineAppearanceCtrl->SetSelection( 2 );
         break;
     }
@@ -158,13 +159,13 @@ void DIALOG_KEEPOUT_AREA_PROPERTIES::initDialog()
 
     for( LSEQ cu_stack = show.UIOrder();  cu_stack;  ++cu_stack, imgIdx++ )
     {
-        LAYER_ID layer = *cu_stack;
+        PCB_LAYER_ID layer = *cu_stack;
 
         m_layerId.push_back( layer );
 
         msg = board->GetLayerName( layer );
 
-        EDA_COLOR_T layerColor = board->GetLayerColor( layer );
+        COLOR4D layerColor = board->GetLayerColor( layer );
 
         imageList->Add( makeLayerBitmap( layerColor ) );
 
@@ -226,15 +227,15 @@ bool DIALOG_KEEPOUT_AREA_PROPERTIES::AcceptOptionsForKeepOut()
     switch( m_OutlineAppearanceCtrl->GetSelection() )
     {
     case 0:
-        m_zonesettings.m_Zone_HatchingStyle = CPolyLine::NO_HATCH;
+        m_zonesettings.m_Zone_HatchingStyle = ZONE_CONTAINER::NO_HATCH;
         break;
 
     case 1:
-        m_zonesettings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_EDGE;
+        m_zonesettings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_EDGE;
         break;
 
     case 2:
-        m_zonesettings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_FULL;
+        m_zonesettings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_FULL;
         break;
     }
 
@@ -255,14 +256,14 @@ bool DIALOG_KEEPOUT_AREA_PROPERTIES::AcceptOptionsForKeepOut()
 }
 
 
-wxBitmap DIALOG_KEEPOUT_AREA_PROPERTIES::makeLayerBitmap( EDA_COLOR_T aColor )
+wxBitmap DIALOG_KEEPOUT_AREA_PROPERTIES::makeLayerBitmap( COLOR4D aColor )
 {
     wxBitmap    bitmap( LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
     wxBrush     brush;
     wxMemoryDC  iconDC;
 
     iconDC.SelectObject( bitmap );
-    brush.SetColour( MakeColour( aColor ) );
+    brush.SetColour( aColor.ToColour() );
     brush.SetStyle( wxBRUSHSTYLE_SOLID );
 
     iconDC.SetBrush( brush );

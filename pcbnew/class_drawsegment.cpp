@@ -39,6 +39,7 @@
 #include <colors_selection.h>
 #include <trigo.h>
 #include <msgpanel.h>
+#include <bitmaps.h>
 
 #include <pcbnew.h>
 
@@ -184,9 +185,7 @@ double DRAWSEGMENT::GetArcAngleStart() const
 
 void DRAWSEGMENT::SetAngle( double aAngle )
 {
-    NORMALIZE_ANGLE_360( aAngle );
-
-    m_Angle = aAngle;
+    m_Angle = NormalizeAngle360( aAngle );
 }
 
 
@@ -206,8 +205,8 @@ void DRAWSEGMENT::Draw( EDA_DRAW_PANEL* panel, wxDC* DC, GR_DRAWMODE draw_mode,
     int l_trace;
     int radius;
 
-    LAYER_ID    curr_layer = ( (PCB_SCREEN*) panel->GetScreen() )->m_Active_Layer;
-    EDA_COLOR_T color;
+    PCB_LAYER_ID    curr_layer = ( (PCB_SCREEN*) panel->GetScreen() )->m_Active_Layer;
+    COLOR4D    color;
 
     BOARD * brd =  GetBoard( );
 
@@ -221,7 +220,7 @@ void DRAWSEGMENT::Draw( EDA_DRAW_PANEL* panel, wxDC* DC, GR_DRAWMODE draw_mode,
     if( ( draw_mode & GR_ALLOW_HIGHCONTRAST ) &&  displ_opts && displ_opts->m_ContrastModeDisplay )
     {
         if( !IsOnLayer( curr_layer ) && !IsOnLayer( Edge_Cuts ) )
-            ColorTurnToDarkDarkGray( &color );
+            color = COLOR4D( DARKDARKGRAY );
     }
 
     GRSetDrawMode( DC, draw_mode );
@@ -586,6 +585,12 @@ wxString DRAWSEGMENT::GetSelectMenuText() const
 }
 
 
+BITMAP_DEF DRAWSEGMENT::GetMenuImage() const
+{
+    return add_dashed_line_xpm;
+}
+
+
 EDA_ITEM* DRAWSEGMENT::Clone() const
 {
     return new DRAWSEGMENT( *this );
@@ -610,9 +615,10 @@ const BOX2I DRAWSEGMENT::ViewBBox() const
 
 void DRAWSEGMENT::computeArcBBox( EDA_RECT& aBBox ) const
 {
-    aBBox.Merge( m_End );
-    // TODO perhaps the above line can be replaced with this one, so we do not include the center
-    //aBBox.SetOrigin( m_End );
+    // Do not include the center, which is not necessarily
+    // inside the BB of a arc with a small angle
+    aBBox.SetOrigin( m_End );
+
     wxPoint end = m_End;
     RotatePoint( &end, m_Start, -m_Angle );
     aBBox.Merge( end );

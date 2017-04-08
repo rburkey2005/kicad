@@ -486,7 +486,7 @@ bool SCH_SCREEN::Save( FILE* aFile ) const
     }
 
     // This section is not used, but written for file compatibility
-    if( fprintf( aFile, "EELAYER %d %d\n", LAYERSCH_ID_COUNT, 0 ) < 0
+    if( fprintf( aFile, "EELAYER %d %d\n", SCH_LAYER_ID_COUNT, 0 ) < 0
         || fprintf( aFile, "EELAYER END\n" ) < 0 )
         return false;
 
@@ -550,22 +550,17 @@ void SCH_SCREEN::CheckComponentsToPartsLinks()
             SCH_COMPONENT::ResolveAll( c, libs );
 
             m_modification_sync = mod_hash;     // note the last mod_hash
-
-            // guard against unneeded runs through this code path by printing trace
-            DBG(printf("%s: resync-ing %s\n", __func__, TO_UTF8( GetFileName() ) );)
         }
     }
 }
 
 
-void SCH_SCREEN::Draw( EDA_DRAW_PANEL* aCanvas, wxDC* aDC, GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor )
+void SCH_SCREEN::Draw( EDA_DRAW_PANEL* aCanvas, wxDC* aDC, GR_DRAWMODE aDrawMode, COLOR4D aColor )
 {
     /* note: SCH_SCREEN::Draw is useful only for schematic.
      * library editor and library viewer do not use m_drawList, and therefore
      * their SCH_SCREEN::Draw() draws nothing
      */
-
-    CheckComponentsToPartsLinks();
 
     for( SCH_ITEM* item = m_drawList.begin(); item; item = item->Next() )
     {
@@ -587,8 +582,6 @@ void SCH_SCREEN::Draw( EDA_DRAW_PANEL* aCanvas, wxDC* aDC, GR_DRAWMODE aDrawMode
  */
 void SCH_SCREEN::Plot( PLOTTER* aPlotter )
 {
-    CheckComponentsToPartsLinks();
-
     for( SCH_ITEM* item = m_drawList.begin();  item;  item = item->Next() )
     {
         aPlotter->SetCurrentLineWidth( item->GetPenSize() );
@@ -646,7 +639,7 @@ LIB_PIN* SCH_SCREEN::GetPin( const wxPoint& aPosition, SCH_COMPONENT** aComponen
         {
             pin = NULL;
 
-            LIB_PART* part = Prj().SchLibs()->FindLibPart( component->GetPartName() );
+            auto part = component->GetPartRef().lock();
 
             if( !part )
                 continue;
@@ -927,7 +920,9 @@ bool SCH_SCREEN::TestDanglingEnds()
     for( item = m_drawList.begin(); item; item = item->Next() )
     {
         if( item->IsDanglingStateChanged( endPoints ) )
+        {
             hasStateChanged = true;
+        }
     }
 
     return hasStateChanged;
@@ -1104,13 +1099,13 @@ bool SCH_SCREEN::SetComponentFootprint( SCH_SHEET_PATH* aSheetPath, const wxStri
              */
             SCH_FIELD * fpfield = component->GetField( FOOTPRINT );
             if( fpfield->GetText().IsEmpty()
-              && ( fpfield->GetTextPosition() == component->GetPosition() ) )
+              && ( fpfield->GetTextPos() == component->GetPosition() ) )
             {
-                fpfield->SetOrientation( component->GetField( VALUE )->GetOrientation() );
-                fpfield->SetTextPosition( component->GetField( VALUE )->GetTextPosition() );
-                fpfield->SetSize( component->GetField( VALUE )->GetSize() );
+                fpfield->SetTextAngle( component->GetField( VALUE )->GetTextAngle() );
+                fpfield->SetTextPos( component->GetField( VALUE )->GetTextPos() );
+                fpfield->SetTextSize( component->GetField( VALUE )->GetTextSize() );
 
-                if( fpfield->GetOrientation() == 0 )
+                if( fpfield->GetTextAngle() == 0.0 )
                     fpfield->Offset( wxPoint( 0, 100 ) );
                 else
                     fpfield->Offset( wxPoint( 100, 0 ) );
@@ -1387,12 +1382,6 @@ void SCH_SCREENS::BuildScreenList( EDA_ITEM* aItem )
     {
         SCH_SCREEN*     screen = (SCH_SCREEN*) aItem;
 
-        // Ensure each component has its pointer to its part lib LIB_PART
-        // up to date (the cost is low if this is the case)
-        // We do this update here, because most of time this function is called
-        // to create a netlist, or an ERC, which need this update
-        screen->CheckComponentsToPartsLinks();
-
         AddScreenToList( screen );
         EDA_ITEM* strct = screen->GetDrawItems();
 
@@ -1524,6 +1513,48 @@ int SCH_SCREENS::GetMarkerCount( enum MARKER_BASE::TYPEMARKER aMarkerType,
 
     return count;
 }
+
+
+void SCH_SCREENS::UpdateSymbolLinks()
+{
+    for( SCH_SCREEN* screen = GetFirst(); screen; screen = GetNext() )
+        screen->CheckComponentsToPartsLinks();
+}
+
+
+void SCH_SCREENS::TestDanglingEnds()
+{
+    for( SCH_SCREEN* screen = GetFirst(); screen; screen = GetNext() )
+        screen->TestDanglingEnds();
+}
+
+
+bool SCH_SCREENS::HasNoFullyDefinedLibIds()
+{
+    SCH_COMPONENT* symbol;
+    SCH_ITEM* item;
+    SCH_ITEM* nextItem;
+    SCH_SCREEN* screen;
+
+    for( screen = GetFirst(); screen; screen = GetNext() )
+    {
+        for( item = screen->GetDrawItems(); item; item = nextItem )
+        {
+            nextItem = item->Next();
+
+            if( item->Type() != SCH_COMPONENT_T )
+                continue;
+
+            symbol = dynamic_cast< SCH_COMPONENT* >( item );
+
+            if( !symbol->GetLibId().GetLibNickname().empty() )
+                return false;
+        }
+    }
+
+    return true;
+}
+
 
 #if defined(DEBUG)
 void SCH_SCREEN::Show( int nestLevel, std::ostream& os ) const

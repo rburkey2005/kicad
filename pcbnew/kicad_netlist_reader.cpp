@@ -5,7 +5,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 1992-2011 Jean-Pierre Charras.
- * Copyright (C) 1992-2015 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -282,7 +282,7 @@ void KICAD_NETLIST_PARSER::parseComponent() throw( IO_ERROR, PARSE_ERROR, boost:
      * A component need a reference, value, footprint name and a full time stamp
      * The full time stamp is the sheetpath time stamp + the component time stamp
      */
-    FPID     fpid;
+    LIB_ID   fpid;
     wxString footprint;
     wxString ref;
     wxString value;
@@ -363,7 +363,7 @@ void KICAD_NETLIST_PARSER::parseComponent() throw( IO_ERROR, PARSE_ERROR, boost:
         }
     }
 
-    if( !footprint.IsEmpty() && fpid.Parse( footprint ) >= 0 )
+    if( !footprint.IsEmpty() && fpid.Parse( TO_UTF8( footprint ) ) >= 0 )
     {
         wxString error;
         error.Printf( _( "invalid footprint ID in\nfile: <%s>\nline: %d\noffset: %d" ),

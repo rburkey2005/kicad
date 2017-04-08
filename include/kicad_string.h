@@ -30,6 +30,8 @@
 #ifndef KICAD_STRING_H_
 #define KICAD_STRING_H_
 
+#include "config.h"
+
 #include <wx/string.h>
 #include <wx/filename.h>
 
@@ -70,6 +72,11 @@ int ReadDelimitedText( wxString* aDest, const char* aSource );
  * @return std::string - the escaped input text, without the wrapping double quotes.
  */
 std::string EscapedUTF8( const wxString& aString );
+
+/**
+ * Return a new wxString escaped for embedding in HTML.
+ */
+wxString EscapedHTML( const wxString& aString );
 
 /**
  * Function GetLine

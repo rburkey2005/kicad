@@ -2,7 +2,8 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2014 Henner Zeller <h.zeller@acm.org>
- * Copyright (C) 2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2017 Chris Pavlina <pavlina.chris@gmail.com>
+ * Copyright (C) 2016-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -21,306 +22,440 @@
  * or you may write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
+
 #include <dialog_choose_component.h>
 
+#include <algorithm>
 #include <set>
 #include <wx/tokenzr.h>
+#include <wx/utils.h>
+
+#include <wx/artprov.h>
+#include <wx/bitmap.h>
+#include <wx/button.h>
+#include <wx/choice.h>
+#include <wx/dataview.h>
+#include <wx/html/htmlwin.h>
+#include <wx/panel.h>
+#include <wx/sizer.h>
+#include <wx/splitter.h>
+#include <wx/statbmp.h>
+#include <wx/textctrl.h>
+#include <wx/timer.h>
+#include <wx/utils.h>
 
 #include <class_library.h>
-#include <component_tree_search_container.h>
+#include <generate_alias_info.h>
 #include <sch_base_frame.h>
+#include <template_fieldnames.h>
+#include <widgets/footprint_preview_widget.h>
+#include <widgets/footprint_select_widget.h>
+#include <wxdataviewctrl_helpers.h>
 
-// Tree navigation helpers.
-static wxTreeItemId GetPrevItem( const wxTreeCtrl& tree, const wxTreeItemId& item );
-static wxTreeItemId GetNextItem( const wxTreeCtrl& tree, const wxTreeItemId& item );
+
+FOOTPRINT_ASYNC_LOADER          DIALOG_CHOOSE_COMPONENT::m_fp_loader;
+std::unique_ptr<FOOTPRINT_LIST> DIALOG_CHOOSE_COMPONENT::m_fp_list;
 
 DIALOG_CHOOSE_COMPONENT::DIALOG_CHOOSE_COMPONENT( SCH_BASE_FRAME* aParent, const wxString& aTitle,
-                                                  COMPONENT_TREE_SEARCH_CONTAINER* const aContainer,
-                                                  int aDeMorganConvert )
-    : DIALOG_CHOOSE_COMPONENT_BASE( aParent, wxID_ANY, aTitle ), m_search_container( aContainer )
+        CMP_TREE_MODEL_ADAPTER::PTR& aAdapter, int aDeMorganConvert, bool aAllowFieldEdits )
+        : DIALOG_SHIM( aParent, wxID_ANY, aTitle, wxDefaultPosition, wxSize( 800, 650 ),
+                  wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER ),
+          m_parent( aParent ),
+          m_adapter( aAdapter ),
+          m_deMorganConvert( aDeMorganConvert >= 0 ? aDeMorganConvert : 0 ),
+          m_allow_field_edits( aAllowFieldEdits ),
+          m_external_browser_requested( false )
 {
-    m_parent = aParent;
-    m_deMorganConvert = aDeMorganConvert >= 0 ? aDeMorganConvert : 0;
-    m_external_browser_requested = false;
-    m_received_doubleclick_in_tree = false;
-    m_search_container->SetTree( m_libraryComponentTree );
-    m_searchBox->SetFocus();
-    m_componentDetails->SetEditable( false );
-    m_componentView->SetLayoutDirection( wxLayout_LeftToRight );
+    wxBusyCursor busy_while_loading;
 
-    m_libraryComponentTree->ScrollTo( m_libraryComponentTree->GetFocusedItem() );
+    auto sizer = new wxBoxSizer( wxVERTICAL );
 
-    // The tree showing libs and component uses a fixed font,
-    // because we want controle the position of some info when drawing the
-    // tree. Using tabs does not work very well (does not work on Windows)
-    wxFont font = wxSystemSettings::GetFont( wxSYS_DEFAULT_GUI_FONT );
-    m_libraryComponentTree->SetFont( wxFont( font.GetPointSize(),
-             wxFONTFAMILY_MODERN,  wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL ) );
+    auto splitter = new wxSplitterWindow(
+            this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE );
+    auto left_panel = ConstructLeftPanel( splitter );
+    auto right_panel = ConstructRightPanel( splitter );
+    auto buttons = new wxStdDialogButtonSizer();
+    m_dbl_click_timer = new wxTimer( this );
 
-    // We have to call SetSizeHints to fix the minimal size of the dialog
-    // and its widgets.
-    // this line also fixes an issue on Linux Ubuntu using Unity (dialog not shown).
-    GetSizer()->SetSizeHints( this );
+    splitter->SetSashGravity( 0.9 );
+    splitter->SetMinimumPaneSize( 1 );
+    splitter->SplitVertically( left_panel, right_panel, -300 );
 
-    Centre();
+    buttons->AddButton( new wxButton( this, wxID_OK ) );
+    buttons->AddButton( new wxButton( this, wxID_CANCEL ) );
+    buttons->Realize();
+
+    sizer->Add( splitter, 1, wxEXPAND | wxALL, 5 );
+    sizer->Add( buttons, 0, wxEXPAND | wxBOTTOM, 10 );
+    SetSizer( sizer );
+
+    Bind( wxEVT_INIT_DIALOG, &DIALOG_CHOOSE_COMPONENT::OnInitDialog, this );
+    Bind( wxEVT_TIMER, &DIALOG_CHOOSE_COMPONENT::OnCloseTimer, this, m_dbl_click_timer->GetId() );
+
+    m_query_ctrl->Bind( wxEVT_TEXT, &DIALOG_CHOOSE_COMPONENT::OnQueryText, this );
+    m_query_ctrl->Bind( wxEVT_TEXT_ENTER, &DIALOG_CHOOSE_COMPONENT::OnQueryEnter, this );
+    m_query_ctrl->Bind( wxEVT_CHAR_HOOK, &DIALOG_CHOOSE_COMPONENT::OnQueryCharHook, this );
+    m_tree_ctrl->Bind(
+            wxEVT_DATAVIEW_ITEM_ACTIVATED, &DIALOG_CHOOSE_COMPONENT::OnTreeActivate, this );
+    m_tree_ctrl->Bind(
+            wxEVT_DATAVIEW_SELECTION_CHANGED, &DIALOG_CHOOSE_COMPONENT::OnTreeSelect, this );
+    m_details_ctrl->Bind( wxEVT_HTML_LINK_CLICKED, &DIALOG_CHOOSE_COMPONENT::OnDetailsLink, this );
+    m_sch_view_ctrl->Bind( wxEVT_LEFT_DCLICK, &DIALOG_CHOOSE_COMPONENT::OnSchViewDClick, this );
+    m_sch_view_ctrl->Bind( wxEVT_PAINT, &DIALOG_CHOOSE_COMPONENT::OnSchViewPaint, this );
+
+    if( m_fp_sel_ctrl )
+        m_fp_sel_ctrl->Bind(
+                EVT_FOOTPRINT_SELECTED, &DIALOG_CHOOSE_COMPONENT::OnFootprintSelected, this );
+
+    Layout();
 }
 
 
 DIALOG_CHOOSE_COMPONENT::~DIALOG_CHOOSE_COMPONENT()
 {
-    m_search_container->SetTree( NULL );
+    // I am not sure the following two lines are necessary,
+    // but they will not hurt anyone
+    m_dbl_click_timer->Stop();
+    Unbind( wxEVT_TIMER, &DIALOG_CHOOSE_COMPONENT::OnCloseTimer, this );
+
+    delete m_dbl_click_timer;
+}
+
+
+wxPanel* DIALOG_CHOOSE_COMPONENT::ConstructLeftPanel( wxWindow* aParent )
+{
+    auto panel = new wxPanel( aParent );
+    auto sizer = new wxBoxSizer( wxVERTICAL );
+    auto search_sizer = new wxBoxSizer( wxHORIZONTAL );
+
+    m_query_ctrl = new wxTextCtrl(
+            panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER );
+
+    m_tree_ctrl =
+            new wxDataViewCtrl( panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxDV_SINGLE );
+    m_adapter->AttachTo( m_tree_ctrl );
+
+    m_details_ctrl = new wxHtmlWindow( panel, wxID_ANY, wxDefaultPosition, wxSize( 320, 240 ),
+            wxHW_SCROLLBAR_AUTO | wxSUNKEN_BORDER );
+
+// Additional visual cue for GTK, which hides the placeholder text on focus
+#ifdef __WXGTK__
+    search_sizer->Add( new wxStaticBitmap( panel, wxID_ANY,
+                               wxArtProvider::GetBitmap( wxART_FIND, wxART_FRAME_ICON ) ),
+            0, wxALIGN_CENTER | wxALL, 5 );
+#endif
+
+    search_sizer->Add( m_query_ctrl, 1, wxALIGN_CENTER | wxALL | wxEXPAND, 5 );
+
+    sizer->Add( search_sizer, 0, wxEXPAND, 5 );
+    sizer->Add( m_tree_ctrl, 1, wxALL | wxEXPAND, 5 );
+    sizer->Add( m_details_ctrl, 1, wxALL | wxEXPAND, 5 );
+
+    panel->SetSizer( sizer );
+    panel->Layout();
+    sizer->Fit( panel );
+    return panel;
+}
+
+
+wxPanel* DIALOG_CHOOSE_COMPONENT::ConstructRightPanel( wxWindow* aParent )
+{
+    auto panel = new wxPanel( aParent );
+    auto sizer = new wxBoxSizer( wxVERTICAL );
+
+    m_sch_view_ctrl = new wxPanel( panel, wxID_ANY, wxDefaultPosition, wxSize( -1, -1 ),
+            wxFULL_REPAINT_ON_RESIZE | wxSUNKEN_BORDER | wxTAB_TRAVERSAL );
+    m_sch_view_ctrl->SetLayoutDirection( wxLayout_LeftToRight );
+
+    if( m_allow_field_edits && m_fp_list )
+        m_fp_sel_ctrl = new FOOTPRINT_SELECT_WIDGET( panel, m_fp_loader, m_fp_list, true );
+    else
+        m_fp_sel_ctrl = nullptr;
+
+    m_fp_view_ctrl = new FOOTPRINT_PREVIEW_WIDGET( panel, Kiway() );
+
+
+    sizer->Add( m_sch_view_ctrl, 1, wxEXPAND | wxALL, 5 );
+
+    if( m_fp_sel_ctrl )
+        sizer->Add( m_fp_sel_ctrl, 0, wxEXPAND | wxALL, 5 );
+
+    sizer->Add( m_fp_view_ctrl, 1, wxEXPAND | wxALL, 5 );
+
+
+    panel->SetSizer( sizer );
+    panel->Layout();
+    sizer->Fit( panel );
+
+    return panel;
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::OnInitDialog( wxInitDialogEvent& aEvent )
+{
+    // If wxTextCtrl::SetHint() is called before binding wxEVT_TEXT, the event
+    // handler will intermittently fire.
+    m_query_ctrl->SetHint( _( "Search" ) );
+    m_query_ctrl->SetFocus();
+    m_query_ctrl->SetValue( wxEmptyString );
+
+    if( m_fp_view_ctrl->IsInitialized() )
+    {
+        // This hides the GAL panel and shows the status label
+        m_fp_view_ctrl->SetStatusText( wxEmptyString );
+    }
+
+    if( m_fp_sel_ctrl )
+        m_fp_sel_ctrl->Load( Kiway(), Prj() );
+
+    // There may be a part preselected in the model. Make sure it is displayed.
+    PostSelectEvent();
 }
 
 
 LIB_ALIAS* DIALOG_CHOOSE_COMPONENT::GetSelectedAlias( int* aUnit ) const
 {
-    return m_search_container->GetSelectedAlias( aUnit );
+    auto sel = m_tree_ctrl->GetSelection();
+
+    if( aUnit )
+        *aUnit = m_adapter->GetUnitFor( sel );
+
+    return m_adapter->GetAliasFor( sel );
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnSearchBoxChange( wxCommandEvent& aEvent )
+std::vector<std::pair<int, wxString>> DIALOG_CHOOSE_COMPONENT::GetFields() const
 {
-    m_search_container->UpdateSearchTerm( m_searchBox->GetLineText( 0 ) );
-    updateSelection();
-
-    // On Windows, but not on Linux, the focus is given to
-    // the m_libraryComponentTree, after modificatuons.
-    // We want the focus for m_searchBox.
-    //
-    // We cannot call SetFocus on Linux because it changes the current text selection
-    // and the text edit cursor position.
-#ifdef __WINDOWS__
-    m_searchBox->SetFocus();
-#endif
+    return m_field_edits;
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnSearchBoxEnter( wxCommandEvent& aEvent )
+void DIALOG_CHOOSE_COMPONENT::OnQueryText( wxCommandEvent& aEvent )
 {
-    EndModal( wxID_OK );   // We are done.
+    m_adapter->UpdateSearchString( m_query_ctrl->GetLineText( 0 ) );
+    PostSelectEvent();
+
+    // Required to avoid interaction with SetHint()
+    // See documentation for wxTextEntry::SetHint
+    aEvent.Skip();
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::selectIfValid( const wxTreeItemId& aTreeId )
+void DIALOG_CHOOSE_COMPONENT::OnQueryEnter( wxCommandEvent& aEvent )
 {
-    if( aTreeId.IsOk() && aTreeId != m_libraryComponentTree->GetRootItem() )
-        m_libraryComponentTree->SelectItem( aTreeId );
+    HandleItemSelection();
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnInterceptSearchBoxKey( wxKeyEvent& aKeyStroke )
+void DIALOG_CHOOSE_COMPONENT::SelectIfValid( const wxDataViewItem& aTreeId )
 {
-    // Cursor up/down and partiallyi cursor are use to do tree navigation operations.
-    // This is done by intercepting some navigational keystrokes that normally would go to
-    // the text search box (which has the focus by default). That way, we are mostly keyboard
-    // operable.
-    // (If the tree has the focus, it can handle that by itself).
-    const wxTreeItemId sel = m_libraryComponentTree->GetSelection();
+    if( aTreeId.IsOk() )
+    {
+        m_tree_ctrl->EnsureVisible( aTreeId );
+        m_tree_ctrl->Select( aTreeId );
+        PostSelectEvent();
+    }
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::PostSelectEvent()
+{
+    wxDataViewEvent evt( wxEVT_DATAVIEW_SELECTION_CHANGED );
+    m_tree_ctrl->GetEventHandler()->ProcessEvent( evt );
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::OnQueryCharHook( wxKeyEvent& aKeyStroke )
+{
+    auto const sel = m_tree_ctrl->GetSelection();
 
     switch( aKeyStroke.GetKeyCode() )
     {
-    case WXK_UP:
-        selectIfValid( GetPrevItem( *m_libraryComponentTree, sel ) );
-        break;
+    case WXK_UP: SelectIfValid( GetPrevItem( *m_tree_ctrl, sel ) ); break;
 
-    case WXK_DOWN:
-        selectIfValid( GetNextItem( *m_libraryComponentTree, sel ) );
-        break;
-
-        // The following keys we can only hijack if they are not needed by the textbox itself.
-
-    case WXK_LEFT:
-        if( m_searchBox->GetInsertionPoint() == 0 )
-            m_libraryComponentTree->Collapse( sel );
-        else
-            aKeyStroke.Skip();   // Use for original purpose: move cursor.
-        break;
-
-    case WXK_RIGHT:
-        if( m_searchBox->GetInsertionPoint() >= (long) m_searchBox->GetLineText( 0 ).length() )
-            m_libraryComponentTree->Expand( sel );
-        else
-            aKeyStroke.Skip();   // Use for original purpose: move cursor.
-        break;
+    case WXK_DOWN: SelectIfValid( GetNextItem( *m_tree_ctrl, sel ) ); break;
 
     default:
-        aKeyStroke.Skip();  // Any other key: pass on to search box directly.
+        aKeyStroke.Skip(); // Any other key: pass on to search box directly.
         break;
     }
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnTreeSelect( wxTreeEvent& aEvent )
+void DIALOG_CHOOSE_COMPONENT::OnTreeSelect( wxDataViewEvent& aEvent )
 {
-    updateSelection();
-}
+    auto       sel = m_tree_ctrl->GetSelection();
+    int        unit = m_adapter->GetUnitFor( sel );
+    LIB_ALIAS* alias = m_adapter->GetAliasFor( sel );
 
+    m_sch_view_ctrl->Refresh();
 
-// Test strategy for OnDoubleClickTreeActivation()/OnTreeMouseUp() work around wxWidgets bug:
-//  - search for an item.
-//  - use the mouse to double-click on an item in the tree.
-//  -> The dialog should close, and the component should _not_ be immediately placed
-void DIALOG_CHOOSE_COMPONENT::OnDoubleClickTreeActivation( wxTreeEvent& aEvent )
-{
-    if( !updateSelection() )
-        return;
-
-    // Ok, got selection. We don't just end the modal dialog here, but
-    // wait for the MouseUp event to occur. Otherwise something (broken?)
-    // happens: the dialog will close and will deliver the 'MouseUp' event
-    // to the eeschema canvas, that will immediately place the component.
-    m_received_doubleclick_in_tree = true;
-}
-
-
-void DIALOG_CHOOSE_COMPONENT::OnTreeMouseUp( wxMouseEvent& aMouseEvent )
-{
-    if( m_received_doubleclick_in_tree )
-        EndModal( wxID_OK );     // We are done (see OnDoubleClickTreeSelect)
+    if( alias )
+    {
+        m_details_ctrl->SetPage( GenerateAliasInfo( alias, unit ) );
+        ShowFootprintFor( alias );
+        PopulateFootprintSelector( alias );
+    }
     else
-        aMouseEvent.Skip();      // Let upstream handle it.
+    {
+        m_details_ctrl->SetPage( wxEmptyString );
+
+        if( m_fp_view_ctrl->IsInitialized() )
+            m_fp_view_ctrl->SetStatusText( wxEmptyString );
+
+        PopulateFootprintSelector( nullptr );
+    }
 }
 
-// Test strategy to see if OnInterceptTreeEnter() works:
-//  - search for an item.
-//  - click into the tree once to set focus on tree; navigate. Press 'Enter'
-//  -> The dialog should close and the component be available to place.
-void DIALOG_CHOOSE_COMPONENT::OnInterceptTreeEnter( wxKeyEvent& aEvent )
+
+void DIALOG_CHOOSE_COMPONENT::OnTreeActivate( wxDataViewEvent& aEvent )
 {
-    // We have to do some special handling for double-click on a tree-item because
-    // of some superfluous event delivery bug in wxWidgets (see OnDoubleClickTreeActivation()).
-    // In tree-activation, we assume we got a double-click and need to take special precaution
-    // that the mouse-up event is not delivered to the window one level up by going through
-    // a state-sequence OnDoubleClickTreeActivation() -> OnTreeMouseUp().
-
-    // Pressing 'Enter' within a tree will also call OnDoubleClickTreeActivation(),
-    // but since this is not due to the double-click and we have no way of knowing that it is
-    // not, we need to intercept the 'Enter' key before that to know that it is time to exit.
-    if( aEvent.GetKeyCode() == WXK_RETURN )
-        EndModal( wxID_OK );    // Dialog is done.
-    else
-        aEvent.Skip();          // Let tree handle that key for navigation.
+    HandleItemSelection();
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnStartComponentBrowser( wxMouseEvent& aEvent )
+void DIALOG_CHOOSE_COMPONENT::OnCloseTimer( wxTimerEvent& aEvent )
+{
+    // Hack handler because of eaten MouseUp event. See
+    // DIALOG_CHOOSE_COMPONENT::OnDoubleClickTreeActivation for the beginning
+    // of this spaghetti noodle.
+
+    auto state = wxGetMouseState();
+
+    if( state.LeftIsDown() )
+    {
+        // Mouse hasn't been raised yet, so fire the timer again. Otherwise the
+        // purpose of this timer is defeated.
+        m_dbl_click_timer->StartOnce( DIALOG_CHOOSE_COMPONENT::DblClickDelay );
+    }
+    else
+    {
+        EndQuasiModal( wxID_OK );
+    }
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::OnSchViewDClick( wxMouseEvent& aEvent )
 {
     m_external_browser_requested = true;
-    EndModal( wxID_OK );   // We are done.
+    EndQuasiModal( wxID_OK );
 }
 
 
-bool DIALOG_CHOOSE_COMPONENT::updateSelection()
+void DIALOG_CHOOSE_COMPONENT::ShowFootprintFor( LIB_ALIAS* aAlias )
 {
-    int unit = 0;
-    LIB_ALIAS* selection = m_search_container->GetSelectedAlias( &unit );
+    if( !m_fp_view_ctrl->IsInitialized() )
+        return;
 
-    m_componentView->Refresh();
+    LIB_FIELD* fp_field = aAlias->GetPart()->GetField( FOOTPRINT );
+    wxString   fp_name = fp_field ? fp_field->GetFullText() : wxString( "" );
 
-    m_componentDetails->Clear();
-
-    if( selection == NULL )
-        return false;
-
-    m_componentDetails->Freeze();
-    wxFont font_normal = m_componentDetails->GetFont();
-    wxFont font_bold = m_componentDetails->GetFont();
-    font_bold.SetWeight( wxFONTWEIGHT_BOLD );
-
-    wxTextAttr headline_attribute;
-    headline_attribute.SetFont( font_bold );
-    wxTextAttr text_attribute;
-    text_attribute.SetFont( font_normal );
-
-    const wxString name = selection->GetName();
-
-    if ( !name.empty() )
-    {
-        m_componentDetails->SetDefaultStyle( headline_attribute );
-        m_componentDetails->AppendText( name );
-    }
-
-    const wxString description = selection->GetDescription();
-
-    if( !description.empty() )
-    {
-        if ( !m_componentDetails->IsEmpty() )
-            m_componentDetails->AppendText( wxT( "\n\n" ) );
-
-        m_componentDetails->SetDefaultStyle( headline_attribute );
-        m_componentDetails->AppendText( _( "Description\n" ) );
-        m_componentDetails->SetDefaultStyle( text_attribute );
-        m_componentDetails->AppendText( description );
-    }
-
-    const wxString keywords = selection->GetKeyWords();
-
-    if( !keywords.empty() )
-    {
-        if ( !m_componentDetails->IsEmpty() )
-            m_componentDetails->AppendText( wxT( "\n\n" ) );
-
-        m_componentDetails->SetDefaultStyle( headline_attribute );
-        m_componentDetails->AppendText( _( "Keywords\n" ) );
-        m_componentDetails->SetDefaultStyle( text_attribute );
-        m_componentDetails->AppendText( keywords );
-    }
-
-    if ( !selection->IsRoot() )
-    {
-        LIB_PART* root_part = selection->GetPart();
-        const wxString root_component_name( root_part ? root_part->GetName() : _( "Unknown" ) );
-
-        if ( !m_componentDetails->IsEmpty() )
-            m_componentDetails->AppendText( wxT( "\n\n" ) );
-
-        m_componentDetails->SetDefaultStyle( headline_attribute );
-        m_componentDetails->AppendText( _( "Alias of " ) );
-        m_componentDetails->SetDefaultStyle( text_attribute );
-        m_componentDetails->AppendText( root_component_name );
-    }
-
-    m_componentDetails->SetInsertionPoint( 0 );  // scroll up.
-    m_componentDetails->Thaw();
-
-    return true;
+    ShowFootprint( fp_name );
 }
 
 
-void DIALOG_CHOOSE_COMPONENT::OnHandlePreviewRepaint( wxPaintEvent& aRepaintEvent )
+void DIALOG_CHOOSE_COMPONENT::ShowFootprint( wxString const& aName )
 {
-    int unit = 0;
-    LIB_ALIAS*  selection = m_search_container->GetSelectedAlias( &unit );
-    LIB_PART*   part = selection ? selection->GetPart() : NULL;
+    if( aName == wxEmptyString )
+    {
+        m_fp_view_ctrl->SetStatusText( _( "No footprint specified" ) );
+    }
+    else
+    {
+        LIB_ID lib_id( aName );
+
+        m_fp_view_ctrl->ClearStatus();
+        m_fp_view_ctrl->CacheFootprint( lib_id );
+        m_fp_view_ctrl->DisplayFootprint( lib_id );
+    }
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::PopulateFootprintSelector( LIB_ALIAS* aAlias )
+{
+    if( !m_fp_sel_ctrl )
+        return;
+
+    m_fp_sel_ctrl->ClearFilters();
+
+    if( aAlias )
+    {
+        LIB_PINS   temp_pins;
+        LIB_FIELD* fp_field = aAlias->GetPart()->GetField( FOOTPRINT );
+        wxString   fp_name = fp_field ? fp_field->GetFullText() : wxString( "" );
+
+        aAlias->GetPart()->GetPins( temp_pins );
+
+        m_fp_sel_ctrl->FilterByPinCount( temp_pins.size() );
+        m_fp_sel_ctrl->FilterByFootprintFilters( aAlias->GetPart()->GetFootPrints(), true );
+        m_fp_sel_ctrl->SetDefaultFootprint( fp_name );
+        m_fp_sel_ctrl->UpdateList();
+        m_fp_sel_ctrl->Enable();
+    }
+    else
+    {
+        m_fp_sel_ctrl->UpdateList();
+        m_fp_sel_ctrl->Disable();
+    }
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::OnDetailsLink( wxHtmlLinkEvent& aEvent )
+{
+    const wxHtmlLinkInfo& info = aEvent.GetLinkInfo();
+    ::wxLaunchDefaultBrowser( info.GetHref() );
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::OnSchViewPaint( wxPaintEvent& aEvent )
+{
+    auto sel = m_tree_ctrl->GetSelection();
+
+    int        unit = m_adapter->GetUnitFor( sel );
+    LIB_ALIAS* alias = m_adapter->GetAliasFor( sel );
+    LIB_PART*  part = alias ? alias->GetPart() : nullptr;
 
     // Don't draw anything (not even the background) if we don't have
     // a part to show
     if( !part )
         return;
 
-    if( selection->IsRoot() )
+    if( alias->IsRoot() )
     {
         // just show the part directly
-        renderPreview( part, unit );
+        RenderPreview( part, unit );
     }
     else
     {
         // switch out the name temporarily for the alias name
         wxString tmp( part->GetName() );
-        part->SetName( selection->GetName() );
+        part->SetName( alias->GetName() );
 
-        renderPreview( part, unit );
+        RenderPreview( part, unit );
 
         part->SetName( tmp );
     }
 }
 
 
-// Render the preview in our m_componentView. If this gets more complicated, we should
-// probably have a derived class from wxPanel; but this keeps things local.
-void DIALOG_CHOOSE_COMPONENT::renderPreview( LIB_PART* aComponent, int aUnit )
+void DIALOG_CHOOSE_COMPONENT::OnFootprintSelected( wxCommandEvent& aEvent )
 {
-    wxPaintDC dc( m_componentView );
+    m_fp_override = aEvent.GetString();
+
+    m_field_edits.erase(
+            std::remove_if( m_field_edits.begin(), m_field_edits.end(),
+                    []( std::pair<int, wxString> const& i ) { return i.first == FOOTPRINT; } ),
+            m_field_edits.end() );
+
+    m_field_edits.push_back( std::make_pair( FOOTPRINT, m_fp_override ) );
+
+    ShowFootprint( m_fp_override );
+}
+
+
+void DIALOG_CHOOSE_COMPONENT::RenderPreview( LIB_PART* aComponent, int aUnit )
+{
+    wxPaintDC dc( m_sch_view_ctrl );
 
     const wxSize dc_size = dc.GetSize();
 
@@ -330,12 +465,12 @@ void DIALOG_CHOOSE_COMPONENT::renderPreview( LIB_PART* aComponent, int aUnit )
 
     GRResetPenAndBrush( &dc );
 
-    EDA_COLOR_T bgcolor = m_parent->GetDrawBgColor();
+    COLOR4D bgColor = m_parent->GetDrawBgColor();
 
-    dc.SetBackground( bgcolor == BLACK ? *wxBLACK_BRUSH : *wxWHITE_BRUSH );
+    dc.SetBackground( wxBrush( bgColor.ToColour() ) );
     dc.Clear();
 
-    if( aComponent == NULL )
+    if( !aComponent )
         return;
 
     if( aUnit <= 0 )
@@ -344,66 +479,46 @@ void DIALOG_CHOOSE_COMPONENT::renderPreview( LIB_PART* aComponent, int aUnit )
     dc.SetDeviceOrigin( dc_size.x / 2, dc_size.y / 2 );
 
     // Find joint bounding box for everything we are about to draw.
-    EDA_RECT bBox = aComponent->GetUnitBoundingBox( aUnit, m_deMorganConvert );
+    EDA_RECT     bBox = aComponent->GetUnitBoundingBox( aUnit, m_deMorganConvert );
     const double xscale = (double) dc_size.x / bBox.GetWidth();
     const double yscale = (double) dc_size.y / bBox.GetHeight();
-    const double scale  = std::min( xscale, yscale ) * 0.85;
+    const double scale = std::min( xscale, yscale ) * 0.85;
 
     dc.SetUserScale( scale, scale );
 
     wxPoint offset = -bBox.Centre();
 
-
-    aComponent->Draw( NULL, &dc, offset, aUnit, m_deMorganConvert, GR_COPY,
-                      UNSPECIFIED_COLOR, DefaultTransform, true, true, false );
+    auto opts = PART_DRAW_OPTIONS::Default();
+    opts.draw_hidden_fields = false;
+    aComponent->Draw( nullptr, &dc, offset, aUnit, m_deMorganConvert, opts );
 }
 
 
-static wxTreeItemId GetPrevItem( const wxTreeCtrl& tree, const wxTreeItemId& item )
+void DIALOG_CHOOSE_COMPONENT::HandleItemSelection()
 {
-    wxTreeItemId prevItem = tree.GetPrevSibling( item );
-
-    if( !prevItem.IsOk() )
+    if( m_adapter->GetAliasFor( m_tree_ctrl->GetSelection() ) )
     {
-        prevItem = tree.GetItemParent( item );
-    }
-    else if( tree.IsExpanded( prevItem ) )
-    {
-        prevItem = tree.GetLastChild( prevItem );
-    }
-
-    return prevItem;
-}
-
-
-static wxTreeItemId GetNextItem( const wxTreeCtrl& tree, const wxTreeItemId& item )
-{
-    wxTreeItemId nextItem;
-
-    if( !item.IsOk() )
-        return nextItem;    // item is not valid: return a not valid wxTreeItemId
-
-    if( tree.IsExpanded( item ) )
-    {
-        wxTreeItemIdValue dummy;
-        nextItem = tree.GetFirstChild( item, dummy );
+        // Got a selection. We can't just end the modal dialog here, because
+        // wx leaks some events back to the parent window (in particular, the
+        // MouseUp following a double click).
+        //
+        // NOW, here's where it gets really fun. wxTreeListCtrl eats MouseUp.
+        // This isn't really feasible to bypass without a fully custom
+        // wxDataViewCtrl implementation, and even then might not be fully
+        // possible (docs are vague). To get around this, we use a one-shot
+        // timer to schedule the dialog close.
+        //
+        // See DIALOG_CHOOSE_COMPONENT::OnCloseTimer for the other end of this
+        // spaghetti noodle.
+        m_dbl_click_timer->StartOnce( DIALOG_CHOOSE_COMPONENT::DblClickDelay );
     }
     else
     {
-        wxTreeItemId root_cell=  tree.GetRootItem();
+        auto const sel = m_tree_ctrl->GetSelection();
 
-        // Walk up levels until we find one that has a next sibling.
-        for ( wxTreeItemId walk = item; walk.IsOk(); walk = tree.GetItemParent( walk ) )
-        {
-            if( walk == root_cell )     // the root cell (not displayed) is reached
-                break;                  // Exit (calling GetNextSibling( root_cell ) crashes.
-
-            nextItem = tree.GetNextSibling( walk );
-
-            if( nextItem.IsOk() )
-                break;
-        }
+        if( m_tree_ctrl->IsExpanded( sel ) )
+            m_tree_ctrl->Collapse( sel );
+        else
+            m_tree_ctrl->Expand( sel );
     }
-
-    return nextItem;
 }

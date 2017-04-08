@@ -1,10 +1,10 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2015 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -43,11 +43,14 @@
 #include <filter_reader.h>
 #include <macros.h>
 #include <msgpanel.h>
+#include <bitmaps.h>
 
 #include <class_board.h>
 #include <class_edge_mod.h>
 #include <class_module.h>
+#include <convert_basic_shapes_to_polygon.h>
 
+#include <view/view.h>
 
 MODULE::MODULE( BOARD* parent ) :
     BOARD_ITEM_CONTAINER( (BOARD_ITEM*) parent, PCB_MODULE_T ),
@@ -236,11 +239,11 @@ void MODULE::DrawAncre( EDA_DRAW_PANEL* panel, wxDC* DC, const wxPoint& offset,
 {
     GRSetDrawMode( DC, draw_mode );
 
-    if( GetBoard()->IsElementVisible( ANCHOR_VISIBLE ) )
+    if( GetBoard()->IsElementVisible( LAYER_ANCHOR ) )
     {
         GRDrawAnchor( panel->GetClipBox(), DC, m_Pos.x, m_Pos.y,
                       dim_ancre,
-                      g_ColorsSettings.GetItemColor( ANCHOR_VISIBLE ) );
+                      g_ColorsSettings.GetItemColor( LAYER_ANCHOR ) );
     }
 }
 
@@ -401,13 +404,13 @@ void MODULE::Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, GR_DRAWMODE aDrawMode,
     DrawAncre( aPanel, aDC, aOffset, DIM_ANCRE_MODULE, aDrawMode );
 
     // Draw graphic items
-    if( brd->IsElementVisible( MOD_REFERENCES_VISIBLE ) )
+    if( brd->IsElementVisible( LAYER_MOD_REFERENCES ) )
     {
         if( !(m_Reference->IsMoving()) )
             m_Reference->Draw( aPanel, aDC, aDrawMode, aOffset );
     }
 
-    if( brd->IsElementVisible( MOD_VALUES_VISIBLE ) )
+    if( brd->IsElementVisible( LAYER_MOD_VALUES ) )
     {
         if( !(m_Value->IsMoving()) )
             m_Value->Draw( aPanel, aDC, aDrawMode, aOffset );
@@ -800,6 +803,12 @@ wxString MODULE::GetSelectMenuText() const
 }
 
 
+BITMAP_DEF MODULE::GetMenuImage() const
+{
+    return module_xpm;
+}
+
+
 EDA_ITEM* MODULE::Clone() const
 {
     return new MODULE( *this );
@@ -825,33 +834,10 @@ void MODULE::RunOnChildren( std::function<void (BOARD_ITEM*)> aFunction )
     }
 }
 
-
-void MODULE::ViewUpdate( int aUpdateFlags )
-{
-    if( !m_view )
-        return;
-
-    // Update the module itself
-    VIEW_ITEM::ViewUpdate( aUpdateFlags );
-
-    // Update pads
-    for( D_PAD* pad = m_Pads.GetFirst(); pad; pad = pad->Next() )
-        pad->ViewUpdate( aUpdateFlags );
-
-    // Update module's drawing (mostly silkscreen)
-    for( BOARD_ITEM* drawing = m_Drawings.GetFirst(); drawing; drawing = drawing->Next() )
-        drawing->ViewUpdate( aUpdateFlags );
-
-    // Update module's texts
-    m_Reference->ViewUpdate( aUpdateFlags );
-    m_Value->ViewUpdate( aUpdateFlags );
-}
-
-
 void MODULE::ViewGetLayers( int aLayers[], int& aCount ) const
 {
     aCount = 2;
-    aLayers[0] = ITEM_GAL_LAYER( ANCHOR_VISIBLE );
+    aLayers[0] = LAYER_ANCHOR;
 
     switch( m_Layer )
     {
@@ -860,23 +846,23 @@ void MODULE::ViewGetLayers( int aLayers[], int& aCount ) const
         wxASSERT_MSG( false, "Illegal layer" );    // do you really have modules placed on other layers?
         // pass through
     case F_Cu:
-        aLayers[1] = ITEM_GAL_LAYER( MOD_FR_VISIBLE );
+        aLayers[1] = LAYER_MOD_FR;
         break;
 
     case B_Cu:
-        aLayers[1] = ITEM_GAL_LAYER( MOD_BK_VISIBLE );
+        aLayers[1] = LAYER_MOD_BK;
         break;
     }
 }
 
 
-unsigned int MODULE::ViewGetLOD( int aLayer ) const
+unsigned int MODULE::ViewGetLOD( int aLayer, KIGFX::VIEW* aView ) const
 {
-    int layer = ( m_Layer == F_Cu ) ? MOD_FR_VISIBLE :
-                ( m_Layer == B_Cu ) ? MOD_BK_VISIBLE : ANCHOR_VISIBLE;
+    int layer = ( m_Layer == F_Cu ) ? LAYER_MOD_FR :
+                ( m_Layer == B_Cu ) ? LAYER_MOD_BK : LAYER_ANCHOR;
 
     // Currently it is only for anchor layer
-    if( m_view->IsLayerVisible( ITEM_GAL_LAYER( layer ) ) )
+    if( aView->IsLayerVisible( layer ) )
         return 30;
 
     return std::numeric_limits<unsigned int>::max();
@@ -980,8 +966,9 @@ void MODULE::SetPosition( const wxPoint& newpos )
     wxPoint delta = newpos - m_Pos;
 
     m_Pos += delta;
-    m_Reference->SetTextPosition( m_Reference->GetTextPosition() + delta );
-    m_Value->SetTextPosition( m_Value->GetTextPosition() + delta );
+
+    m_Reference->EDA_TEXT::Offset( delta );
+    m_Value->EDA_TEXT::Offset( delta );
 
     for( D_PAD* pad = m_Pads;  pad;  pad = pad->Next() )
     {
@@ -1002,7 +989,7 @@ void MODULE::SetPosition( const wxPoint& newpos )
         case PCB_MODULE_TEXT_T:
         {
             TEXTE_MODULE* text = static_cast<TEXTE_MODULE*>( item );
-            text->SetTextPosition( text->GetTextPosition() + delta );
+            text->EDA_TEXT::Offset( delta );
             break;
         }
 
@@ -1232,4 +1219,53 @@ double MODULE::PadCoverageRatio() const
     double ratio = padArea / moduleArea;
 
     return std::min( ratio, 1.0 );
+}
+
+// see convert_drawsegment_list_to_polygon.cpp:
+extern bool ConvertOutlineToPolygon( std::vector< DRAWSEGMENT* >& aSegList,
+                                     SHAPE_POLY_SET& aPolygons, int aSegmentsByCircle,
+                                     wxString* aErrorText);
+
+bool MODULE::BuildPolyCourtyard()
+{
+    m_poly_courtyard_front.RemoveAllContours();
+    m_poly_courtyard_back.RemoveAllContours();
+    // Build the courtyard area from graphic items on the courtyard.
+    // Only PCB_MODULE_EDGE_T have meaning, graphic texts are ignored.
+    // Collect items:
+    std::vector< DRAWSEGMENT* > list_front;
+    std::vector< DRAWSEGMENT* > list_back;
+
+    for( BOARD_ITEM* item = GraphicalItems(); item; item = item->Next() )
+    {
+        if( item->GetLayer() == B_CrtYd && item->Type() == PCB_MODULE_EDGE_T )
+            list_back.push_back( static_cast< DRAWSEGMENT* > ( item ) );
+
+        if( item->GetLayer() == F_CrtYd && item->Type() == PCB_MODULE_EDGE_T )
+            list_front.push_back( static_cast< DRAWSEGMENT* > ( item ) );
+    }
+
+    // Note: if no item found on courtyard layers, return true.
+    // false is returned only when the shape defined on courtyard layers
+    // is not convertible to a polygon
+    if( !list_front.size() && !list_back.size() )
+        return true;
+
+    wxString error_msg;
+
+    const int STEPS = 36;     // for a segmentation of an arc of 360 degrees
+    bool success = ConvertOutlineToPolygon( list_front, m_poly_courtyard_front,
+                                            STEPS, &error_msg );
+
+    if( success )
+        success = ConvertOutlineToPolygon( list_back, m_poly_courtyard_back,
+                                           STEPS, &error_msg );
+
+    if( !error_msg.IsEmpty() )
+    {
+        error_msg.Prepend( GetReference() + ": " );
+        wxLogMessage( error_msg );
+    }
+
+    return success;
 }

@@ -32,6 +32,7 @@
 #include <confirm.h>
 #include <id.h>
 #include <schframe.h>
+#include <bitmaps.h>
 
 #include <general.h>
 #include <sch_sheet.h>
@@ -40,6 +41,8 @@
 #include <wx/imaglist.h>
 #include <wx/treectrl.h>
 
+#include <class_netlist_object.h>
+#include <sch_sheet_path.h>
 
 enum
 {
@@ -48,6 +51,7 @@ enum
 
 
 class HIERARCHY_NAVIG_DLG;
+
 
 /* This class derived from wxTreeItemData stores the SCH_SHEET_PATH of each
  * sheet in hierarchy in each TreeItem, in its associated data buffer
@@ -301,6 +305,9 @@ void SCH_EDIT_FRAME::DisplayCurrentSheet()
     {
         RedrawScreen( GetScrollCenterPosition(), true );
     }
+
+    // Some items (wires, labels) can be highlighted. So prepare the highlight flag:
+    SetCurrentSheetHighlightFlags();
 
     // Now refresh m_canvas. Should be not necessary, but because screen has changed
     // the previous refresh has set all new draw parameters (scroll position ..)

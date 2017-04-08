@@ -1,8 +1,8 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2007-2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2016 KiCad Developers, see CHANGELOG.TXT for contributors.
+ * Copyright (C) 2007-2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 1992-2017 KiCad Developers, see CHANGELOG.TXT for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,47 +26,7 @@
 #ifndef BITMAPS_H_
 #define BITMAPS_H_
 
-//FIXME: cannot include only this file in wxWidgets 2.9.3
-// test if it works under stable release
-// #include <wx/bitmap.h>   // only to define wxBitmap
-class wxBitmap;     // only to define wxBitmap
-
-#include <config.h>
-
-
-/// PNG memory record (file in memory).
-struct BITMAP_OPAQUE
-{
-    const unsigned char* png;
-    int         byteCount;
-    const char* name;       // for debug, or future lazy dynamic linking
-};
-
-// declared as single element _array_, so its name assigns to pointer
-#define EXTERN_BITMAP(x) extern const BITMAP_OPAQUE x[1];
-
-
-/// a BITMAP_DEF is really a const pointer to an opaque
-/// structure.  So you should never need to use 'const' with it.
-typedef const BITMAP_OPAQUE *BITMAP_DEF;
-
-
-/**
- * Function KiBitmap
- * constructs a wxBitmap from a memory record, held in a
- * BITMAP_DEF.
- */
-wxBitmap KiBitmap( BITMAP_DEF aBitmap );
-
-
-/**
- * Function KiBitmapNew
- * allocates a wxBitmap on heap from a memory record, held in a
- * BITMAP_DEF.
- *
- * @return wxBitmap* - caller owns it.
- */
-wxBitmap* KiBitmapNew( BITMAP_DEF aBitmap );
+#include <bitmap_types.h>
 
 
 // may eventually generate this file automatically.
@@ -102,6 +62,8 @@ EXTERN_BITMAP( anchor_xpm )
 EXTERN_BITMAP( annotate_down_right_xpm )
 EXTERN_BITMAP( annotate_right_down_xpm )
 EXTERN_BITMAP( annotate_xpm )
+EXTERN_BITMAP( align_items_xpm )
+EXTERN_BITMAP( apply_pad_settings_xpm )
 EXTERN_BITMAP( array_line_xpm )
 EXTERN_BITMAP( array_module_xpm )
 EXTERN_BITMAP( array_pad_xpm )
@@ -141,6 +103,7 @@ EXTERN_BITMAP( copyblock_xpm )
 EXTERN_BITMAP( copycomponent_xpm )
 EXTERN_BITMAP( copy_button_xpm )
 EXTERN_BITMAP( copy_library_xpm )
+EXTERN_BITMAP( copy_pad_settings_xpm )
 EXTERN_BITMAP( create_cmp_file_xpm )
 EXTERN_BITMAP( cursor_shape_xpm )
 EXTERN_BITMAP( cursor_xpm )
@@ -174,6 +137,8 @@ EXTERN_BITMAP( dialog_warning_xpm )
 EXTERN_BITMAP( directory_xpm )
 EXTERN_BITMAP( dismiss_xpm )
 EXTERN_BITMAP( display_options_xpm )
+EXTERN_BITMAP( distribute_horizontal_xpm )
+EXTERN_BITMAP( distribute_vertical_xpm )
 EXTERN_BITMAP( down_xpm )
 EXTERN_BITMAP( ortho_xpm )
 EXTERN_BITMAP( drag_module_xpm )
@@ -211,7 +176,6 @@ EXTERN_BITMAP( export_dsn_xpm )
 EXTERN_BITMAP( export_idf_xpm )
 EXTERN_BITMAP( export_footprint_names_xpm )
 EXTERN_BITMAP( export_module_xpm )
-EXTERN_BITMAP( export_options_pad_xpm )
 EXTERN_BITMAP( export_xpm )
 EXTERN_BITMAP( fabrication_xpm )
 EXTERN_BITMAP( file_footprint_xpm )
@@ -219,6 +183,7 @@ EXTERN_BITMAP( fill_zone_xpm )
 EXTERN_BITMAP( find_xpm )
 EXTERN_BITMAP( find_replace_xpm )
 EXTERN_BITMAP( flag_xpm )
+EXTERN_BITMAP( flip_board_xpm )
 EXTERN_BITMAP( fonts_xpm )
 EXTERN_BITMAP( footprint_text_xpm )
 EXTERN_BITMAP( gbr_select_mode0_xpm )
@@ -229,13 +194,13 @@ EXTERN_BITMAP( gerber_file_xpm )
 EXTERN_BITMAP( gerber_recent_files_xpm )
 EXTERN_BITMAP( gerbview_clear_layers_xpm )
 EXTERN_BITMAP( gerbview_open_recent_drill_files_xpm )
-EXTERN_BITMAP( gerbview_show_negative_objects_xpm );
+EXTERN_BITMAP( gerbview_open_recent_ziparchive_files_xpm )
+EXTERN_BITMAP( gerbview_show_negative_objects_xpm )
 EXTERN_BITMAP( general_deletions_xpm )
 EXTERN_BITMAP( general_ratsnest_xpm )
 EXTERN_BITMAP( glabel2label_xpm )
 EXTERN_BITMAP( glabel2text_xpm )
 EXTERN_BITMAP( gl_change_xpm )
-EXTERN_BITMAP( global_options_pad_xpm )
 EXTERN_BITMAP( green_xpm )
 EXTERN_BITMAP( grid_select_axis_xpm )
 EXTERN_BITMAP( grid_select_xpm )
@@ -246,6 +211,8 @@ EXTERN_BITMAP( hidden_pin_xpm )
 EXTERN_BITMAP( hierarchy_cursor_xpm )
 EXTERN_BITMAP( hierarchy_nav_xpm )
 EXTERN_BITMAP( hotkeys_xpm )
+EXTERN_BITMAP( hotkeys_import_xpm )
+EXTERN_BITMAP( hotkeys_export_xpm )
 EXTERN_BITMAP( html_xpm )
 EXTERN_BITMAP( icon_cvpcb_small_xpm )
 EXTERN_BITMAP( icon_cvpcb_xpm )
@@ -267,6 +234,7 @@ EXTERN_BITMAP( import_cmp_from_lib_xpm )
 EXTERN_BITMAP( import_footprint_names_xpm )
 EXTERN_BITMAP( import_hierarchical_label_xpm )
 EXTERN_BITMAP( import_module_xpm )
+EXTERN_BITMAP( import_setup_xpm )
 EXTERN_BITMAP( import_xpm )
 EXTERN_BITMAP( import3d_xpm )
 EXTERN_BITMAP( info_xpm )
@@ -303,7 +271,6 @@ EXTERN_BITMAP( layers_manager_xpm )
 EXTERN_BITMAP( leave_sheet_xpm )
 EXTERN_BITMAP( left_xpm )
 EXTERN_BITMAP( libedit_xpm )
-EXTERN_BITMAP( libedprt_xpm )
 EXTERN_BITMAP( lib_next_xpm )
 EXTERN_BITMAP( lib_previous_xpm )
 EXTERN_BITMAP( library_browse_xpm )
@@ -316,6 +283,7 @@ EXTERN_BITMAP( load_module_board_xpm )
 EXTERN_BITMAP( load_module_lib_xpm )
 EXTERN_BITMAP( local_ratsnest_xpm )
 EXTERN_BITMAP( locked_xpm )
+EXTERN_BITMAP( measurement_xpm )
 EXTERN_BITMAP( mirepcb_xpm )
 EXTERN_BITMAP( mirror_h_xpm )
 EXTERN_BITMAP( mirror_v_xpm )
@@ -363,6 +331,7 @@ EXTERN_BITMAP( mw_add_stub_arc_xpm )
 EXTERN_BITMAP( mw_add_stub_xpm )
 EXTERN_BITMAP( mw_toolbar_xpm )
 EXTERN_BITMAP( net_highlight_xpm )
+EXTERN_BITMAP( net_highlight_schematic_xpm )
 EXTERN_BITMAP( netlist_xpm )
 EXTERN_BITMAP( net_locked_xpm )
 EXTERN_BITMAP( net_unlocked_xpm )
@@ -390,7 +359,6 @@ EXTERN_BITMAP( options_all_vias_xpm )
 EXTERN_BITMAP( options_arc_xpm )
 EXTERN_BITMAP( options_circle_xpm )
 EXTERN_BITMAP( options_module_xpm )
-EXTERN_BITMAP( options_new_pad_xpm )
 EXTERN_BITMAP( options_pad_xpm )
 EXTERN_BITMAP( options_pinsheet_xpm )
 EXTERN_BITMAP( options_pin_xpm )
@@ -422,6 +390,7 @@ EXTERN_BITMAP( pin2pin_xpm )
 EXTERN_BITMAP( pin_name_to_xpm )
 EXTERN_BITMAP( pin_number_to_xpm )
 EXTERN_BITMAP( pin_size_to_xpm )
+EXTERN_BITMAP( pin_show_etype_xpm )
 EXTERN_BITMAP( pin_table_xpm )
 EXTERN_BITMAP( pinorient_right_xpm )
 EXTERN_BITMAP( pinorient_left_xpm )
@@ -459,6 +428,7 @@ EXTERN_BITMAP( polar_coord_xpm )
 EXTERN_BITMAP( post_compo_xpm )
 EXTERN_BITMAP( post_drill_xpm )
 EXTERN_BITMAP( post_module_xpm )
+EXTERN_BITMAP( push_pad_settings_xpm )
 EXTERN_BITMAP( preference_xpm )
 EXTERN_BITMAP( print_button_xpm )
 EXTERN_BITMAP( ps_router_xpm )

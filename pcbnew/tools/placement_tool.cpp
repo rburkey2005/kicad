@@ -23,7 +23,7 @@
  */
 
 #include "placement_tool.h"
-#include "common_actions.h"
+#include "pcb_actions.h"
 #include "selection_tool.h"
 #include <tool/tool_manager.h>
 
@@ -31,8 +31,42 @@
 #include <class_board.h>
 #include <ratsnest_data.h>
 #include <board_commit.h>
+#include <bitmaps.h>
 
 #include <confirm.h>
+#include <menus_helpers.h>
+
+// Placement tool
+TOOL_ACTION PCB_ACTIONS::alignTop( "pcbnew.Place.alignTop",
+        AS_GLOBAL, 0,
+        _( "Align to Top" ),
+        _( "Aligns selected items to the top edge" ), up_xpm );
+
+TOOL_ACTION PCB_ACTIONS::alignBottom( "pcbnew.Place.alignBottom",
+        AS_GLOBAL, 0,
+        _( "Align to Bottom" ),
+        _( "Aligns selected items to the bottom edge" ), down_xpm );
+
+TOOL_ACTION PCB_ACTIONS::alignLeft( "pcbnew.Place.alignLeft",
+        AS_GLOBAL, 0,
+        _( "Align to Left" ),
+        _( "Aligns selected items to the left edge" ), left_xpm );
+
+TOOL_ACTION PCB_ACTIONS::alignRight( "pcbnew.Place.alignRight",
+        AS_GLOBAL, 0,
+        _( "Align to Right" ),
+        _( "Aligns selected items to the right edge" ), right_xpm );
+
+TOOL_ACTION PCB_ACTIONS::distributeHorizontally( "pcbnew.Place.distributeHorizontally",
+        AS_GLOBAL, 0,
+        _( "Distribute Horizontally" ),
+        _( "Distributes selected items along the horizontal axis" ), distribute_horizontal_xpm );
+
+TOOL_ACTION PCB_ACTIONS::distributeVertically( "pcbnew.Place.distributeVertically",
+        AS_GLOBAL, 0,
+        _( "Distribute Vertically" ),
+        _( "Distributes selected items along the vertical axis" ), distribute_vertical_xpm );
+
 
 PLACEMENT_TOOL::PLACEMENT_TOOL() :
     TOOL_INTERACTIVE( "pcbnew.Placement" ), m_selectionTool( NULL ), m_placementMenu( NULL )
@@ -58,15 +92,20 @@ bool PLACEMENT_TOOL::Init()
 
     // Create a context menu and make it available through selection tool
     m_placementMenu = new CONTEXT_MENU;
-    m_placementMenu->Add( COMMON_ACTIONS::alignTop );
-    m_placementMenu->Add( COMMON_ACTIONS::alignBottom );
-    m_placementMenu->Add( COMMON_ACTIONS::alignLeft );
-    m_placementMenu->Add( COMMON_ACTIONS::alignRight );
+    m_placementMenu->SetIcon( align_items_xpm );
+    m_placementMenu->SetTitle( _( "Align/distribute" ) );
+
+    // Add all align/distribute commands
+    m_placementMenu->Add( PCB_ACTIONS::alignTop );
+    m_placementMenu->Add( PCB_ACTIONS::alignBottom );
+    m_placementMenu->Add( PCB_ACTIONS::alignLeft );
+    m_placementMenu->Add( PCB_ACTIONS::alignRight );
     m_placementMenu->AppendSeparator();
-    m_placementMenu->Add( COMMON_ACTIONS::distributeHorizontally );
-    m_placementMenu->Add( COMMON_ACTIONS::distributeVertically );
-    m_selectionTool->GetMenu().AddMenu( m_placementMenu, _( "Align/distribute" ), false,
-                                        SELECTION_CONDITIONS::MoreThan( 1 ) );
+    m_placementMenu->Add( PCB_ACTIONS::distributeHorizontally );
+    m_placementMenu->Add( PCB_ACTIONS::distributeVertically );
+
+    m_selectionTool->GetToolMenu().GetMenu().AddMenu( m_placementMenu, false,
+            SELECTION_CONDITIONS::MoreThan( 1 ) );
 
     return true;
 }
@@ -80,23 +119,24 @@ int PLACEMENT_TOOL::AlignTop( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Compute the highest point of selection - it will be the edge of alignment
-    int top = selection.Item<BOARD_ITEM>( 0 )->GetBoundingBox().GetY();
+    int top = selection.Front()->GetBoundingBox().GetY();
 
     for( int i = 1; i < selection.Size(); ++i )
     {
-        int currentTop = selection.Item<BOARD_ITEM>( i )->GetBoundingBox().GetY();
+        int currentTop = selection[i]->GetBoundingBox().GetY();
 
         if( top > currentTop )      // Y decreases when going up
             top = currentTop;
     }
 
     // Move the selected items
-    for( int i = 0; i < selection.Size(); ++i )
+    for( auto i : selection )
     {
-        BOARD_ITEM* item = selection.Item<BOARD_ITEM>( i );
+        auto item = static_cast<BOARD_ITEM*>( i );
+
         int difference = top - item->GetBoundingBox().GetY();
 
         item->Move( wxPoint( 0, difference ) );
@@ -116,23 +156,24 @@ int PLACEMENT_TOOL::AlignBottom( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Compute the lowest point of selection - it will be the edge of alignment
-    int bottom = selection.Item<BOARD_ITEM>( 0 )->GetBoundingBox().GetBottom();
+    int bottom = selection.Front()->GetBoundingBox().GetBottom();
 
     for( int i = 1; i < selection.Size(); ++i )
     {
-        int currentBottom = selection.Item<BOARD_ITEM>( i )->GetBoundingBox().GetBottom();
+        int currentBottom = selection[i]->GetBoundingBox().GetBottom();
 
         if( bottom < currentBottom )      // Y increases when going down
             bottom = currentBottom;
     }
 
     // Move the selected items
-    for( int i = 0; i < selection.Size(); ++i )
+    for( auto i : selection )
     {
-        BOARD_ITEM* item = selection.Item<BOARD_ITEM>( i );
+        auto item = static_cast<BOARD_ITEM*>( i );
+
         int difference = bottom - item->GetBoundingBox().GetBottom();
 
         item->Move( wxPoint( 0, difference ) );
@@ -152,23 +193,24 @@ int PLACEMENT_TOOL::AlignLeft( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Compute the leftmost point of selection - it will be the edge of alignment
-    int left = selection.Item<BOARD_ITEM>( 0 )->GetBoundingBox().GetX();
+    int left = selection.Front()->GetBoundingBox().GetX();
 
     for( int i = 1; i < selection.Size(); ++i )
     {
-        int currentLeft = selection.Item<BOARD_ITEM>( i )->GetBoundingBox().GetX();
+        int currentLeft = selection[i]->GetBoundingBox().GetX();
 
         if( left > currentLeft )      // X decreases when going left
             left = currentLeft;
     }
 
     // Move the selected items
-    for( int i = 0; i < selection.Size(); ++i )
+    for( auto i : selection )
     {
-        BOARD_ITEM* item = selection.Item<BOARD_ITEM>( i );
+        auto item = static_cast<BOARD_ITEM*>( i );
+
         int difference = left - item->GetBoundingBox().GetX();
 
         item->Move( wxPoint( difference, 0 ) );
@@ -188,23 +230,24 @@ int PLACEMENT_TOOL::AlignRight( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Compute the rightmost point of selection - it will be the edge of alignment
-    int right = selection.Item<BOARD_ITEM>( 0 )->GetBoundingBox().GetRight();
+    int right = selection.Front()->GetBoundingBox().GetRight();
 
     for( int i = 1; i < selection.Size(); ++i )
     {
-        int currentRight = selection.Item<BOARD_ITEM>( i )->GetBoundingBox().GetRight();
+        int currentRight = selection[i]->GetBoundingBox().GetRight();
 
         if( right < currentRight )      // X increases when going right
             right = currentRight;
     }
 
     // Move the selected items
-    for( int i = 0; i < selection.Size(); ++i )
+    for( auto i : selection )
     {
-        BOARD_ITEM* item = selection.Item<BOARD_ITEM>( i );
+        auto item = static_cast<BOARD_ITEM*>( i );
+
         int difference = right - item->GetBoundingBox().GetRight();
 
         item->Move( wxPoint( difference, 0 ) );
@@ -236,26 +279,27 @@ int PLACEMENT_TOOL::DistributeHorizontally( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Prepare a list, so the items can be sorted by their X coordinate
-    std::list<BOARD_ITEM*> itemsList;
-    for( int i = 0; i < selection.Size(); ++i )
-        itemsList.push_back( selection.Item<BOARD_ITEM>( i ) );
+    std::vector<BOARD_ITEM*> itemsList;
+
+    for( auto item : selection )
+        itemsList.push_back( static_cast<BOARD_ITEM*>( item ) );
 
     // Sort items by X coordinate
-    itemsList.sort( compareX );
+    std::sort(itemsList.begin(), itemsList.end(), compareX );
 
     // Expected X coordinate for the next item (=minX)
-    int position = (*itemsList.begin())->GetBoundingBox().Centre().x;
+    int position = itemsList.front()->GetBoundingBox().Centre().x;
 
     // X coordinate for the last item
-    const int maxX = (*itemsList.rbegin())->GetBoundingBox().Centre().x;
+    const int maxX = itemsList.back()->GetBoundingBox().Centre().x;
 
     // Distance between items
     const int distance = ( maxX - position ) / ( itemsList.size() - 1 );
 
-    for( BOARD_ITEM* item : itemsList )
+    for( auto item : itemsList )
     {
         int difference = position - item->GetBoundingBox().Centre().x;
 
@@ -278,15 +322,16 @@ int PLACEMENT_TOOL::DistributeVertically( const TOOL_EVENT& aEvent )
         return 0;
 
     BOARD_COMMIT commit( getEditFrame<PCB_BASE_FRAME>() );
-    commit.Stage( selection.items, UR_CHANGED );
+    commit.StageItems( selection, CHT_MODIFY );
 
     // Prepare a list, so the items can be sorted by their Y coordinate
-    std::list<BOARD_ITEM*> itemsList;
-    for( int i = 0; i < selection.Size(); ++i )
-        itemsList.push_back( selection.Item<BOARD_ITEM>( i ) );
+    std::vector<BOARD_ITEM*> itemsList;
+
+    for( auto item : selection )
+        itemsList.push_back( static_cast<BOARD_ITEM*>( item ) );
 
     // Sort items by Y coordinate
-    itemsList.sort( compareY );
+    std::sort( itemsList.begin(), itemsList.end(), compareY );
 
     // Expected Y coordinate for the next item (=minY)
     int position = (*itemsList.begin())->GetBoundingBox().Centre().y;
@@ -297,7 +342,7 @@ int PLACEMENT_TOOL::DistributeVertically( const TOOL_EVENT& aEvent )
     // Distance between items
     const int distance = ( maxY - position ) / ( itemsList.size() - 1 );
 
-    for( BOARD_ITEM* item : itemsList )
+    for( auto item : itemsList )
     {
         int difference = position - item->GetBoundingBox().Centre().y;
 
@@ -314,11 +359,11 @@ int PLACEMENT_TOOL::DistributeVertically( const TOOL_EVENT& aEvent )
 
 void PLACEMENT_TOOL::SetTransitions()
 {
-    Go( &PLACEMENT_TOOL::AlignTop,    COMMON_ACTIONS::alignTop.MakeEvent() );
-    Go( &PLACEMENT_TOOL::AlignBottom, COMMON_ACTIONS::alignBottom.MakeEvent() );
-    Go( &PLACEMENT_TOOL::AlignLeft,   COMMON_ACTIONS::alignLeft.MakeEvent() );
-    Go( &PLACEMENT_TOOL::AlignRight,  COMMON_ACTIONS::alignRight.MakeEvent() );
+    Go( &PLACEMENT_TOOL::AlignTop,    PCB_ACTIONS::alignTop.MakeEvent() );
+    Go( &PLACEMENT_TOOL::AlignBottom, PCB_ACTIONS::alignBottom.MakeEvent() );
+    Go( &PLACEMENT_TOOL::AlignLeft,   PCB_ACTIONS::alignLeft.MakeEvent() );
+    Go( &PLACEMENT_TOOL::AlignRight,  PCB_ACTIONS::alignRight.MakeEvent() );
 
-    Go( &PLACEMENT_TOOL::DistributeHorizontally,  COMMON_ACTIONS::distributeHorizontally.MakeEvent() );
-    Go( &PLACEMENT_TOOL::DistributeVertically,    COMMON_ACTIONS::distributeVertically.MakeEvent() );
+    Go( &PLACEMENT_TOOL::DistributeHorizontally,  PCB_ACTIONS::distributeHorizontally.MakeEvent() );
+    Go( &PLACEMENT_TOOL::DistributeVertically,    PCB_ACTIONS::distributeVertically.MakeEvent() );
 }

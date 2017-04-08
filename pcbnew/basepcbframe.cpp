@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2011 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 1992-2011 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -86,6 +86,10 @@ BEGIN_EVENT_TABLE( PCB_BASE_FRAME, EDA_DRAW_FRAME )
     EVT_UPDATE_UI( ID_TB_OPTIONS_SHOW_PADS_SKETCH, PCB_BASE_FRAME::OnUpdatePadDrawMode )
     EVT_UPDATE_UI( ID_ON_GRID_SELECT, PCB_BASE_FRAME::OnUpdateSelectGrid )
     EVT_UPDATE_UI( ID_ON_ZOOM_SELECT, PCB_BASE_FRAME::OnUpdateSelectZoom )
+    // Switching canvases
+    EVT_UPDATE_UI( ID_MENU_CANVAS_LEGACY, PCB_BASE_FRAME::OnUpdateSwitchCanvas )
+    EVT_UPDATE_UI( ID_MENU_CANVAS_CAIRO, PCB_BASE_FRAME::OnUpdateSwitchCanvas )
+    EVT_UPDATE_UI( ID_MENU_CANVAS_OPENGL, PCB_BASE_FRAME::OnUpdateSwitchCanvas )
 
     EVT_UPDATE_UI_RANGE( ID_ZOOM_IN, ID_ZOOM_PAGE, PCB_BASE_FRAME::OnUpdateSelectZoom )
 END_EVENT_TABLE()
@@ -290,7 +294,7 @@ EDA_RECT PCB_BASE_FRAME::GetBoardBoundingBox( bool aBoardEdgesOnly ) const
 {
     wxASSERT( m_Pcb );
 
-    EDA_RECT area = m_Pcb->ComputeBoundingBox( aBoardEdgesOnly );
+    EDA_RECT area = aBoardEdgesOnly ? m_Pcb->GetBoardEdgesBoundingBox() : m_Pcb->GetBoundingBox();
 
     if( area.GetWidth() == 0 && area.GetHeight() == 0 )
     {
@@ -371,9 +375,9 @@ void PCB_BASE_FRAME::Show3D_Frame( wxCommandEvent& event )
 
 
 // Note: virtual, overridden in PCB_EDIT_FRAME;
-void PCB_BASE_FRAME::SwitchLayer( wxDC* DC, LAYER_ID layer )
+void PCB_BASE_FRAME::SwitchLayer( wxDC* DC, PCB_LAYER_ID layer )
 {
-    LAYER_ID preslayer = GetActiveLayer();
+    PCB_LAYER_ID preslayer = GetActiveLayer();
     DISPLAY_OPTIONS* displ_opts = (DISPLAY_OPTIONS*)GetDisplayOptions();
 
     // Check if the specified layer matches the present layer
@@ -442,10 +446,9 @@ void PCB_BASE_FRAME::OnTogglePadDrawMode( wxCommandEvent& aEvent )
     if( gal )
     {
     // Apply new display options to the GAL canvas
-        KIGFX::PCB_PAINTER* painter =
-                static_cast<KIGFX::PCB_PAINTER*> ( gal->GetView()->GetPainter() );
-        KIGFX::PCB_RENDER_SETTINGS* settings =
-                static_cast<KIGFX::PCB_RENDER_SETTINGS*> ( painter->GetSettings() );
+        auto view = gal->GetView();
+        auto painter = static_cast<KIGFX::PCB_PAINTER*> ( view->GetPainter() );
+        auto settings = static_cast<KIGFX::PCB_RENDER_SETTINGS*> ( painter->GetSettings() );
         settings->LoadDisplayOptions( displ_opts );
 
         // Update pads
@@ -453,7 +456,7 @@ void PCB_BASE_FRAME::OnTogglePadDrawMode( wxCommandEvent& aEvent )
         for( MODULE* module = board->m_Modules; module; module = module->Next() )
         {
             for( D_PAD* pad = module->Pads(); pad; pad = pad->Next() )
-                pad->ViewUpdate( KIGFX::VIEW_ITEM::GEOMETRY );
+                view->Update( pad, KIGFX::GEOMETRY );
         }
     }
 
@@ -592,15 +595,15 @@ GENERAL_COLLECTORS_GUIDE PCB_BASE_FRAME::GetCollectorsGuide()
                                     GetActiveLayer() );
 
     // account for the globals
-    guide.SetIgnoreMTextsMarkedNoShow( ! m_Pcb->IsElementVisible( MOD_TEXT_INVISIBLE ));
-    guide.SetIgnoreMTextsOnBack( ! m_Pcb->IsElementVisible( MOD_TEXT_BK_VISIBLE ));
-    guide.SetIgnoreMTextsOnFront( ! m_Pcb->IsElementVisible( MOD_TEXT_FR_VISIBLE ));
-    guide.SetIgnoreModulesOnBack( ! m_Pcb->IsElementVisible( MOD_BK_VISIBLE ) );
-    guide.SetIgnoreModulesOnFront( ! m_Pcb->IsElementVisible( MOD_FR_VISIBLE ) );
-    guide.SetIgnorePadsOnBack( ! m_Pcb->IsElementVisible( PAD_BK_VISIBLE ) );
-    guide.SetIgnorePadsOnFront( ! m_Pcb->IsElementVisible( PAD_FR_VISIBLE ) );
-    guide.SetIgnoreModulesVals( ! m_Pcb->IsElementVisible( MOD_VALUES_VISIBLE ) );
-    guide.SetIgnoreModulesRefs( ! m_Pcb->IsElementVisible( MOD_REFERENCES_VISIBLE ) );
+    guide.SetIgnoreMTextsMarkedNoShow( ! m_Pcb->IsElementVisible( LAYER_MOD_TEXT_INVISIBLE ) );
+    guide.SetIgnoreMTextsOnBack( ! m_Pcb->IsElementVisible( LAYER_MOD_TEXT_BK ) );
+    guide.SetIgnoreMTextsOnFront( ! m_Pcb->IsElementVisible( LAYER_MOD_TEXT_FR ) );
+    guide.SetIgnoreModulesOnBack( ! m_Pcb->IsElementVisible( LAYER_MOD_BK ) );
+    guide.SetIgnoreModulesOnFront( ! m_Pcb->IsElementVisible( LAYER_MOD_FR ) );
+    guide.SetIgnorePadsOnBack( ! m_Pcb->IsElementVisible( LAYER_PAD_BK ) );
+    guide.SetIgnorePadsOnFront( ! m_Pcb->IsElementVisible( LAYER_PAD_FR ) );
+    guide.SetIgnoreModulesVals( ! m_Pcb->IsElementVisible( LAYER_MOD_VALUES ) );
+    guide.SetIgnoreModulesRefs( ! m_Pcb->IsElementVisible( LAYER_MOD_REFERENCES ) );
 
     return guide;
 }
@@ -1023,4 +1026,29 @@ bool PCB_BASE_FRAME::SaveCanvasTypeSetting( EDA_DRAW_PANEL_GAL::GAL_TYPE aCanvas
         return cfg->Write( CANVAS_TYPE_KEY, (long) aCanvasType );
 
     return false;
+}
+
+
+void PCB_BASE_FRAME::OnUpdateSwitchCanvas( wxUpdateUIEvent& aEvent )
+{
+    wxMenuBar* menuBar = GetMenuBar();
+    EDA_DRAW_PANEL_GAL* gal_canvas = GetGalCanvas();
+    EDA_DRAW_PANEL_GAL::GAL_TYPE canvasType = EDA_DRAW_PANEL_GAL::GAL_TYPE_NONE;
+
+    if( IsGalCanvasActive() && gal_canvas )
+        canvasType = gal_canvas->GetBackend();
+
+    struct { int menuId; int galType; } menuList[] =
+    {
+        { ID_MENU_CANVAS_LEGACY,    EDA_DRAW_PANEL_GAL::GAL_TYPE_NONE },
+        { ID_MENU_CANVAS_OPENGL,    EDA_DRAW_PANEL_GAL::GAL_TYPE_OPENGL },
+        { ID_MENU_CANVAS_CAIRO,     EDA_DRAW_PANEL_GAL::GAL_TYPE_CAIRO },
+    };
+
+    for( auto ii: menuList )
+    {
+        wxMenuItem* item = menuBar->FindItem( ii.menuId );
+        if( ii.galType == canvasType )
+            item->Check( true );
+    }
 }

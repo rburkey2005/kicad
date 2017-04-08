@@ -149,7 +149,7 @@ void DIALOG_PLOT::Init_Dialog()
     // Populate the check list box by all enabled layers names
     for( LSEQ seq = m_layerList;  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
         int checkIndex = m_layerCheckListBox->Append( m_board->GetLayerName( layer ) );
 
@@ -166,6 +166,9 @@ void DIALOG_PLOT::Init_Dialog()
     // Option for including Gerber netlist info (from Gerber X2 format) in the output
 #ifdef KICAD_USE_GBR_NETATTRIBUTES
     m_useGerberNetAttributes->SetValue( m_plotOpts.GetIncludeGerberNetlistInfo() );
+
+    // Grey out if m_useGerberX2Attributes is not checked
+    m_useGerberNetAttributes->Enable( m_useGerberX2Attributes->GetValue() );
 #else
     m_plotOpts.SetIncludeGerberNetlistInfo( false );
     m_useGerberNetAttributes->SetValue( false );
@@ -670,6 +673,23 @@ void DIALOG_PLOT::applyPlotSettings()
 }
 
 
+void DIALOG_PLOT::OnGerberX2Checked( wxCommandEvent& event )
+{
+    // m_useGerberNetAttributes is useless if m_useGerberX2Attributes
+    // is not checked. So disabled (greyed out) when Gerber X2 gets unchecked
+    // to make it clear to the user.
+    if( m_useGerberX2Attributes->GetValue() )
+    {
+        m_useGerberNetAttributes->Enable( true );
+    }
+    else
+    {
+        m_useGerberNetAttributes->Enable( false );
+        m_useGerberNetAttributes->SetValue( false );
+    }
+}
+
+
 void DIALOG_PLOT::Plot( wxCommandEvent& event )
 {
     applyPlotSettings();
@@ -748,7 +768,7 @@ void DIALOG_PLOT::Plot( wxCommandEvent& event )
 
     for( LSEQ seq = m_plotOpts.GetLayerSelection().UIOrder();  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
         // All copper layers that are disabled are actually selected
         // This is due to wonkyness in automatically selecting copper layers

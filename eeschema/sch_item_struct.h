@@ -116,7 +116,7 @@ public:
 class SCH_ITEM : public EDA_ITEM
 {
 protected:
-    LAYERSCH_ID    m_Layer;
+    SCH_LAYER_ID   m_Layer;
     EDA_ITEMS      m_connections;   ///< List of items connected to this item.
     wxPoint        m_storedPos;     ///< a temporary variable used in some move commands
                                     ///> to store a initial pos (of the item or mouse cursor)
@@ -161,14 +161,14 @@ public:
      * Function GetLayer
      * returns the layer this item is on.
      */
-    LAYERSCH_ID GetLayer() const { return m_Layer; }
+    SCH_LAYER_ID GetLayer() const { return m_Layer; }
 
     /**
      * Function SetLayer
      * sets the layer this item is on.
      * @param aLayer The layer number.
      */
-    void SetLayer( LAYERSCH_ID aLayer )  { m_Layer = aLayer; }
+    void SetLayer( SCH_LAYER_ID aLayer )  { m_Layer = aLayer; }
 
     /**
      * Function GetPenSize virtual pure
@@ -184,11 +184,11 @@ public:
      * @param aOffset drawing Offset (usually wxPoint(0,0),
      *  but can be different when moving an object)
      * @param aDrawMode GR_OR, GR_XOR, ...
-     * @param aColor UNSPECIFIED_COLOR to use the normal body item color,
+     * @param aColor COLOR4D::UNSPECIFIED to use the normal body item color,
      * or force this color if it is a valid color
      */
     virtual void Draw( EDA_DRAW_PANEL* aPanel, wxDC* aDC, const wxPoint&  aOffset,
-                       GR_DRAWMODE aDrawMode, EDA_COLOR_T aColor = UNSPECIFIED_COLOR ) = 0;
+                       GR_DRAWMODE aDrawMode, COLOR4D aColor = COLOR4D::UNSPECIFIED ) = 0;
 
     /**
      * Function Move

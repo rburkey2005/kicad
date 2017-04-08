@@ -116,6 +116,16 @@ public:
         return VECTOR2<CastedType>( (CastedType) x, (CastedType) y );
     }
 
+    /**
+     * (wxPoint)
+     * implements the cast to wxPoint.
+     * @return wxPoint - the vector cast to wxPoint.
+     */
+    explicit operator wxPoint() const
+    {
+        return wxPoint( x, y );
+    }
+
     /// Destructor
     // virtual ~VECTOR2();
 
@@ -576,8 +586,9 @@ std::ostream& operator<<( std::ostream& aStream, const VECTOR2<T>& aVector )
 
 
 /* Default specializations */
-typedef VECTOR2<double> VECTOR2D;
-typedef VECTOR2<int>    VECTOR2I;
+typedef VECTOR2<double>       VECTOR2D;
+typedef VECTOR2<int>          VECTOR2I;
+typedef VECTOR2<unsigned int> VECTOR2U;
 
 /* Compatibility typedefs */
 // FIXME should be removed to avoid multiple typedefs for the same type

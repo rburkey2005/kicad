@@ -197,7 +197,7 @@ void PCB_BASE_FRAME::Compile_Ratsnest( wxDC* aDC, bool aDisplayStatus )
     TestForActiveLinksInRatsnest( 0 );
 
     // Redraw the active ratsnest ( if enabled )
-    if( GetBoard()->IsElementVisible(RATSNEST_VISIBLE) && aDC )
+    if( GetBoard()->IsElementVisible( LAYER_RATSNEST ) && aDC )
         DrawGeneralRatsnest( aDC, 0 );
 
     if( aDisplayStatus )
@@ -284,7 +284,7 @@ void PCB_BASE_FRAME::Build_Board_Ratsnest()
     // Update the ratsnest display option (visible/invisible) flag
     for( unsigned ii = 0; ii < m_Pcb->GetRatsnestsCount(); ii++ )
     {
-        if( !GetBoard()->IsElementVisible( RATSNEST_VISIBLE ) )  // Clear VISIBLE flag
+        if( !GetBoard()->IsElementVisible( LAYER_RATSNEST ) )  // Clear VISIBLE flag
             m_Pcb->m_FullRatsnest[ii].m_Status &= ~CH_VISIBLE;
     }
 }
@@ -567,9 +567,13 @@ void PCB_BASE_FRAME::build_ratsnest_module( MODULE* aModule )
         m_Pcb->m_LocalRatsnest.clear();
 
         // collect active pads of the module:
-        for( pad_ref = aModule->Pads();  pad_ref;  pad_ref = pad_ref->Next() )
+        for( pad_ref = aModule->Pads(); pad_ref; pad_ref = pad_ref->Next() )
         {
             if( pad_ref->GetNetCode() == NETINFO_LIST::UNCONNECTED )
+                continue;
+
+            if( !( pad_ref->GetLayerSet() & LSET::AllCuMask() ).any() )
+                // pad not a copper layer (happens when building complex shapes)
                 continue;
 
             localPadList.push_back( pad_ref );
@@ -752,7 +756,7 @@ void PCB_BASE_FRAME::TraceModuleRatsNest( wxDC* DC )
     if( ( m_Pcb->m_Status_Pcb & RATSNEST_ITEM_LOCAL_OK ) == 0 )
         return;
 
-    EDA_COLOR_T tmpcolor = g_ColorsSettings.GetItemColor(RATSNEST_VISIBLE);
+    COLOR4D tmpcolor = g_ColorsSettings.GetItemColor( LAYER_RATSNEST );
 
     for( unsigned ii = 0; ii < m_Pcb->m_LocalRatsnest.size(); ii++ )
     {
@@ -760,12 +764,12 @@ void PCB_BASE_FRAME::TraceModuleRatsNest( wxDC* DC )
 
         if( rats->m_Status & LOCAL_RATSNEST_ITEM )
         {
-            g_ColorsSettings.SetItemColor(RATSNEST_VISIBLE, YELLOW);
+            g_ColorsSettings.SetItemColor( LAYER_RATSNEST, YELLOW );
             rats->Draw( m_canvas, DC, GR_XOR, g_Offset_Module );
         }
         else
         {
-            g_ColorsSettings.SetItemColor(RATSNEST_VISIBLE, tmpcolor);
+            g_ColorsSettings.SetItemColor( LAYER_RATSNEST, tmpcolor );
 
             wxPoint tmp = rats->m_PadStart->GetPosition();
 
@@ -776,7 +780,7 @@ void PCB_BASE_FRAME::TraceModuleRatsNest( wxDC* DC )
         }
     }
 
-    g_ColorsSettings.SetItemColor( RATSNEST_VISIBLE, tmpcolor );
+    g_ColorsSettings.SetItemColor( LAYER_RATSNEST, tmpcolor );
 }
 
 

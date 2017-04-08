@@ -25,22 +25,20 @@
 #ifndef PCB_EDITOR_CONTROL_H
 #define PCB_EDITOR_CONTROL_H
 
-#include <tool/tool_interactive.h>
+#include <tools/pcb_tool.h>
 
 namespace KIGFX {
     class ORIGIN_VIEWITEM;
 }
 
 class PCB_EDIT_FRAME;
-class ZONE_CONTEXT_MENU;
-class LOCK_CONTEXT_MENU;
 
 /**
  * Class PCB_EDITOR_CONTROL
  *
  * Handles actions specific to the board editor in pcbnew.
  */
-class PCB_EDITOR_CONTROL : public TOOL_INTERACTIVE
+class PCB_EDITOR_CONTROL : public PCB_TOOL
 {
 public:
     PCB_EDITOR_CONTROL();
@@ -64,6 +62,9 @@ public:
     int ZoneUnfill( const TOOL_EVENT& aEvent );
     int ZoneUnfillAll( const TOOL_EVENT& aEvent );
     int ZoneMerge( const TOOL_EVENT& aEvent );
+
+    ///> Duplicates a zone onto a layer (prompts for new layer)
+    int ZoneDuplicate( const TOOL_EVENT& aEvent );
 
     /**
      * Function PlaceTarget()
@@ -109,7 +110,7 @@ private:
     PCB_EDIT_FRAME* m_frame;
 
     ///> Place & drill origin marker.
-    KIGFX::ORIGIN_VIEWITEM* m_placeOrigin;
+    std::unique_ptr<KIGFX::ORIGIN_VIEWITEM> m_placeOrigin;
 
     ///> Flag to ignore a single crossprobe message from eeschema.
     bool m_probingSchToPcb;
@@ -121,9 +122,6 @@ private:
 
     // How does line width change after one -/+ key press.
     static const int WIDTH_STEP;
-
-    ZONE_CONTEXT_MENU* m_zoneMenu;
-    LOCK_CONTEXT_MENU* m_lockMenu;
 };
 
 #endif

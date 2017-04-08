@@ -2,9 +2,9 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2013 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 2013-2016 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2013-2017 Wayne Stambaugh <stambaughw@verizon.net>
  * Copyright (C) 2013 CERN (www.cern.ch)
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -35,6 +35,7 @@
 #include <schframe.h>
 #include <pgm_base.h>
 #include <kiface_i.h>
+#include <richio.h>
 
 #include <eeschema_id.h>
 #include <class_library.h>
@@ -110,39 +111,24 @@ bool SCH_EDIT_FRAME::SaveEEFile( SCH_SCREEN* aScreen, bool aSaveUnderNewName,
     wxLogTrace( traceAutoSave,
                 wxT( "Saving file <" ) + schematicFileName.GetFullPath() + wxT( ">" ) );
 
-#ifdef KICAD_USE_SCH_IO_MANAGER
-        SCH_PLUGIN::SCH_PLUGIN_RELEASER pi( SCH_IO_MGR::FindPlugin( SCH_IO_MGR::SCH_LEGACY ) );
+    SCH_PLUGIN::SCH_PLUGIN_RELEASER pi( SCH_IO_MGR::FindPlugin( SCH_IO_MGR::SCH_LEGACY ) );
 
-        try
-        {
-            pi->Save( schematicFileName.GetFullPath(), aScreen, &Kiway() );
-            success = true;
-        }
-        catch( const IO_ERROR& ioe )
-        {
-            msg.Printf( _( "Error saving schematic file '%s'.\n%s" ),
-                        GetChars( schematicFileName.GetFullPath() ), GetChars( ioe.What() ) );
-            DisplayError( this, msg );
-
-            msg.Printf( _( "Failed to save '%s'" ), GetChars( schematicFileName.GetFullPath() ) );
-            AppendMsgPanel( wxEmptyString, msg, CYAN );
-
-            success = false;
-        }
-#else
-    FILE* f = wxFopen( schematicFileName.GetFullPath(), wxT( "wt" ) );
-
-    if( !f )
+    try
     {
-        msg.Printf( _( "Failed to create file '%s'" ),
-                    GetChars( schematicFileName.GetFullPath() ) );
-        DisplayError( this, msg );
-        return false;
+        pi->Save( schematicFileName.GetFullPath(), aScreen, &Kiway() );
+        success = true;
     }
+    catch( const IO_ERROR& ioe )
+    {
+        msg.Printf( _( "Error saving schematic file '%s'.\n%s" ),
+                    GetChars( schematicFileName.GetFullPath() ), GetChars( ioe.What() ) );
+        DisplayError( this, msg );
 
-    success = aScreen->Save( f );
-    fclose( f );
-#endif
+        msg.Printf( _( "Failed to save '%s'" ), GetChars( schematicFileName.GetFullPath() ) );
+        AppendMsgPanel( wxEmptyString, msg, CYAN );
+
+        success = false;
+    }
 
     if( success )
     {
@@ -290,23 +276,34 @@ bool SCH_EDIT_FRAME::OpenProjectFiles( const std::vector<wxString>& aFileSet, in
     SetStatusText( wxEmptyString );
     ClearMsgPanel();
 
+    LoadProjectFile();
+
     // PROJECT::SetProjectFullName() is an impactful function.  It should only be
     // called under carefully considered circumstances.
 
     // The calling code should know not to ask me here to change projects unless
     // it knows what consequences that will have on other KIFACEs running and using
     // this same PROJECT.  It can be very harmful if that calling code is stupid.
-    Prj().SetProjectFullName( pro.GetFullPath() );
 
-    LoadProjectFile();
+    // Don't reload the symbol libraries if we are just launching Eeschema from KiCad again.
+    // They are already saved in the kiface project object.
+    if( pro.GetFullPath() != Prj().GetProjectFullName()
+      || !Prj().GetElem( PROJECT::ELEM_SCH_PART_LIBS ) )
+    {
+        Prj().SetProjectFullName( pro.GetFullPath() );
 
-    // load the libraries here, not in SCH_SCREEN::Draw() which is a context
-    // that will not tolerate DisplayError() dialog since we're already in an
-    // event handler in there.
-    // And when a schematic file is loaded, we need these libs to initialize
-    // some parameters (links to PART LIB, dangling ends ...)
-    Prj().SetElem( PROJECT::ELEM_SCH_PART_LIBS, NULL );
-    Prj().SchLibs();
+        // load the libraries here, not in SCH_SCREEN::Draw() which is a context
+        // that will not tolerate DisplayError() dialog since we're already in an
+        // event handler in there.
+        // And when a schematic file is loaded, we need these libs to initialize
+        // some parameters (links to PART LIB, dangling ends ...)
+        Prj().SetElem( PROJECT::ELEM_SCH_PART_LIBS, NULL );
+        Prj().SchLibs();
+    }
+
+    // Load the symbol library table, this will be used forever more.
+    Prj().SetElem( PROJECT::ELEM_SYMBOL_LIB_TABLE, NULL );
+    Prj().SchSymbolLibTable();
 
     if( is_new )
     {
@@ -315,7 +312,6 @@ bool SCH_EDIT_FRAME::OpenProjectFiles( const std::vector<wxString>& aFileSet, in
     }
     else
     {
-#ifdef KICAD_USE_SCH_IO_MANAGER
         delete g_RootSheet;   // Delete the current project.
         g_RootSheet = NULL;   // Force CreateScreens() to build new empty project on load failure.
 
@@ -329,6 +325,11 @@ bool SCH_EDIT_FRAME::OpenProjectFiles( const std::vector<wxString>& aFileSet, in
         }
         catch( const IO_ERROR& ioe )
         {
+            // Do not leave g_RootSheet == NULL because it is expected to be
+            // a valid sheet. Therefore create a dummy empty root sheet and screen.
+            CreateScreens();
+            Zoom_Automatique( false );
+
             wxString msg;
             msg.Printf( _( "Error loading schematic file '%s'.\n%s" ),
                         GetChars( fullFileName ), GetChars( ioe.What() ) );
@@ -337,23 +338,23 @@ bool SCH_EDIT_FRAME::OpenProjectFiles( const std::vector<wxString>& aFileSet, in
             msg.Printf( _( "Failed to load '%s'" ), GetChars( fullFileName ) );
             AppendMsgPanel( wxEmptyString, msg, CYAN );
 
-            // When g_RootSheet is NULL, create a dummy root sheet and screen.
-            CreateScreens();
-            Zoom_Automatique( false );
-
             return false;
         }
-#else
-        g_RootSheet->SetScreen( NULL );
 
-        DBG( printf( "%s: loading schematic %s\n", __func__, TO_UTF8( fullFileName ) );)
-
-        bool diag = g_RootSheet->Load( this );
-        (void) diag;
-#endif
         SetScreen( m_CurrentSheet->LastScreen() );
 
-        GetScreen()->ClrModify();
+        // It's possible the schematic parser fixed errors due to bugs so warn the user
+        // that the schematic has been fixed (modified).
+        SCH_SHEET_LIST sheetList( g_RootSheet );
+
+        if( sheetList.IsModified() )
+        {
+            DisplayInfoMessage( this,
+                                _( "An error was found when loading the schematic that has "
+                                   "been automatically fixed.  Please save the schematic to "
+                                   "repair the broken file or it may not be usable with other "
+                                   "versions of KiCad." ) );
+        }
 
         UpdateFileHistory( fullFileName );
 
@@ -365,12 +366,13 @@ bool SCH_EDIT_FRAME::OpenProjectFiles( const std::vector<wxString>& aFileSet, in
 
         if( !rescueNeverShow )
         {
-            if( RescueProject( false ) )
-            {
-                GetScreen()->CheckComponentsToPartsLinks();
-                GetScreen()->TestDanglingEnds();
-            }
+            RescueProject( false );
         }
+
+        SCH_SCREENS schematic;
+
+        schematic.UpdateSymbolLinks();      // Update all symbol library links for all sheets.
+        GetScreen()->TestDanglingEnds();    // Only perform the dangling end test on root sheet.
     }
 
     GetScreen()->SetGrid( ID_POPUP_GRID_LEVEL_1000 + m_LastGridSizeId );
@@ -420,8 +422,15 @@ bool SCH_EDIT_FRAME::AppendOneEEProject()
     {
         PART_LIBS*  libs = Prj().SchLibs();
 
-        if( PART_LIB* lib = libs->AddLibrary( cache_name ) )
-            lib->SetCache();
+        try
+        {
+            if( PART_LIB* lib = libs->AddLibrary( cache_name ) )
+                lib->SetCache();
+        }
+        catch( const IO_ERROR& ioe )
+        {
+            DisplayError( this, ioe.What() );
+        }
     }
 
     wxLogDebug( wxT( "Importing schematic " ) + fullFileName );

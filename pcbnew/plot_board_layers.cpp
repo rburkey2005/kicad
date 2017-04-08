@@ -8,7 +8,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -98,13 +98,13 @@ void PlotSilkScreen( BOARD *aBoard, PLOTTER* aPlotter, LSET aLayerMask,
                 if( !( masklayer & layersmask_plotpads ).any() )
                     continue;
 
-                EDA_COLOR_T color = ColorFromInt( 0 );
+                COLOR4D color = COLOR4D::BLACK;
 
                 if( layersmask_plotpads[B_SilkS] )
                    color = aBoard->GetLayerColor( B_SilkS );
 
                 if( layersmask_plotpads[F_SilkS] )
-                    color = ColorFromInt( color | aBoard->GetLayerColor( F_SilkS ) );
+                    color = ( color == COLOR4D::BLACK) ? aBoard->GetLayerColor( F_SilkS ) : color;
 
                 itemplotter.PlotPad( pad, color, SKETCH );
             }
@@ -150,7 +150,7 @@ void PlotSilkScreen( BOARD *aBoard, PLOTTER* aPlotter, LSET aLayerMask,
     }
 }
 
-void PlotOneBoardLayer( BOARD *aBoard, PLOTTER* aPlotter, LAYER_ID aLayer,
+void PlotOneBoardLayer( BOARD *aBoard, PLOTTER* aPlotter, PCB_LAYER_ID aLayer,
                         const PCB_PLOT_PARAMS& aPlotOpt )
 {
     PCB_PLOT_PARAMS plotOpt = aPlotOpt;
@@ -360,25 +360,66 @@ void PlotStandardLayer( BOARD *aBoard, PLOTTER* aPlotter,
                 margin = pad->GetSolderPasteMargin();
             }
 
+            // Now offset the pad size by margin + width_adj
+            // this is easy for most shapes, but not for a trapezoid
             wxSize padPlotsSize;
-            padPlotsSize.x = pad->GetSize().x + ( 2 * margin.x ) + width_adj;
-            padPlotsSize.y = pad->GetSize().y + ( 2 * margin.y ) + width_adj;
+            wxSize extraSize = margin * 2;
+            extraSize.x += width_adj;
+            extraSize.y += width_adj;
+            wxSize deltaSize = pad->GetDelta(); // has meaning only for trapezoidal pads
+
+            if( pad->GetShape() == PAD_SHAPE_TRAPEZOID )
+            {   // The easy way is to use BuildPadPolygon to calculate
+                // size and delta of the trapezoidal pad after offseting:
+                wxPoint coord[4];
+                pad->BuildPadPolygon( coord, extraSize/2, 0.0 );
+                // Calculate the size and delta from polygon corners coordinates:
+                // coord[0] is the lower left
+                // coord[1] is the upper left
+                // coord[2] is the upper right
+                // coord[3] is the lower right
+
+                // the size is the distance between middle of segments
+                // (left/right or top/bottom)
+                // size X is the dist between left and right middle points:
+                padPlotsSize.x = ( ( -coord[0].x + coord[3].x )     // the lower segment X length
+                                 + ( -coord[1].x + coord[2].x ) )   // the upper segment X length
+                                 / 2;           // the Y size is the half sum
+                // size Y is the dist between top and bottom middle points:
+                padPlotsSize.y = ( ( coord[0].y - coord[1].y )      // the left segment Y lenght
+                                 + ( coord[3].y - coord[2].y ) )    // the right segment Y lenght
+                                 / 2;           // the Y size is the half sum
+
+                // calculate the delta ( difference of lenght between 2 opposite edges )
+                // The delta.x is the delta along the X axis, therefore the delta of Y lenghts
+                wxSize delta;
+
+                if( coord[0].y != coord[3].y )
+                    delta.x = coord[0].y - coord[3].y;
+                else
+                    delta.y = coord[1].x - coord[0].x;
+
+                pad->SetDelta( delta );
+            }
+            else
+                padPlotsSize = pad->GetSize() + extraSize;
 
             // Don't draw a null size item :
             if( padPlotsSize.x <= 0 || padPlotsSize.y <= 0 )
                 continue;
 
-            EDA_COLOR_T color = BLACK;
+            COLOR4D color = COLOR4D::BLACK;
 
             if( pad->GetLayerSet()[B_Cu] )
-               color = aBoard->GetVisibleElementColor( PAD_BK_VISIBLE );
+               color = aBoard->GetVisibleElementColor( LAYER_PAD_BK );
 
             if( pad->GetLayerSet()[F_Cu] )
-                color = ColorFromInt( color | aBoard->GetVisibleElementColor( PAD_FR_VISIBLE ) );
+                color = color.LegacyMix( aBoard->GetVisibleElementColor( LAYER_PAD_FR ) );
 
             // Temporary set the pad size to the required plot size:
             wxSize tmppadsize = pad->GetSize();
             pad->SetSize( padPlotsSize );
+
             switch( pad->GetShape() )
             {
             case PAD_SHAPE_CIRCLE:
@@ -398,6 +439,7 @@ void PlotStandardLayer( BOARD *aBoard, PLOTTER* aPlotter,
             }
 
             pad->SetSize( tmppadsize );     // Restore the pad size
+            pad->SetDelta( deltaSize );
         }
 
         aPlotter->EndBlock( NULL );
@@ -465,7 +507,7 @@ void PlotStandardLayer( BOARD *aBoard, PLOTTER* aPlotter,
 
         gbr_metadata.SetNetName( Via->GetNetname() );
 
-        EDA_COLOR_T color = aBoard->GetVisibleElementColor(VIAS_VISIBLE + Via->GetViaType());
+        COLOR4D color = aBoard->GetVisibleElementColor( LAYER_VIAS + Via->GetViaType() );
         // Set plot color (change WHITE to LIGHTGRAY because
         // the white items are not seen on a white paper or screen
         aPlotter->SetColor( color != WHITE ? color : LIGHTGRAY);
@@ -528,7 +570,7 @@ void PlotStandardLayer( BOARD *aBoard, PLOTTER* aPlotter,
 
 
 // Seems like we want to plot from back to front?
-static const LAYER_ID plot_seq[] = {
+static const PCB_LAYER_ID plot_seq[] = {
 
     B_Adhes,        // 32
     F_Adhes,
@@ -599,7 +641,7 @@ void PlotLayerOutlines( BOARD* aBoard, PLOTTER* aPlotter,
 
     for( LSEQ seq = aLayerMask.Seq( plot_seq, DIM( plot_seq ) );  seq;  ++seq )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
         outlines.RemoveAllContours();
         aBoard->ConvertBrdLayerToPolygonalContours( layer, outlines );
@@ -691,7 +733,7 @@ void PlotSolderMaskLayer( BOARD *aBoard, PLOTTER* aPlotter,
                           LSET aLayerMask, const PCB_PLOT_PARAMS& aPlotOpt,
                           int aMinThickness )
 {
-    LAYER_ID    layer = aLayerMask[B_Mask] ? B_Mask : F_Mask;
+    PCB_LAYER_ID    layer = aLayerMask[B_Mask] ? B_Mask : F_Mask;
     int         inflate = aMinThickness/2;
 
     BRDITEMS_PLOTTER itemplotter( aPlotter, aBoard, aPlotOpt );
@@ -1031,14 +1073,15 @@ PLOTTER* StartPlotBoard( BOARD *aBoard, PCB_PLOT_PARAMS *aPlotOpts,
 
             if( useX2mode )
             {
-                AddGerberX2Attribute( plotter, aBoard, aLayer );
+                AddGerberX2Attribute( plotter, aBoard, aLayer, false );
                 GERBER_PLOTTER* gbrplotter = static_cast <GERBER_PLOTTER*> ( plotter );
                 gbrplotter->UseX2Attributes( true );
                 gbrplotter->UseX2NetAttributes( plotOpts.GetIncludeGerberNetlistInfo() );
             }
             else
-                plotter->AddLineToHeader( GetGerberFileFunctionAttribute(
-                                                aBoard, aLayer, true ) );
+            {
+                AddGerberX2Attribute( plotter, aBoard, aLayer, true );
+            }
         }
 
         plotter->StartPlot();

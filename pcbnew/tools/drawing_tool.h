@@ -1,7 +1,7 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2014 CERN
+ * Copyright (C) 2014-2017 CERN
  * @author Maciej Suminski <maciej.suminski@cern.ch>
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,8 @@
 #include <tools/pcb_tool.h>
 #include <boost/optional.hpp>
 
+#include <tool/tool_menu.h>
+
 namespace KIGFX
 {
     class VIEW;
@@ -36,6 +38,7 @@ namespace KIGFX
 class BOARD;
 class PCB_BASE_EDIT_FRAME;
 class DRAWSEGMENT;
+class POLYGON_GEOM_MANAGER;
 
 /**
  * Class DRAWING_TOOL
@@ -49,8 +52,40 @@ public:
     DRAWING_TOOL();
     ~DRAWING_TOOL();
 
+    /// @copydoc TOOL_INTERACTIVE::Init()
+    bool Init() override;
+
     /// @copydoc TOOL_INTERACTIVE::Reset()
     void Reset( RESET_REASON aReason ) override;
+
+    ///> Get the DRAWING_TOOL top-level context menu
+    inline TOOL_MENU& GetToolMenu()
+    {
+        return m_menu;
+    }
+
+    ///> The possible drawing modes of DRAWING_TOOL
+    enum class MODE
+    {
+        NONE,
+        LINE,
+        CIRCLE,
+        ARC,
+        TEXT,
+        ANCHOR,
+        DXF,
+        DIMENSION,
+        KEEPOUT,
+        ZONE,
+    };
+
+    /**
+     * Function GetDrawingMode
+     *
+     * Returns the current drawing mode of the DRAWING_TOOL, or
+     * MODE::NONE if not currently in any drawing mode
+     */
+    MODE GetDrawingMode() const;
 
     /**
      * Function DrawLine()
@@ -101,13 +136,31 @@ public:
     int DrawZone( const TOOL_EVENT& aEvent );
 
     /**
-     * Function DrawKeepout()
+     * Function DrawZoneKeepout()
      * Starts interactively drawing a keepout area. After invoking the function an area settings
      * dialog is displayed. After confirmation it allows the user to set points that are going to
      * be used as a boundary polygon of the area. Double click or clicking on the origin of the
      * boundary polyline finishes the drawing.
      */
-    int DrawKeepout( const TOOL_EVENT& aEvent );
+    int DrawZoneKeepout( const TOOL_EVENT& aEvent );
+
+    /**
+     * Function DrawZoneCutout()
+     * Starts interactively drawing a zone cutout area of an existing zone.
+     * The normal zone interactive tool is used, but the zone settings
+     * dialog is not shown (since the cutout affects only shape of an
+     * existing zone).
+     */
+    int DrawZoneCutout( const TOOL_EVENT& aEvent );
+
+    /**
+     * Function DrawSimilarZone()
+     * Starts interactively drawing a zone with same settings as
+     * an existing zone.
+     * The normal zone interactive tool is used, but the zone settings
+     * dialog is not shown at the start.
+     */
+    int DrawSimilarZone( const TOOL_EVENT& aEvent );
 
     /**
      * Function PlaceDXF()
@@ -125,6 +178,19 @@ public:
     void SetTransitions() override;
 
 private:
+
+    enum class ZONE_MODE
+    {
+        ADD,            ///< Add a new zone/keepout with fresh settings
+        CUTOUT,         ///< Make a cutout to an existing zone
+        SIMILAR         ///< Add a new zone with the same settings as an existing one
+    };
+
+    ///> Shows the context menu for the drawing tool
+    ///> This menu consists of normal UI functions (zoom, grid, etc)
+    ///> And any suitable global functions for the active drawing type.
+    void showContextMenu();
+
     ///> Starts drawing a selected shape (i.e. DRAWSEGMENT).
     ///> @param aShape is the type of created shape (@see STROKE_T).
     ///> @param aGraphic is an object that is going to be used by the tool for drawing. It has to
@@ -141,9 +207,39 @@ private:
     ///> the same point.
     bool drawArc( DRAWSEGMENT*& aGraphic );
 
-    ///> Draws a polygon, that is added as a zone or a keepout area.
-    ///> @param aKeepout decides if the drawn polygon is a zone or a keepout area.
-    int drawZone( bool aKeepout );
+    /**
+     * Draws a polygon, that is added as a zone or a keepout area.
+     *
+     * @param aKeepout dictates if the drawn polygon is a zone or a
+     * keepout area.
+     * @param aMode dictates the mode of the zone tool:
+     *  ADD      add a new zone/keepout with fresh settings
+     *  CUTOUT   add a cutout to an existing zone
+     *  SIMILAR  add a new zone with the same settings as an existing one
+     */
+    int drawZone( bool aKeepout, ZONE_MODE aMode );
+
+    /**
+     * Function getSourceZoneForAction()
+     *
+     * Gets a source zone item for an action that takes an existing zone
+     * into account (for example a cutout of an existing zone). The source
+     * zone is taken from the current selection
+     *
+     * @param aMode mode of the zone tool
+     * @param aZone updated pointer to a suitable source zone,
+     * or nullptr if none found, or the action doesn't need a source
+     * @return true if a suitable zone was found, or the action doesn't
+     * need a zone. False if the action needs a zone but none was found.
+     */
+    bool getSourceZoneForAction( ZONE_MODE aMode, ZONE_CONTAINER*& aZone );
+
+    /**
+     * Run the event loop for polygon creation, sending user input
+     * on to the given POLYGON_GEOM_MANAGER for processing into a
+     * complete polygon.
+     */
+    void runPolygonEventLoop( POLYGON_GEOM_MANAGER& aPolyGeomMgr );
 
     /**
      * Function make45DegLine()
@@ -157,16 +253,27 @@ private:
     ///> Returns the appropriate width for a segment depending on the settings.
     int getSegmentWidth( unsigned int aLayer ) const;
 
+    ///> Selects a non-copper layer for drawing
+    PCB_LAYER_ID getDrawingLayer() const;
+
     KIGFX::VIEW* m_view;
     KIGFX::VIEW_CONTROLS* m_controls;
     BOARD* m_board;
     PCB_BASE_EDIT_FRAME* m_frame;
+    MODE m_mode;
 
     /// Stores the current line width for multisegment drawing.
     unsigned int m_lineWidth;
 
+    /// Menu model displayed by the tool.
+    TOOL_MENU m_menu;
+
     // How does line width change after one -/+ key press.
-    static const int WIDTH_STEP;
+    static const unsigned int WIDTH_STEP;
+
+
+    // give internal access to drawing helper classes
+    friend class ZONE_CREATE_HELPER;
 };
 
 #endif /* __DRAWING_TOOL_H */

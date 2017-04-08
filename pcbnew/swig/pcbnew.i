@@ -41,9 +41,9 @@
 %include <convert_to_biu.h>
 
 %{
-#include <fpid.h>
+#include <lib_id.h>
 %}
-%include fpid.h
+%include lib_id.h
 
 
 // ignore a couple of items that generate warnings from swig built code
@@ -59,7 +59,7 @@ class BASE_SET {};
 
 %{
 #include <wx_python_helpers.h>
-#include <colors.h>
+#include <gal/color4d.h>
 
 #include <pcbnew_scripting_helpers.h>
 
@@ -103,7 +103,8 @@ HANDLE_EXCEPTIONS(PLUGIN::FootprintDelete)
 %include <pcb_plot_params.h>
 %include <plot_common.h>
 %include <exporters/gendrill_Excellon_writer.h>
-%include <colors.h>
+%include <gal/color4d.h>
+%include <id.h>
 
 %include <pcbnew_scripting_helpers.h>
 

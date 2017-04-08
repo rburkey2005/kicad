@@ -32,16 +32,16 @@ using namespace std::placeholders;
 #include <macros.h>
 #include <pcbnew_id.h>
 #include <view/view_controls.h>
-#include <pcbcommon.h>
 #include <pcb_painter.h>
 #include <dialogs/dialog_pns_settings.h>
 #include <dialogs/dialog_pns_diff_pair_dimensions.h>
 #include <dialogs/dialog_pns_length_tuning_settings.h>
 #include <dialogs/dialog_track_via_size.h>
 #include <base_units.h>
+#include <bitmaps.h>
 
 #include <tool/context_menu.h>
-#include <tools/common_actions.h>
+#include <tools/pcb_actions.h>
 #include <tools/grid_helper.h>
 
 #include <ratsnest_data.h>
@@ -55,6 +55,8 @@ using namespace std::placeholders;
 #include "pns_meander_placer.h" // fixme: move settings to separate header
 #include "pns_tune_status_popup.h"
 #include "pns_topology.h"
+
+#include <view/view.h>
 
 using namespace KIGFX;
 
@@ -234,7 +236,7 @@ void TOOL_BASE::updateStartItem( TOOL_EVENT& aEvent )
 }
 
 
-void TOOL_BASE::updateEndItem( TOOL_EVENT& aEvent )
+void TOOL_BASE::updateEndItem( const TOOL_EVENT& aEvent )
 {
     VECTOR2I mp = m_ctls->GetMousePosition();
     VECTOR2I p = getView()->ToWorld( mp );

@@ -109,7 +109,7 @@ void SPECCTRA_DB::buildLayerMaps( BOARD* aBoard )
 
     for( unsigned i = 0;  i < pcbLayer2kicad.size();  ++i )
     {
-        LAYER_ID id = ( i < layerCount-1 ) ? ToLAYER_ID( i ) : B_Cu;
+        PCB_LAYER_ID id = ( i < layerCount-1 ) ? ToLAYER_ID( i ) : B_Cu;
 
         pcbLayer2kicad[i] = id;
 
@@ -571,7 +571,7 @@ void SPECCTRA_DB::doUNIT( UNIT_RES* growth ) throw( IO_ERROR )
 }
 
 
-void SPECCTRA_DB::doLAYER_PAIR( LAYER_PAIR* growth ) throw( IO_ERROR )
+void SPECCTRA_DB::doSPECCTRA_LAYER_PAIR( SPECCTRA_LAYER_PAIR* growth ) throw( IO_ERROR )
 {
     NeedSYMBOL();
     growth->layer_id0 = CurText();
@@ -600,9 +600,9 @@ void SPECCTRA_DB::doLAYER_NOISE_WEIGHT( LAYER_NOISE_WEIGHT* growth )
         if( NextTok() != T_layer_pair )
             Expecting( T_layer_pair );
 
-        LAYER_PAIR* layer_pair = new LAYER_PAIR( growth );
+        SPECCTRA_LAYER_PAIR* layer_pair = new SPECCTRA_LAYER_PAIR( growth );
         growth->layer_pairs.push_back( layer_pair );
-        doLAYER_PAIR( layer_pair );
+        doSPECCTRA_LAYER_PAIR( layer_pair );
     }
 }
 
@@ -1009,9 +1009,9 @@ void SPECCTRA_DB::doBOUNDARY( BOUNDARY* growth ) throw( IO_ERROR, boost::bad_poi
 
 void SPECCTRA_DB::doPATH( PATH* growth ) throw( IO_ERROR )
 {
-    T       tok = NextTok();
+    T tok = NextTok();
 
-    if( !IsSymbol( tok ) )
+    if( !IsSymbol( tok ) && tok != T_NUMBER )   // a layer name can be like a number like +12
         Expecting( "layer_id" );
 
     growth->layer_id = CurText();
@@ -1084,7 +1084,7 @@ void SPECCTRA_DB::doCIRCLE( CIRCLE* growth ) throw( IO_ERROR )
 {
     T       tok;
 
-    NeedSYMBOL();
+    NeedSYMBOLorNUMBER();
     growth->layer_id = CurText();
 
     if( NextTok() != T_NUMBER )
@@ -2062,6 +2062,7 @@ L_done_that:
             if( growth->shape )
                 Unexpected( tok );
             break;
+
         default:
             // the example in the spec uses "circ" instead of "circle".  Bad!
             if( !strcmp( "circ", CurText() ) )
@@ -2549,7 +2550,7 @@ void SPECCTRA_DB::doCLASS( CLASS* growth ) throw( IO_ERROR, boost::bad_pointer )
             {
                 std::string     builder;
                 int             bracketNesting = 1; // we already saw the opening T_LEFT
-                T               tok = T_NONE;
+                tok = T_NONE;
 
                 while( bracketNesting!=0 && tok!=T_EOF )
                 {
@@ -2563,9 +2564,9 @@ void SPECCTRA_DB::doCLASS( CLASS* growth ) throw( IO_ERROR, boost::bad_pointer )
 
                     if( bracketNesting >= 1 )
                     {
-                        T     prevTok = (T) PrevTok();
+                        T     previousTok = (T) PrevTok();
 
-                        if( prevTok!=T_LEFT && prevTok!=T_circuit && tok!=T_RIGHT )
+                        if( previousTok!=T_LEFT && previousTok!=T_circuit && tok!=T_RIGHT )
                             builder += ' ';
 
                         if( tok==T_STRING )
@@ -2811,7 +2812,7 @@ void SPECCTRA_DB::doWIRE( WIRE* growth ) throw( IO_ERROR, boost::bad_pointer )
             break;
 
         case T_net:
-            NeedSYMBOL();
+            NeedSYMBOLorNUMBER();
             growth->net_id = CurText();
             NeedRIGHT();
             break;

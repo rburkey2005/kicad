@@ -33,6 +33,7 @@
 
 #include <config_params.h>
 #include <draw_frame.h>
+#include <layers_id_colors_and_visibility.h>
 
 #include <gerbview.h>
 #include <class_gbr_layout.h>
@@ -48,6 +49,7 @@ class GBR_LAYER_BOX_SELECTOR;
 class GERBER_DRAW_ITEM;
 class GERBER_FILE_IMAGE;
 class GERBER_FILE_IMAGE_LIST;
+class REPORTER;
 
 
 /**
@@ -152,8 +154,12 @@ public:
 protected:
     GERBER_LAYER_WIDGET*    m_LayersManager;
 
+    // Auxiliary file history used to store zip files history.
+    wxFileHistory           m_zipFileHistory;
+
     // Auxiliary file history used to store drill files history.
     wxFileHistory           m_drillFileHistory;
+
     /// The last filename chosen to be proposed to the user
     wxString                m_lastFileName;
 
@@ -280,19 +286,19 @@ public:
      * Function IsElementVisible
      * tests whether a given element category is visible. Keep this as an
      * inline function.
-     * @param aItemIdVisible is an item id from the enum GERBER_VISIBLE_ID
+     * @param aItemIdVisible is an item id from the enum GERBVIEW_LAYER_ID
      * @return bool - true if the element is visible.
      */
-    bool    IsElementVisible( GERBER_VISIBLE_ID aItemIdVisible ) const;
+    bool    IsElementVisible( GERBVIEW_LAYER_ID aItemIdVisible ) const;
 
     /**
      * Function SetElementVisibility
      * changes the visibility of an element category
-     * @param aItemIdVisible is an item id from the enum GERBER_VISIBLE_ID
+     * @param aItemIdVisible is an item id from the enum GERBVIEW_LAYER_ID
      * @param aNewState = The new visibility state of the element category
-     *  (see enum PCB_VISIBLE)
+     *  (see enum PCB)
      */
-    void    SetElementVisibility( GERBER_VISIBLE_ID aItemIdVisible, bool aNewState );
+    void    SetElementVisibility( GERBVIEW_LAYER_ID aItemIdVisible, bool aNewState );
 
     /**
      * Function SetGridVisibility(), virtual from EDA_DRAW_FRAME
@@ -329,21 +335,21 @@ public:
      * Function GetVisibleElementColor
      * returns the color of a gerber visible element.
      */
-    EDA_COLOR_T GetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible ) const;
+    COLOR4D GetVisibleElementColor( GERBVIEW_LAYER_ID aItemIdVisible ) const;
 
-    void    SetVisibleElementColor( GERBER_VISIBLE_ID aItemIdVisible, EDA_COLOR_T aColor );
+    void    SetVisibleElementColor( GERBVIEW_LAYER_ID aItemIdVisible, COLOR4D aColor );
 
     /**
      * Function GetLayerColor
      * gets a layer color for any valid layer.
      */
-    EDA_COLOR_T GetLayerColor( int aLayer ) const;
+    COLOR4D GetLayerColor( int aLayer ) const;
 
     /**
      * Function SetLayerColor
      * changes a layer color for any valid layer.
      */
-    void    SetLayerColor( int aLayer, EDA_COLOR_T aColor );
+    void    SetLayerColor( int aLayer, COLOR4D aColor );
 
     /**
      * Function GetNegativeItemsColor
@@ -351,7 +357,7 @@ public:
      * This is usually the background color, but can be an other color
      * in order to see negative objects
      */
-    EDA_COLOR_T GetNegativeItemsColor() const;
+    COLOR4D GetNegativeItemsColor() const;
 
     /**
      * Function DisplayLinesSolidMode
@@ -591,6 +597,22 @@ public:
     void                OnDrlFileHistory( wxCommandEvent& event );
 
     /**
+     * Function OnZipFileHistory
+     * deletes the current data and load a zip archive file selected from the
+     * history list. The archive is expected coantaining a set of gerber and drill file
+     */
+    void                OnZipFileHistory( wxCommandEvent& event );
+
+    /**
+     * Extracts gerber and drill files from the zip archive, and load them
+     * @param aFullFileName is the full filename of the zip archive
+     * @param aReporter a REPORTER to collect warning and error messages
+     * @return true if OK, false if a file cannot be readable
+     */
+    bool                unarchiveFiles( const wxString& aFullFileName,
+                                        REPORTER* aReporter = nullptr );
+
+    /**
      * function LoadGerberFiles
      * Load a photoplot (Gerber) file or many files.
      * @param aFileName - void string or file name with full path to open or empty string to
@@ -602,15 +624,25 @@ public:
     bool                Read_GERBER_File( const wxString&   GERBER_FullFileName );
 
     /**
-     * function Read_EXCELLON_File
+     * function LoadExcellonFiles
      * Load a drill (EXCELLON) file or many files.
      * @param aFileName - void string or file name with full path to open or empty string to
      *                    open a new file. In this case one one file is loaded
-     *                    if void string: user will be prompted for filename(s)
+     *                    if empty string: user will be prompted for filename(s)
      * @return true if file was opened successfully.
      */
     bool                LoadExcellonFiles( const wxString& aFileName );
     bool                Read_EXCELLON_File( const wxString& aFullFileName );
+
+    /**
+     * function LoadZipArchiveFileLoadZipArchiveFile
+     * Load a zipped archive file.
+     * @param aFileName - void string or file name with full path to open or empty string to
+     *                    open a new file.
+     *                    if empty string: user will be prompted for filename(s)
+     * @return true if file was opened successfully.
+     */
+    bool                LoadZipArchiveFile( const wxString& aFileName );
 
     bool                GeneralControl( wxDC* aDC, const wxPoint& aPosition, EDA_KEY aHotKey = 0 ) override;
 

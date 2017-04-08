@@ -73,7 +73,7 @@ private:
      * creates the colored rectangle bitmaps used in the layer selection widget.
      * @param aColor is the color to fill the rectangle with.
      */
-    wxBitmap makeLayerBitmap( EDA_COLOR_T aColor );
+    wxBitmap makeLayerBitmap( COLOR4D aColor );
 };
 
 
@@ -121,15 +121,15 @@ void DIALOG_NON_COPPER_ZONES_EDITOR::Init()
 
     switch( m_settings.m_Zone_HatchingStyle )
     {
-    case CPolyLine::NO_HATCH:
+    case ZONE_CONTAINER::NO_HATCH:
         m_OutlineAppearanceCtrl->SetSelection( 0 );
         break;
 
-    case CPolyLine::DIAGONAL_EDGE:
+    case ZONE_CONTAINER::DIAGONAL_EDGE:
         m_OutlineAppearanceCtrl->SetSelection( 1 );
         break;
 
-    case CPolyLine::DIAGONAL_FULL:
+    case ZONE_CONTAINER::DIAGONAL_FULL:
         m_OutlineAppearanceCtrl->SetSelection( 2 );
         break;
     }
@@ -143,7 +143,7 @@ void DIALOG_NON_COPPER_ZONES_EDITOR::Init()
     wxImageList* imageList = new wxImageList( LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
     m_LayerSelectionCtrl->AssignImageList( imageList, wxIMAGE_LIST_SMALL );
 
-    LAYER_ID lyrSelect = m_parent->GetActiveLayer();
+    PCB_LAYER_ID lyrSelect = m_parent->GetActiveLayer();
 
     if( m_zone )
         lyrSelect = m_zone->GetLayer();
@@ -153,9 +153,9 @@ void DIALOG_NON_COPPER_ZONES_EDITOR::Init()
 
     for( LSEQ seq = LSET::AllNonCuMask().Seq(); seq; ++seq, ++imgIdx )
     {
-        LAYER_ID layer = *seq;
+        PCB_LAYER_ID layer = *seq;
 
-        EDA_COLOR_T layerColor = board->GetLayerColor( layer );
+        COLOR4D layerColor = board->GetLayerColor( layer );
         imageList->Add( makeLayerBitmap( layerColor ) );
 
         msg = board->GetLayerName( layer );
@@ -202,15 +202,15 @@ void DIALOG_NON_COPPER_ZONES_EDITOR::OnOkClick( wxCommandEvent& event )
     switch( m_OutlineAppearanceCtrl->GetSelection() )
     {
     case 0:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::NO_HATCH;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::NO_HATCH;
         break;
 
     case 1:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_EDGE;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_EDGE;
         break;
 
     case 2:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_FULL;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_FULL;
         break;
     }
 
@@ -251,14 +251,14 @@ void DIALOG_NON_COPPER_ZONES_EDITOR::OnCancelClick( wxCommandEvent& event )
 }
 
 
-wxBitmap DIALOG_NON_COPPER_ZONES_EDITOR::makeLayerBitmap( EDA_COLOR_T aColor )
+wxBitmap DIALOG_NON_COPPER_ZONES_EDITOR::makeLayerBitmap( COLOR4D aColor )
 {
     wxBitmap    bitmap( LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
     wxBrush     brush;
     wxMemoryDC  iconDC;
 
     iconDC.SelectObject( bitmap );
-    brush.SetColour( MakeColour( aColor ) );
+    brush.SetColour( aColor.ToColour() );
     brush.SetStyle( wxBRUSHSTYLE_SOLID );
 
     iconDC.SetBrush( brush );

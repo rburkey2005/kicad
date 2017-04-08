@@ -5,9 +5,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2016 Jean-Pierre Charras, jp.charras at wanadoo.fr
+ * Copyright (C) 2017 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2009-2016 Dick Hollenbeck, dick@softplc.com
- * Copyright (C) 2004-2016 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 2004-2017 KiCad Developers, see change_log.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,6 +28,7 @@
  */
 
 #include <fctsys.h>
+#include <kiface_i.h>
 #include <confirm.h>
 #include <wildcards_and_files_ext.h>
 #include <pgm_base.h>
@@ -36,15 +37,22 @@
 #include <base_units.h>
 #include <class_board_design_settings.h>
 #include <class_draw_panel_gal.h>
+#include <view/view.h>
 
 /* class DIALOG_DRC_CONTROL: a dialog to set DRC parameters (clearance, min cooper size)
  * and run DRC tests
  */
 
+// Keywords for read and write config
+#define TestMissingCourtyardKey     wxT( "TestMissingCourtyard" )
+#define TestFootprintCourtyardKey   wxT( "TestFootprintCourtyard" )
+
+
 DIALOG_DRC_CONTROL::DIALOG_DRC_CONTROL( DRC* aTester, PCB_EDIT_FRAME* aEditorFrame,
                                         wxWindow* aParent ) :
     DIALOG_DRC_CONTROL_BASE( aParent )
 {
+    m_config = Kiface().KifaceSettings();
     m_tester = aTester;
     m_brdEditor = aEditorFrame;
     m_currentBoard = m_brdEditor->GetBoard();
@@ -52,12 +60,15 @@ DIALOG_DRC_CONTROL::DIALOG_DRC_CONTROL( DRC* aTester, PCB_EDIT_FRAME* aEditorFra
 
     InitValues();
 
-    FixOSXCancelButtonIssue();
-
     // Now all widgets have the size fixed, call FinishDialogSettings
     FinishDialogSettings();
 }
 
+DIALOG_DRC_CONTROL::~DIALOG_DRC_CONTROL()
+{
+    m_config->Write( TestMissingCourtyardKey, m_cbCourtyardMissing->GetValue() );
+    m_config->Write( TestFootprintCourtyardKey,  m_cbCourtyardOverlap->GetValue() );
+}
 
 void DIALOG_DRC_CONTROL::OnActivateDlg( wxActivateEvent& event )
 {
@@ -111,6 +122,14 @@ void DIALOG_DRC_CONTROL::InitValues()
     m_DeleteCurrentMarkerButton->Enable( false );
 
     DisplayDRCValues();
+
+    // read options
+    bool value;
+    m_config->Read( TestMissingCourtyardKey, &value, false );
+    m_cbCourtyardMissing->SetValue( value );
+    m_config->Read( TestFootprintCourtyardKey, &value, false );
+    m_cbCourtyardOverlap->SetValue( value );
+
 
     // Set the initial "enabled" status of the browse button and the text
     // field for report name
@@ -173,6 +192,8 @@ void DIALOG_DRC_CONTROL::OnStartdrcClick( wxCommandEvent& event )
                            true,        // unconnected pads DRC test enabled
                            true,        // DRC test for zones enabled
                            true,        // DRC test for keepout areas enabled
+                           m_cbCourtyardOverlap->GetValue(),
+                           m_cbCourtyardMissing->GetValue(),
                            reportName, make_report );
 
     DelDRCMarkers();
@@ -244,6 +265,8 @@ void DIALOG_DRC_CONTROL::OnListUnconnectedClick( wxCommandEvent& event )
                            true,        // unconnected pads DRC test enabled
                            true,        // DRC test for zones enabled
                            true,        // DRC test for keepout areas enabled
+                           m_cbCourtyardOverlap->GetValue(),
+                           m_cbCourtyardMissing->GetValue(),
                            reportName, make_report );
 
     DelDRCMarkers();
@@ -672,4 +695,3 @@ void DIALOG_DRC_CONTROL::UpdateDisplayedCounts()
     m_MarkerCount->SetLabelText( wxString::Format( "%d", marker_count ) );
     m_UnconnectedCount->SetLabelText( wxString::Format( "%d", unconnected_count ) );
 }
-

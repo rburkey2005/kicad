@@ -85,8 +85,8 @@ extern bool     g_Alternate_Track_Posture;
 extern bool     g_Segments_45_Only;
 
 // Layer pair for auto routing and switch layers by hotkey
-extern LAYER_ID g_Route_Layer_TOP;
-extern LAYER_ID g_Route_Layer_BOTTOM;
+extern PCB_LAYER_ID g_Route_Layer_TOP;
+extern PCB_LAYER_ID g_Route_Layer_BOTTOM;
 
 extern bool     g_TwoSegmentTrackBuild;
 
@@ -102,11 +102,21 @@ extern DLIST<TRACK> g_CurrentTrackList;
 #define g_FirstTrackSegment   g_CurrentTrackList.GetFirst()   ///< first segment created
 
 
-enum MagneticPadOptionValues {
-    no_effect,
-    capture_cursor_in_track_tool,
-    capture_always
+enum MAGNETICPAD_OPTION_VALUES
+{
+    NO_EFFECT,
+    CAPTURE_CURSOR_IN_TRACK_TOOL,
+    CAPTURE_ALWAYS
 };
+
+/**
+ * Helper function PythonPluginsReloadBase
+ * Reload Python plugins if they are newer than
+ * the already loaded, and load new plugins if any
+ * It calls the LoadPlugins(bundlepath) Python method
+ * see kicadplugins.i
+ */
+void PythonPluginsReloadBase();
 
 
 #endif // PCBNEW_H

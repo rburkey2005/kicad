@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -37,7 +37,7 @@
 #include <layers_id_colors_and_visibility.h>       // ALL_LAYERS definition.
 #include <class_board_item.h>
 #include <board_item_container.h>
-#include <fpid.h>
+#include <lib_id.h>
 
 #include <class_text_mod.h>
 #include <PolyLine.h>
@@ -53,6 +53,10 @@ class D_PAD;
 class BOARD;
 class MSG_PANEL_ITEM;
 
+namespace KIGFX
+{
+    class VIEW;
+};
 
 enum INCLUDE_NPTH_T
 {
@@ -144,8 +148,8 @@ public:
     double GetOrientationDegrees() const   { return m_Orient/10.0; }
     double GetOrientationRadians() const   { return m_Orient*M_PI/1800; }
 
-    const FPID& GetFPID() const { return m_fpid; }
-    void SetFPID( const FPID& aFPID ) { m_fpid = aFPID; }
+    const LIB_ID& GetFPID() const { return m_fpid; }
+    void SetFPID( const LIB_ID& aFPID ) { m_fpid = aFPID; }
 
     const wxString& GetDescription() const { return m_Doc; }
     void SetDescription( const wxString& aDoc ) { m_Doc = aDoc; }
@@ -316,7 +320,7 @@ public:
      *  there is no copper left on the board (for instance when creating Gerber Files or 3D shapes)
      *  default = false
      */
-    void TransformPadsShapesWithClearanceToPolygon( LAYER_ID aLayer,
+    void TransformPadsShapesWithClearanceToPolygon( PCB_LAYER_ID aLayer,
                             SHAPE_POLY_SET& aCornerBuffer,
                             int             aInflateValue,
                             int             aCircleToSegmentsCount,
@@ -344,7 +348,7 @@ public:
      *       if 0, use the aCircleToSegmentsCount value
      */
     void TransformGraphicShapesWithClearanceToPolygonSet(
-                            LAYER_ID aLayer,
+                            PCB_LAYER_ID aLayer,
                             SHAPE_POLY_SET& aCornerBuffer,
                             int             aInflateValue,
                             int             aCircleToSegmentsCount,
@@ -363,7 +367,7 @@ public:
      * @param aCircleToSegmentsCountForTexts
      */
     void TransformGraphicTextWithClearanceToPolygonSet(
-                            LAYER_ID aLayer,
+                            PCB_LAYER_ID aLayer,
                             SHAPE_POLY_SET& aCornerBuffer,
                             int             aInflateValue,
                             int             aCircleToSegmentsCount,
@@ -545,7 +549,7 @@ public:
 
     wxString GetSelectMenuText() const override;
 
-    BITMAP_DEF GetMenuImage() const override { return  module_xpm; }
+    BITMAP_DEF GetMenuImage() const override;
 
     EDA_ITEM* Clone() const override;
 
@@ -557,14 +561,12 @@ public:
      */
     void RunOnChildren( std::function<void (BOARD_ITEM*)> aFunction );
 
-    /// @copydoc VIEW_ITEM::ViewUpdate()
-    void ViewUpdate( int aUpdateFlags = KIGFX::VIEW_ITEM::ALL ) override;
 
     /// @copydoc VIEW_ITEM::ViewGetLayers()
     virtual void ViewGetLayers( int aLayers[], int& aCount ) const override;
 
     /// @copydoc VIEW_ITEM::ViewGetLOD()
-    virtual unsigned int ViewGetLOD( int aLayer ) const override;
+    virtual unsigned int ViewGetLOD( int aLayer, KIGFX::VIEW* aView ) const override;
 
     /// @copydoc VIEW_ITEM::ViewBBox()
     virtual const BOX2I ViewBBox() const override;
@@ -638,6 +640,21 @@ public:
     /// Return the initial comments block or NULL if none, without transfer of ownership.
     const wxArrayString* GetInitialComments() const { return m_initial_comments; }
 
+    /** Used in DRC to test the courtyard area (a complex polygon)
+     * @return the courtyard polygon
+     */
+    SHAPE_POLY_SET& GetPolyCourtyardFront() { return m_poly_courtyard_front; }
+    SHAPE_POLY_SET& GetPolyCourtyardBack() { return m_poly_courtyard_back; }
+
+    /** Used in DRC to build the courtyard area (a complex polygon)
+     * from graphic items put on the courtyard
+     * @return true if OK, or no courtyard defined,
+     * false only if the polygon cannot be built due to amalformed courtyard shape
+     * The polygon cannot be built if segments/arcs on courtyard layers
+     * cannot be grouped in a polygon.
+     */
+    bool BuildPolyCourtyard();
+
 #if defined(DEBUG)
     virtual void Show( int nestLevel, std::ostream& os ) const override { ShowDummy( os ); }
 #endif
@@ -650,7 +667,7 @@ private:
     wxPoint           m_Pos;            ///< Position of module on the board in internal units.
     TEXTE_MODULE*     m_Reference;      ///< Component reference designator value (U34, R18..)
     TEXTE_MODULE*     m_Value;          ///< Component value (74LS00, 22K..)
-    FPID              m_fpid;           ///< The #FPID of the MODULE.
+    LIB_ID            m_fpid;           ///< The #LIB_ID of the MODULE.
     int               m_Attributs;      ///< Flag bits ( see Mod_Attribut )
     int               m_ModuleStatus;   ///< For autoplace: flags (LOCKED, AUTOPLACED)
     EDA_RECT          m_BoundaryBox;    ///< Bounding box : coordinates on board, real orientation.
@@ -680,6 +697,11 @@ private:
 
     wxArrayString*    m_initial_comments;   ///< leading s-expression comments in the module,
                                             ///< lazily allocated only if needed for speed
+
+    /// Used in DRC to test the courtyard area (a polygon which can be not basic
+    /// Note also a footprint can have courtyards on bot board sides
+    SHAPE_POLY_SET m_poly_courtyard_front;
+    SHAPE_POLY_SET m_poly_courtyard_back;
 };
 
 #endif     // MODULE_H_

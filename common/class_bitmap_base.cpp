@@ -107,9 +107,8 @@ bool BITMAP_BASE::SaveData( FILE* aFile ) const
         // Write binary data in hexadecimal form (ASCII)
         wxStreamBuffer* buffer = stream.GetOutputStreamBuffer();
         char*           begin  = (char*) buffer->GetBufferStart();
-        int             ii;
 
-        for( ii = 0; begin <= buffer->GetBufferEnd(); begin++, ii++ )
+        for( int ii = 0; begin < buffer->GetBufferEnd(); begin++, ii++ )
         {
             if( ii >= 32 )
             {
@@ -140,7 +139,7 @@ void BITMAP_BASE::SaveData( wxArrayString& aPngStrings ) const
         char*           begin  = (char*) buffer->GetBufferStart();
         wxString        line;
 
-        for( int ii = 0; begin <= buffer->GetBufferEnd(); begin++, ii++ )
+        for( int ii = 0; begin < buffer->GetBufferEnd(); begin++, ii++ )
         {
             if( ii >= 32 )
             {
@@ -288,7 +287,7 @@ void BITMAP_BASE::Rotate( bool aRotateCCW )
 
 void BITMAP_BASE::PlotImage( PLOTTER*       aPlotter,
                              const wxPoint& aPos,
-                             EDA_COLOR_T    aDefaultColor,
+                             COLOR4D        aDefaultColor,
                              int            aDefaultPensize )
 {
     if( m_image == NULL )

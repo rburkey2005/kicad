@@ -32,16 +32,53 @@ using namespace KIGFX;
 
 void VIEW_CONTROLS::ShowCursor( bool aEnabled )
 {
+    m_settings.m_showCursor = aEnabled;
     m_view->GetGAL()->SetCursorEnabled( aEnabled );
+}
+
+
+bool VIEW_CONTROLS::IsCursorShown() const
+{
+    // this only says if the VIEW_CONTROLS say the cursor should be
+    // shown: m_view->GetGAL()->IsCursorEnabled() will say if the GAL is
+    // actually going to do show the cursor or not
+    return m_settings.m_showCursor;
 }
 
 
 void VIEW_CONTROLS::Reset()
 {
-    SetSnapping( false );
-    SetAutoPan( false );
-    ForceCursorPosition( false );
-    ShowCursor( false );
-    CaptureCursor( false );
-    SetGrabMouse( false );
+    // Get the default settings from the default constructor
+    VC_SETTINGS dummy;
+    ApplySettings( dummy );
+}
+
+
+void VC_SETTINGS::Reset()
+{
+    m_showCursor = false;
+    m_forceCursorPosition = false;
+    m_cursorCaptured = false;
+    m_snappingEnabled = false;
+    m_grabMouse = false;
+    m_autoPanEnabled = false;
+    m_autoPanMargin = 0.1;
+    m_autoPanSpeed = 0.15;
+    m_warpCursor = false;
+    m_enableMousewheelPan = false;
+}
+
+
+void VIEW_CONTROLS::ApplySettings( const VC_SETTINGS& aSettings )
+{
+    ShowCursor( aSettings.m_showCursor );
+    CaptureCursor( aSettings.m_cursorCaptured );
+    SetSnapping( aSettings.m_snappingEnabled );
+    SetGrabMouse( aSettings.m_grabMouse );
+    SetAutoPan( aSettings.m_autoPanEnabled );
+    SetAutoPanMargin( aSettings.m_autoPanMargin );
+    SetAutoPanSpeed( aSettings.m_autoPanSpeed );
+    // storing 'force cursor position' causes more harm than advantage
+    // let the tools control this setting
+    //ForceCursorPosition( aSettings.m_forceCursorPosition, aSettings.m_forcedPosition );
 }

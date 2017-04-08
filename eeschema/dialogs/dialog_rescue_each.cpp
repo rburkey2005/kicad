@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2015-2016 Chris Pavlina <pavlina.chris@gmail.com>
- * Copyright (C) 2015-2016 Kicad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2015-2017 Kicad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -135,6 +135,12 @@ void DIALOG_RESCUE_EACH::PopulateConflictList()
 
         m_ListOfConflicts->AppendItem( data );
     }
+
+    if( !m_Rescuer->m_all_candidates.empty() )
+    {
+        // Select the first choice
+        m_ListOfConflicts->SelectRow( 0 );
+    }
 }
 
 
@@ -150,9 +156,10 @@ void DIALOG_RESCUE_EACH::PopulateInstanceList()
     RESCUE_CANDIDATE& selected_part = m_Rescuer->m_all_candidates[row];
 
     wxVector<wxVariant> data;
+    int count = 0;
     for( SCH_COMPONENT* each_component : *m_Rescuer->GetComponents() )
     {
-        if( each_component->GetPartName() != selected_part.GetRequestedName() )
+        if( each_component->GetLibId().Format() != TO_UTF8( selected_part.GetRequestedName() ) )
             continue;
 
         SCH_FIELD* valueField = each_component->GetField( 1 );
@@ -161,8 +168,11 @@ void DIALOG_RESCUE_EACH::PopulateInstanceList()
         data.push_back( each_component->GetRef( & m_Parent->GetCurrentSheet() ) );
         data.push_back( valueField ? valueField->GetText() : wxT( "" ) );
         m_ListOfInstances->AppendItem( data );
-
+        count++;
     }
+
+    m_titleInstances->SetLabelText( wxString::Format(
+                    _( "Instances of this symbol (%d items):" ), count ) );
 }
 
 
@@ -207,9 +217,9 @@ void DIALOG_RESCUE_EACH::OnDialogResize( wxSizeEvent& aSizeEvent )
 void DIALOG_RESCUE_EACH::renderPreview( LIB_PART* aComponent, int aUnit, wxPanel* aPanel )
 {
     wxPaintDC dc( aPanel );
-    EDA_COLOR_T bgcolor = m_Parent->GetDrawBgColor();
+    wxColour bgColor = m_Parent->GetDrawBgColor().ToColour();
 
-    dc.SetBackground( bgcolor == BLACK ? *wxBLACK_BRUSH : *wxWHITE_BRUSH );
+    dc.SetBackground( wxBrush( bgColor ) );
     dc.Clear();
 
     if( aComponent == NULL )
@@ -238,8 +248,7 @@ void DIALOG_RESCUE_EACH::renderPreview( LIB_PART* aComponent, int aUnit, wxPanel
     if( !width || !height )
         return;
 
-    aComponent->Draw( NULL, &dc, offset, aUnit, /* deMorganConvert */ 1, GR_COPY,
-                      UNSPECIFIED_COLOR, DefaultTransform, true, true, false );
+    aComponent->Draw( NULL, &dc, offset, aUnit, 1, PART_DRAW_OPTIONS::Default() );
 }
 
 

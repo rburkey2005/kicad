@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2007-2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
  * Copyright (C) 2004 Jean-Pierre Charras, jp.charras@wanadoo.fr
- * Copyright (C) 1992-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -237,7 +237,7 @@ static inline char* ReadLine( LINE_READER* rdr, const char* caller )
 
 
 
-using namespace std;    // unique_ptr
+using std::unique_ptr;
 
 
 static EDA_TEXT_HJUSTIFY_T horizJustify( const char* horizontal )
@@ -282,7 +282,7 @@ inline bool is_leg_copperlayer_valid( int aCu_Count, LAYER_NUM aLegacyLayerNum )
 }
 
 
-LAYER_ID LEGACY_PLUGIN::leg_layer2new( int cu_count, LAYER_NUM aLayerNum )
+PCB_LAYER_ID LEGACY_PLUGIN::leg_layer2new( int cu_count, LAYER_NUM aLayerNum )
 {
     int         newid;
     unsigned    old = aLayerNum;
@@ -325,7 +325,7 @@ LAYER_ID LEGACY_PLUGIN::leg_layer2new( int cu_count, LAYER_NUM aLayerNum )
         }
     }
 
-    return LAYER_ID( newid );
+    return PCB_LAYER_ID( newid );
 }
 
 
@@ -434,7 +434,7 @@ void LEGACY_PLUGIN::loadAllSections( bool doAppend )
         {
             unique_ptr<MODULE>    module( new MODULE( m_board ) );
 
-            FPID        fpid;
+            LIB_ID      fpid;
             std::string fpName = StrPurge( line + SZ( "$MODULE" ) );
 
             // The footprint names in legacy libraries can contain the '/' and ':'
@@ -442,7 +442,7 @@ void LEGACY_PLUGIN::loadAllSections( bool doAppend )
             ReplaceIllegalFileNameChars( &fpName );
 
             if( !fpName.empty() )
-                fpid = FPID( fpName );
+                fpid = LIB_ID( fpName );
 
             module->SetFPID( fpid );
 
@@ -660,14 +660,10 @@ void LEGACY_PLUGIN::loadGENERAL()
 
         else if( TESTLINE( "Di" ) )
         {
-            BIU x1 = biuParse( line + SZ( "Di" ), &data );
-            BIU y1 = biuParse( data, &data );
-            BIU x2 = biuParse( data, &data );
-            BIU y2 = biuParse( data );
-
-            EDA_RECT bbbox( wxPoint( x1, y1 ), wxSize( x2-x1, y2-y1 ) );
-
-            m_board->SetBoundingBox( bbbox );
+            biuParse( line + SZ( "Di" ), &data );
+            biuParse( data, &data );
+            biuParse( data, &data );
+            biuParse( data );
         }
 
         /* This is no more usefull, so this info is no more parsed
@@ -872,8 +868,8 @@ void LEGACY_PLUGIN::loadSETUP()
         {
             // eg: "Layer[n]  <a_Layer_name_with_no_spaces> <LAYER_T>"
 
-            LAYER_NUM   layer_num = layerParse( line + SZ( "Layer[" ), &data );
-            LAYER_ID    layer_id  = leg_layer2new( m_cu_count, layer_num );
+            LAYER_NUM    layer_num = layerParse( line + SZ( "Layer[" ), &data );
+            PCB_LAYER_ID layer_id  = leg_layer2new( m_cu_count, layer_num );
 
             /*
             switch( layer_num )
@@ -887,7 +883,7 @@ void LEGACY_PLUGIN::loadSETUP()
                 break;
 
             default:
-                layer_id = LAYER_ID( layer_num );
+                layer_id = PCB_LAYER_ID( layer_num );
             }
             */
 
@@ -1218,8 +1214,8 @@ void LEGACY_PLUGIN::loadMODULE( MODULE* aModule )
             BIU pos_y  = biuParse( data, &data );
             int orient = intParse( data, &data );
 
-            LAYER_NUM layer_num = layerParse( data, &data );
-            LAYER_ID  layer_id  = leg_layer2new( m_cu_count,  layer_num );
+            LAYER_NUM    layer_num = layerParse( data, &data );
+            PCB_LAYER_ID layer_id  = leg_layer2new( m_cu_count,  layer_num );
 
             long edittime  = hexParse( data, &data );
             time_t timestamp = hexParse( data, &data );
@@ -1377,7 +1373,7 @@ void LEGACY_PLUGIN::loadMODULE( MODULE* aModule )
 
     wxString msg = wxString::Format(
         wxT( "Missing '$EndMODULE' for MODULE '%s'" ),
-        GetChars( aModule->GetFPID().GetFootprintName() ) );
+        FROM_UTF8( aModule->GetFPID().GetLibItemName() ) );
 
     THROW_IO_ERROR( msg );
 }
@@ -1432,7 +1428,7 @@ void LEGACY_PLUGIN::loadPAD( MODULE* aModule )
                                 padchar,
                                 padchar,
                                 m_reader->LineNumber(),
-                                GetChars( aModule->GetFPID().GetFootprintName() )
+                                FROM_UTF8( aModule->GetFPID().GetLibItemName() )
                     );
                 THROW_IO_ERROR( m_error );
             }
@@ -1638,7 +1634,7 @@ void LEGACY_PLUGIN::loadMODULE_EDGE( MODULE* aModule )
                         (unsigned char) line[1],
                         (unsigned char) line[1],
                         m_reader->LineNumber(),
-                        GetChars( aModule->GetFPID().GetFootprintName() )
+                        FROM_UTF8( aModule->GetFPID().GetLibItemName() )
                         );
         THROW_IO_ERROR( m_error );
     }
@@ -1801,14 +1797,6 @@ void LEGACY_PLUGIN::loadMODULE_TEXT( TEXTE_MODULE* aText )
     // as far forward as needed until the first double quote.
     txt_end = data + ReadDelimitedText( &m_field, data );
 
-#if 1 && defined(DEBUG)
-    if( m_field == wxT( "ARM_C8" ) )
-    {
-        int breakhere = 1;
-        (void) breakhere;
-    }
-#endif
-
     aText->SetText( m_field );
 
     // after switching to strtok, there's no easy coming back because of the
@@ -1832,11 +1820,11 @@ void LEGACY_PLUGIN::loadMODULE_TEXT( TEXTE_MODULE* aText )
     aText->SetType( static_cast<TEXTE_MODULE::TEXT_TYPE>( type ) );
 
     aText->SetPos0( wxPoint( pos0_x, pos0_y ) );
-    aText->SetSize( wxSize( size0_x, size0_y ) );
+    aText->SetTextSize( wxSize( size0_x, size0_y ) );
 
     orient -= ( static_cast<MODULE*>( aText->GetParent() ) )->GetOrientation();
 
-    aText->SetOrientation( orient );
+    aText->SetTextAngle( orient );
 
     // @todo put in accessors?
     // Set a reasonable width:
@@ -2174,7 +2162,7 @@ void LEGACY_PLUGIN::loadPCB_TEXT()
                 sz.y = 5;
             */
 
-            pcbtxt->SetSize( size );
+            pcbtxt->SetTextSize( size );
 
             /* @todo move into an accessor
             // Set a reasonable width:
@@ -2185,9 +2173,9 @@ void LEGACY_PLUGIN::loadPCB_TEXT()
             */
 
             pcbtxt->SetThickness( thickn );
-            pcbtxt->SetOrientation( angle );
+            pcbtxt->SetTextAngle( angle );
 
-            pcbtxt->SetTextPosition( wxPoint( pos_x, pos_y ) );
+            pcbtxt->SetTextPos( wxPoint( pos_x, pos_y ) );
         }
 
         else if( TESTLINE( "De" ) )
@@ -2351,8 +2339,8 @@ void LEGACY_PLUGIN::loadTrackList( int aStructType )
                 via->SetLayerPair( F_Cu, B_Cu );
             else
             {
-                LAYER_ID  back  = leg_layer2new( m_cu_count, (layer_num >> 4) & 0xf );
-                LAYER_ID  front = leg_layer2new( m_cu_count, layer_num & 0xf );
+                PCB_LAYER_ID back  = leg_layer2new( m_cu_count, (layer_num >> 4) & 0xf );
+                PCB_LAYER_ID front = leg_layer2new( m_cu_count, layer_num & 0xf );
 
                 if( is_leg_copperlayer_valid( m_cu_count, back ) &&
                     is_leg_copperlayer_valid( m_cu_count, front ) )
@@ -2486,7 +2474,7 @@ void LEGACY_PLUGIN::loadZONE_CONTAINER()
 {
     unique_ptr<ZONE_CONTAINER> zc( new ZONE_CONTAINER( m_board ) );
 
-    CPolyLine::HATCH_STYLE outline_hatch = CPolyLine::NO_HATCH;
+    ZONE_CONTAINER::HATCH_STYLE outline_hatch = ZONE_CONTAINER::NO_HATCH;
     bool    sawCorner = false;
     char    buf[1024];
     char*   line;
@@ -2501,17 +2489,13 @@ void LEGACY_PLUGIN::loadZONE_CONTAINER()
             // e.g. "ZCorner 25650 49500 0"
             BIU x    = biuParse( line + SZ( "ZCorner" ), &data );
             BIU y    = biuParse( data, &data );
-            int flag = intParse( data );
 
             if( !sawCorner )
-                zc->Outline()->Start( zc->GetLayer(), x, y, outline_hatch );
+                zc->NewHole();
             else
                 zc->AppendCorner( wxPoint( x, y ) );
 
             sawCorner = true;
-
-            if( flag )
-                zc->Outline()->CloseLastContour();
         }
 
         else if( TESTLINE( "ZInfo" ) )      // general info found
@@ -2552,9 +2536,9 @@ void LEGACY_PLUGIN::loadZONE_CONTAINER()
 
             switch( *hopt )   // upper case required
             {
-            case 'N':   outline_hatch = CPolyLine::NO_HATCH;        break;
-            case 'E':   outline_hatch = CPolyLine::DIAGONAL_EDGE;   break;
-            case 'F':   outline_hatch = CPolyLine::DIAGONAL_FULL;   break;
+            case 'N':   outline_hatch = ZONE_CONTAINER::NO_HATCH;        break;
+            case 'E':   outline_hatch = ZONE_CONTAINER::DIAGONAL_EDGE;   break;
+            case 'F':   outline_hatch = ZONE_CONTAINER::DIAGONAL_FULL;   break;
 
             default:
                 m_error.Printf( wxT( "Bad ZAux for CZONE_CONTAINER '%s'" ), zc->GetNetname().GetData() );
@@ -2736,9 +2720,8 @@ void LEGACY_PLUGIN::loadZONE_CONTAINER()
 
                 // Hatch here, after outlines corners are read
                 // Set hatch here, after outlines corners are read
-                zc->Outline()->SetHatch( outline_hatch,
-                                         Mils2iu( CPolyLine::GetDefaultHatchPitchMils() ),
-                                         true );
+                zc->SetHatch( outline_hatch, Mils2iu( ZONE_CONTAINER::GetDefaultHatchPitchMils() ),
+                              true );
 
                 m_board->Add( zc.release() );
             }
@@ -2823,7 +2806,7 @@ void LEGACY_PLUGIN::loadDIMENSION()
 
             dim->Text().SetMirrored( mirror && *mirror == '0' );
             dim->Text().SetThickness( thickn );
-            dim->Text().SetOrientation( orient );
+            dim->Text().SetTextAngle( orient );
         }
 
         else if( TESTLINE( "Sb" ) )
@@ -3318,20 +3301,11 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
             std::string         footprintName = StrPurge( line + SZ( "$MODULE" ) );
 
             // The footprint names in legacy libraries can contain the '/' and ':'
-            // characters which will cause the FPID parser to choke.
+            // characters which will cause the LIB_ID parser to choke.
             ReplaceIllegalFileNameChars( &footprintName );
 
             // set the footprint name first thing, so exceptions can use name.
-            module->SetFPID( FPID( footprintName ) );
-
-#if 0 && defined( DEBUG )
-            printf( "%s\n", footprintName.c_str() );
-            if( footprintName == "QFN40" )
-            {
-                int breakhere = 1;
-                (void) breakhere;
-            }
-#endif
+            module->SetFPID( LIB_ID( footprintName ) );
 
             m_owner->loadMODULE( module.get() );
 
@@ -3339,7 +3313,7 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
 
             // Not sure why this is asserting on debug builds.  The debugger shows the
             // strings are the same.  If it's not really needed maybe it can be removed.
-//            wxASSERT( footprintName == m->GetFPID().GetFootprintName() );
+//            wxASSERT( footprintName == m->GetFPID().GetLibItemName() );
 
             /*
 
@@ -3386,7 +3360,7 @@ void LP_CACHE::LoadModules( LINE_READER* aReader )
                     {
                         nameOK = true;
 
-                        m->SetFPID( FPID( newName ) );
+                        m->SetFPID( LIB_ID( newName ) );
                         std::pair<MODULE_ITER, bool> r = m_modules.insert( newName, m );
 
                         wxASSERT_MSG( r.second, wxT( "error doing cache insert using guaranteed unique name" ) );

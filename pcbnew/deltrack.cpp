@@ -51,7 +51,7 @@ TRACK* PCB_EDIT_FRAME::Delete_Segment( wxDC* DC, TRACK* aTrack )
     {
         if( g_CurrentTrackList.GetCount() > 0 )
         {
-            LAYER_ID previous_layer = GetActiveLayer();
+            PCB_LAYER_ID previous_layer = GetActiveLayer();
 
             DBG( g_CurrentTrackList.VerifyListIntegrity(); )
 
@@ -124,7 +124,6 @@ TRACK* PCB_EDIT_FRAME::Delete_Segment( wxDC* DC, TRACK* aTrack )
     GetBoard()->Remove( aTrack );
 
     GetBoard()->GetRatsnest()->Remove( aTrack );
-    aTrack->ViewRelease();
 
     // redraw the area where the track was
     m_canvas->RefreshDrawingRect( aTrack->GetBoundingBox() );
@@ -175,7 +174,6 @@ void PCB_EDIT_FRAME::Delete_net( wxDC* DC, TRACK* aTrack )
             break;
 
         GetBoard()->GetRatsnest()->Remove( segm );
-        segm->ViewRelease();
         GetBoard()->m_Track.Remove( segm );
 
         // redraw the area where the track was
@@ -222,7 +220,6 @@ void PCB_EDIT_FRAME::Remove_One_Track( wxDC* DC, TRACK* pt_segm )
                      << std::endl; )
 
         GetBoard()->GetRatsnest()->Remove( tracksegment );
-        tracksegment->ViewRelease();
         GetBoard()->m_Track.Remove( tracksegment );
 
         // redraw the area where the track was

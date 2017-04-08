@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2012-2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2008-2016 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2004-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -37,8 +37,9 @@
 #include <dialog_helpers.h>
 #include <msgpanel.h>
 #include <fp_lib_table.h>
-#include <fpid.h>
+#include <lib_id.h>
 #include <confirm.h>
+#include <bitmaps.h>
 
 #include <class_board.h>
 #include <class_module.h>
@@ -54,10 +55,12 @@
 
 #include <tool/tool_manager.h>
 #include <tool/tool_dispatcher.h>
+#include <tool/common_tools.h>
 #include "tools/pcbnew_control.h"
-#include "tools/common_actions.h"
+#include "tools/pcb_actions.h"
 
 #include <functional>
+#include <memory>
 using namespace std::placeholders;
 
 
@@ -187,6 +190,7 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
 
     // Create GAL canvas
     PCB_DRAW_PANEL_GAL* drawPanel = new PCB_DRAW_PANEL_GAL( this, -1, wxPoint( 0, 0 ), m_FrameSize,
+                                                            parentFrame->GetGalDisplayOptions(),
                                                             parentFrame->GetGalCanvas()->GetBackend() );
     SetGalCanvas( drawPanel );
 
@@ -194,19 +198,21 @@ FOOTPRINT_VIEWER_FRAME::FOOTPRINT_VIEWER_FRAME( KIWAY* aKiway, wxWindow* aParent
     m_toolManager = new TOOL_MANAGER;
     m_toolManager->SetEnvironment( GetBoard(), drawPanel->GetView(),
                                    drawPanel->GetViewControls(), this );
-    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager );
+    m_actions = new PCB_ACTIONS();
+    m_toolDispatcher = new TOOL_DISPATCHER( m_toolManager, m_actions );
     drawPanel->SetEventDispatcher( m_toolDispatcher );
 
     m_toolManager->RegisterTool( new PCBNEW_CONTROL );
-    m_toolManager->ResetTools( TOOL_BASE::RUN );
+    m_toolManager->RegisterTool( new COMMON_TOOLS );
+    m_toolManager->InitTools();
 
     // If a footprint was previously loaded, reload it
     if( getCurNickname().size() && getCurFootprintName().size() )
     {
-        FPID id;
+        LIB_ID id;
 
-        id.SetLibNickname( getCurNickname() );
-        id.SetFootprintName( getCurFootprintName() );
+        id.SetLibNickname( TO_UTF8( getCurNickname() ) );
+        id.SetLibItemName( TO_UTF8( getCurFootprintName() ) );
         GetBoard()->Add( loadFootprint( id ) );
     }
 
@@ -382,21 +388,21 @@ void FOOTPRINT_VIEWER_FRAME::ReCreateFootprintList()
         return;
     }
 
-    FOOTPRINT_LIST fp_info_list;
+    auto fp_info_list( FOOTPRINT_LIST::GetInstance( Kiway() ) );
 
     wxString nickname = getCurNickname();
 
-    fp_info_list.ReadFootprintFiles( Prj().PcbFootprintLibs(), !nickname ? NULL : &nickname );
+    fp_info_list->ReadFootprintFiles( Prj().PcbFootprintLibs(), !nickname ? NULL : &nickname );
 
-    if( fp_info_list.GetErrorCount() )
+    if( fp_info_list->GetErrorCount() )
     {
-        fp_info_list.DisplayErrors( this );
+        fp_info_list->DisplayErrors( this );
         return;
     }
 
-    for( const FOOTPRINT_INFO& footprint : fp_info_list.GetList() )
+    for( auto& footprint : fp_info_list->GetList() )
     {
-        m_footprintList->Append( footprint.GetFootprintName() );
+        m_footprintList->Append( footprint->GetFootprintName() );
     }
 
     int index = m_footprintList->FindString( getCurFootprintName() );
@@ -449,9 +455,9 @@ void FOOTPRINT_VIEWER_FRAME::ClickOnFootprintList( wxCommandEvent& event )
         // Delete the current footprint
         GetBoard()->m_Modules.DeleteAll();
 
-        FPID id;
-        id.SetLibNickname( getCurNickname() );
-        id.SetFootprintName( getCurFootprintName() );
+        LIB_ID id;
+        id.SetLibNickname( TO_UTF8( getCurNickname() ) );
+        id.SetLibItemName( TO_UTF8( getCurFootprintName() ) );
 
         try
         {
@@ -511,12 +517,12 @@ void FOOTPRINT_VIEWER_FRAME::ExportSelectedFootprint( wxCommandEvent& event )
     {
         wxString fp_name = m_footprintList->GetString( ii );
 
-        FPID fpid;
+        LIB_ID fpid;
 
-        fpid.SetLibNickname( getCurNickname() );
-        fpid.SetFootprintName( fp_name );
+        fpid.SetLibNickname( TO_UTF8( getCurNickname() ) );
+        fpid.SetLibItemName( TO_UTF8( fp_name ) );
 
-        DismissModal( true, fpid.Format() );
+        DismissModal( true, FROM_UTF8( fpid.Format() ) );
     }
     else
     {
@@ -677,9 +683,9 @@ void FOOTPRINT_VIEWER_FRAME::Update3D_Frame( bool aForceReloadFootprint )
 }
 
 
-EDA_COLOR_T FOOTPRINT_VIEWER_FRAME::GetGridColor() const
+COLOR4D FOOTPRINT_VIEWER_FRAME::GetGridColor() const
 {
-    return g_ColorsSettings.GetItemColor( GRID_VISIBLE );
+    return g_ColorsSettings.GetItemColor( LAYER_GRID );
 }
 
 
@@ -727,7 +733,7 @@ void FOOTPRINT_VIEWER_FRAME::UpdateTitle()
     if( getCurNickname().size() )
     {
         FP_LIB_TABLE* libtable = Prj().PcbFootprintLibs();
-        const FP_LIB_TABLE_ROW* row = libtable->FindRow( getCurNickname() );
+        const LIB_TABLE_ROW* row = libtable->FindRow( getCurNickname() );
 
         if( row )
             title << L" \u2014 " << row->GetFullURI( true );
@@ -773,9 +779,9 @@ void FOOTPRINT_VIEWER_FRAME::SelectCurrentFootprint( wxCommandEvent& event )
             delete oldmodule;
         }
 
-        setCurFootprintName( module->GetFPID().GetFootprintName() );
+        setCurFootprintName( FROM_UTF8( module->GetFPID().GetLibItemName() ) );
 
-        wxString nickname = module->GetFPID().GetLibNickname();
+        wxString nickname = FROM_UTF8( module->GetFPID().GetLibNickname() );
 
         if( !getCurNickname() && nickname.size() )
         {
@@ -870,7 +876,7 @@ void FOOTPRINT_VIEWER_FRAME::updateView()
     {
         static_cast<PCB_DRAW_PANEL_GAL*>( GetGalCanvas() )->DisplayBoard( GetBoard() );
         m_toolManager->ResetTools( TOOL_BASE::MODEL_RELOAD );
-        m_toolManager->RunAction( COMMON_ACTIONS::zoomFitScreen, true );
+        m_toolManager->RunAction( ACTIONS::zoomFitScreen, true );
     }
 }
 

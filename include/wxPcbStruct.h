@@ -65,6 +65,7 @@ class REPORTER;
 struct PARSE_ERROR;
 class IO_ERROR;
 class FP_LIB_TABLE;
+struct AUTOROUTER_CONTEXT;
 
 namespace PCB { struct IFACE; }     // KIFACE_I is in pcbnew.cpp
 
@@ -117,9 +118,39 @@ protected:
      */
     void enableGALSpecificMenus();
 
-
-    // Has meaning only if DKICAD_SCRIPTING_WXPYTHON option is on
     /**
+     * Helper function to coerce all colors to legacy-compatible when
+     * switching from GAL to legacy canvas
+     */
+    void forceColorsToLegacy();
+
+#if defined(KICAD_SCRIPTING) && defined(KICAD_SCRIPTING_ACTION_MENU)
+    /**
+     * Function RebuildActionPluginMenus
+     * Fill action menu with all registred action plugins
+     */
+    void RebuildActionPluginMenus();
+
+    /**
+     * Function OnActionPlugin
+     * Launched by the menu when an action is called
+     * @param aEvent sent by wx
+     */
+    void OnActionPlugin( wxCommandEvent& aEvent);
+
+    /**
+     * Function OnActionPluginRefresh
+     * Refresh plugin list (reload Python plugins)
+     * @param aEvent sent by wx
+     */
+    void OnActionPluginRefresh( wxCommandEvent& aEvent)
+    {
+       PythonPluginsReload();
+    }
+#endif
+
+    /** Has meaning only if KICAD_SCRIPTING_WXPYTHON option is
+     * not defined
      * @return the frame name identifier for the python console frame
      */
     static const wxChar * pythonConsoleNameId()
@@ -228,6 +259,13 @@ public:
     void OnQuit( wxCommandEvent& event );
 
     /**
+     * Reload the Python plugins if they are newer than
+     * the already loaded, and load new plugins if any
+     * Do nothing if KICAD_SCRIPTING is not defined
+     */
+    void PythonPluginsReload();
+
+    /**
      * Function GetAutoSaveFilePrefix
      *
      * @return the string to prepend to a file name for automatic save.
@@ -325,16 +363,13 @@ public:
      * Function GetGridColor() , virtual
      * @return the color of the grid
      */
-    virtual EDA_COLOR_T GetGridColor() const override;
+    virtual COLOR4D GetGridColor() const override;
 
     /**
      * Function SetGridColor() , virtual
      * @param aColor = the new color of the grid
      */
-    virtual void SetGridColor( EDA_COLOR_T aColor ) override;
-
-    ///> @copydoc EDA_DRAW_FRAME::SetCursorShape()
-    virtual void SetCursorShape( int aCursorShape ) override;
+    virtual void SetGridColor( COLOR4D aColor ) override;
 
     // Configurations:
     void Process_Config( wxCommandEvent& event );
@@ -568,7 +603,7 @@ public:
      * will change the currently active layer to \a aLayer and also
      * update the PCB_LAYER_WIDGET.
      */
-    virtual void SetActiveLayer( LAYER_ID aLayer ) override;
+    virtual void SetActiveLayer( PCB_LAYER_ID aLayer ) override;
 
     /**
      * Function IsElementVisible
@@ -576,18 +611,18 @@ public:
      * inline function.
      * @param aElement is from the enum by the same name
      * @return bool - true if the element is visible.
-     * @see enum PCB_VISIBLE
+     * @see enum GAL_LAYER_ID
      */
-    bool IsElementVisible( int aElement ) const;
+    bool IsElementVisible( GAL_LAYER_ID aElement ) const;
 
     /**
      * Function SetElementVisibility
      * changes the visibility of an element category
      * @param aElement is from the enum by the same name
-     * @param aNewState = The new visibility state of the element category
-     * @see enum PCB_VISIBLE
+     * @param GAL_LAYER_ID = The new visibility state of the element category
+     * @see enum PCB_LAYER_ID
      */
-    void SetElementVisibility( int aElement, bool aNewState );
+    void SetElementVisibility( GAL_LAYER_ID aElement, bool aNewState );
 
     /**
      * Function SetVisibleAlls
@@ -637,6 +672,7 @@ public:
     bool OnRightClick( const wxPoint& aMousePos, wxMenu* aPopMenu ) override;
 
     void OnSelectOptionToolbar( wxCommandEvent& event );
+    void OnFlipPcbView( wxCommandEvent& event );
     void ToolOnRightClick( wxCommandEvent& event ) override;
 
     /* Block operations: */
@@ -1261,7 +1297,7 @@ public:
     bool MergeCollinearTracks( TRACK* track, wxDC* DC, int end );
 
     void Start_DragTrackSegmentAndKeepSlope( TRACK* track, wxDC* DC );
-    void SwitchLayer( wxDC* DC, LAYER_ID layer ) override;
+    void SwitchLayer( wxDC* DC, PCB_LAYER_ID layer ) override;
 
     /**
      * Function Add45DegreeSegment
@@ -1461,7 +1497,7 @@ public:
     DRAWSEGMENT* Begin_DrawSegment( DRAWSEGMENT* Segment, STROKE_T shape, wxDC* DC );
     void End_Edge( DRAWSEGMENT* Segment, wxDC* DC );
     void Delete_Segment_Edge( DRAWSEGMENT* Segment, wxDC* DC );
-    void Delete_Drawings_All_Layer( LAYER_ID aLayer );
+    void Delete_Drawings_All_Layer( PCB_LAYER_ID aLayer );
 
     // Dimension handling:
     void ShowDimensionPropertyDialog( DIMENSION* aDimension, wxDC* aDC );
@@ -1581,7 +1617,7 @@ public:
     void AutoPlaceModule( MODULE* Module, int place_mode, wxDC* DC );
 
     // Autorouting:
-    int Solve( wxDC* DC, int two_sides );
+    int Solve( AUTOROUTER_CONTEXT& aCtx, int aLayersCount );
     void Reset_Noroutable( wxDC* DC );
     void Autoroute( wxDC* DC, int mode );
     void ReadAutoroutedTracks( wxDC* DC );

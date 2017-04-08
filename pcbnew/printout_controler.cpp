@@ -86,7 +86,7 @@ bool BOARD_PRINTOUT_CONTROLLER::OnPrintPage( int aPage )
     LSET lset = m_PrintParams.m_PrintMaskLayer;
     int pageCount = lset.count();
     wxString layer;
-    LAYER_ID extractLayer;
+    PCB_LAYER_ID extractLayer;
 
     // compute layer mask from page number if we want one page per layer
     if( m_PrintParams.m_OptionPrintPage == 0 )  // One page per layer
@@ -282,7 +282,7 @@ void BOARD_PRINTOUT_CONTROLLER::DrawPage( const wxString& aLayerName, int aPageN
     panel->SetClipBox( EDA_RECT( wxPoint( 0, 0 ), wxSize( MAX_VALUE, MAX_VALUE ) ) );
 
     screen->m_IsPrinting = true;
-    EDA_COLOR_T bg_color = m_Parent->GetDrawBgColor();
+    COLOR4D bg_color = m_Parent->GetDrawBgColor();
 
     // Print frame reference, if requested, before
     if( m_PrintParams.m_Print_Black_and_White )

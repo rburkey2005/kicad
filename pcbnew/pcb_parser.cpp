@@ -2,7 +2,7 @@
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
  * Copyright (C) 2012 CERN
- * Copyright (C) 2012-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2012-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -63,12 +63,12 @@ void PCB_PARSER::init()
     // Add untranslated default (i.e. english) layernames.
     // Some may be overridden later if parsing a board rather than a footprint.
     // The english name will survive if parsing only a footprint.
-    for( LAYER_NUM layer = 0;  layer < LAYER_ID_COUNT;  ++layer )
+    for( LAYER_NUM layer = 0;  layer < PCB_LAYER_ID_COUNT;  ++layer )
     {
-        std::string untranslated = TO_UTF8( wxString( LSET::Name( LAYER_ID( layer ) ) ) );
+        std::string untranslated = TO_UTF8( wxString( LSET::Name( PCB_LAYER_ID( layer ) ) ) );
 
-        m_layerIndices[ untranslated ] = LAYER_ID( layer );
-        m_layerMasks[ untranslated ]   = LSET( LAYER_ID( layer ) );
+        m_layerIndices[ untranslated ] = PCB_LAYER_ID( layer );
+        m_layerMasks[ untranslated ]   = LSET( PCB_LAYER_ID( layer ) );
     }
 
     m_layerMasks[ "*.Cu" ]      = LSET::AllCuMask();
@@ -90,7 +90,7 @@ void PCB_PARSER::init()
     {
         std::string key = StrPrintf( "Inner%d.Cu", i );
 
-        m_layerMasks[ key ] = LSET( LAYER_ID( In15_Cu - i ) );
+        m_layerMasks[ key ] = LSET( PCB_LAYER_ID( In15_Cu - i ) );
     }
 
 #if defined(DEBUG) && 0
@@ -244,10 +244,8 @@ void PCB_PARSER::parseEDA_TEXT( EDA_TEXT* aText ) throw( PARSE_ERROR, IO_ERROR )
 
     for( token = NextTok();  token != T_RIGHT;  token = NextTok() )
     {
-        if( token != T_LEFT )
-            Expecting( T_LEFT );
-
-        token = NextTok();
+        if( token == T_LEFT )
+            token = NextTok();
 
         switch( token )
         {
@@ -260,14 +258,14 @@ void PCB_PARSER::parseEDA_TEXT( EDA_TEXT* aText ) throw( PARSE_ERROR, IO_ERROR )
                 switch( token )
                 {
                 case T_size:
-                {
-                    wxSize sz;
-                    sz.SetHeight( parseBoardUnits( "text height" ) );
-                    sz.SetWidth( parseBoardUnits( "text width" ) );
-                    aText->SetSize( sz );
-                    NeedRIGHT();
+                    {
+                        wxSize sz;
+                        sz.SetHeight( parseBoardUnits( "text height" ) );
+                        sz.SetWidth( parseBoardUnits( "text width" ) );
+                        aText->SetTextSize( sz );
+                        NeedRIGHT();
+                    }
                     break;
-                }
 
                 case T_thickness:
                     aText->SetThickness( parseBoardUnits( "text thickness" ) );
@@ -286,7 +284,6 @@ void PCB_PARSER::parseEDA_TEXT( EDA_TEXT* aText ) throw( PARSE_ERROR, IO_ERROR )
                     Expecting( "size, bold, or italic" );
                 }
             }
-
             break;
 
         case T_justify:
@@ -786,7 +783,7 @@ void PCB_PARSER::parseLayer( LAYER* aLayer ) throw( IO_ERROR, PARSE_ERROR )
     // this layer_num is not used, we DO depend on LAYER_T however.
     LAYER_NUM layer_num = parseInt( "layer index" );
 
-    NeedSYMBOL();
+    NeedSYMBOLorNUMBER();
     name = CurText();
 
     NeedSYMBOL();
@@ -859,12 +856,12 @@ void PCB_PARSER::parseLayers() throw( IO_ERROR, PARSE_ERROR )
             if( it->m_visible )
                 visibleLayers.set( it->m_number );
 
-            m_board->SetLayerDescr( LAYER_ID( it->m_number ), *it );
+            m_board->SetLayerDescr( PCB_LAYER_ID( it->m_number ), *it );
 
             UTF8 name = it->m_name;
 
-            m_layerIndices[ name ] = LAYER_ID( it->m_number );
-            m_layerMasks[   name ] = LSET( LAYER_ID( it->m_number ) );
+            m_layerIndices[ name ] = PCB_LAYER_ID( it->m_number );
+            m_layerMasks[   name ] = LSET( PCB_LAYER_ID( it->m_number ) );
         }
 
         copperLayerCount = cu.size();
@@ -958,14 +955,14 @@ T PCB_PARSER::lookUpLayer( const M& aMap ) throw( PARSE_ERROR, IO_ERROR )
 }
 
 
-LAYER_ID PCB_PARSER::parseBoardItemLayer() throw( PARSE_ERROR, IO_ERROR )
+PCB_LAYER_ID PCB_PARSER::parseBoardItemLayer() throw( PARSE_ERROR, IO_ERROR )
 {
     wxCHECK_MSG( CurTok() == T_layer, UNDEFINED_LAYER,
                  wxT( "Cannot parse " ) + GetTokenString( CurTok() ) + wxT( " as layer." ) );
 
     NextTok();
 
-    LAYER_ID layerIndex = lookUpLayer<LAYER_ID>( m_layerIndices );
+    PCB_LAYER_ID layerIndex = lookUpLayer<PCB_LAYER_ID>( m_layerIndices );
 
     // Handle closing ) in object parser.
 
@@ -1518,14 +1515,14 @@ TEXTE_PCB* PCB_PARSER::parseTEXTE_PCB() throw( IO_ERROR, PARSE_ERROR )
 
     pt.x = parseBoardUnits( "X coordinate" );
     pt.y = parseBoardUnits( "Y coordinate" );
-    text->SetTextPosition( pt );
+    text->SetTextPos( pt );
 
     // If there is no orientation defined, then it is the default value of 0 degrees.
     token = NextTok();
 
     if( token == T_NUMBER )
     {
-        text->SetOrientation( parseDouble() * 10.0 );
+        text->SetTextAngle( parseDouble() * 10.0 );
         NeedRIGHT();
     }
     else if( token != T_RIGHT )
@@ -1607,7 +1604,7 @@ DIMENSION* PCB_PARSER::parseDIMENSION() throw( IO_ERROR, PARSE_ERROR )
         {
             TEXTE_PCB* text = parseTEXTE_PCB();
             dimension->Text() = *text;
-            dimension->SetPosition( text->GetTextPosition() );
+            dimension->SetPosition( text->GetTextPos() );
             delete text;
             break;
         }
@@ -1743,7 +1740,7 @@ MODULE* PCB_PARSER::parseMODULE_unchecked( wxArrayString* aInitialComments )
     wxString name;
     wxPoint  pt;
     T        token;
-    FPID     fpid;
+    LIB_ID   fpid;
 
     std::unique_ptr<MODULE> module( new MODULE( m_board ) );
 
@@ -1756,7 +1753,7 @@ MODULE* PCB_PARSER::parseMODULE_unchecked( wxArrayString* aInitialComments )
 
     name = FromUTF8();
 
-    if( !name.IsEmpty() && fpid.Parse( FromUTF8() ) >= 0 )
+    if( !name.IsEmpty() && fpid.Parse( TO_UTF8( FromUTF8() ) ) >= 0 )
     {
         wxString error;
         error.Printf( _( "invalid footprint ID in\nfile: <%s>\nline: %d\noffset: %d" ),
@@ -1796,7 +1793,7 @@ MODULE* PCB_PARSER::parseMODULE_unchecked( wxArrayString* aInitialComments )
             // Footprints can be only on the front side or the back side.
             // but because we can find some stupid layer in file, ensure a
             // acceptable layer is set for the footprint
-            LAYER_ID layer = parseBoardItemLayer();
+            PCB_LAYER_ID layer = parseBoardItemLayer();
             module->SetLayer( layer == B_Cu ? B_Cu : F_Cu );
         }
             NeedRIGHT();
@@ -1919,9 +1916,9 @@ MODULE* PCB_PARSER::parseMODULE_unchecked( wxArrayString* aInitialComments )
             {
                 TEXTE_MODULE* text = parseTEXTE_MODULE();
                 text->SetParent( module.get() );
-                double orientation = text->GetOrientation();
+                double orientation = text->GetTextAngle();
                 orientation -= module->GetOrientation();
-                text->SetOrientation( orientation );
+                text->SetTextAngle( orientation );
                 text->SetDrawCoord();
 
                 switch( text->GetType() )
@@ -2034,7 +2031,7 @@ TEXTE_MODULE* PCB_PARSER::parseTEXTE_MODULE() throw( IO_ERROR, PARSE_ERROR )
     // If there is no orientation defined, then it is the default value of 0 degrees.
     if( token == T_NUMBER )
     {
-        text->SetOrientation( parseDouble() * 10.0 );
+        text->SetTextAngle( parseDouble() * 10.0 );
         NeedRIGHT();
     }
     else if( token != T_RIGHT )
@@ -2603,11 +2600,11 @@ VIA* PCB_PARSER::parseVIA() throw( IO_ERROR, PARSE_ERROR )
 
         case T_layers:
             {
-                LAYER_ID layer1, layer2;
+                PCB_LAYER_ID layer1, layer2;
                 NextTok();
-                layer1 = lookUpLayer<LAYER_ID>( m_layerIndices );
+                layer1 = lookUpLayer<PCB_LAYER_ID>( m_layerIndices );
                 NextTok();
-                layer2 = lookUpLayer<LAYER_ID>( m_layerIndices );
+                layer2 = lookUpLayer<PCB_LAYER_ID>( m_layerIndices );
                 via->SetLayerPair( layer1, layer2 );
                 NeedRIGHT();
             }
@@ -2647,9 +2644,9 @@ ZONE_CONTAINER* PCB_PARSER::parseZONE_CONTAINER() throw( IO_ERROR, PARSE_ERROR )
                  wxT( "Cannot parse " ) + GetTokenString( CurTok() ) +
                  wxT( " as ZONE_CONTAINER." ) );
 
-    CPolyLine::HATCH_STYLE hatchStyle = CPolyLine::NO_HATCH;
+    ZONE_CONTAINER::HATCH_STYLE hatchStyle = ZONE_CONTAINER::NO_HATCH;
 
-    int     hatchPitch = Mils2iu( CPolyLine::GetDefaultHatchPitchMils() );
+    int     hatchPitch = Mils2iu( ZONE_CONTAINER::GetDefaultHatchPitchMils() );
     wxPoint pt;
     T       token;
     int     tmp;
@@ -2712,9 +2709,9 @@ ZONE_CONTAINER* PCB_PARSER::parseZONE_CONTAINER() throw( IO_ERROR, PARSE_ERROR )
             switch( token )
             {
             default:
-            case T_none:   hatchStyle = CPolyLine::NO_HATCH;        break;
-            case T_edge:   hatchStyle = CPolyLine::DIAGONAL_EDGE;   break;
-            case T_full:   hatchStyle = CPolyLine::DIAGONAL_FULL;
+            case T_none:   hatchStyle = ZONE_CONTAINER::NO_HATCH;        break;
+            case T_edge:   hatchStyle = ZONE_CONTAINER::DIAGONAL_EDGE;   break;
+            case T_full:   hatchStyle = ZONE_CONTAINER::DIAGONAL_FULL;
             }
 
             hatchPitch = parseBoardUnits( "hatch pitch" );
@@ -2891,12 +2888,15 @@ ZONE_CONTAINER* PCB_PARSER::parseZONE_CONTAINER() throw( IO_ERROR, PARSE_ERROR )
                 if( token != T_pts )
                     Expecting( T_pts );
 
-                for( token = NextTok();  token != T_RIGHT;  token = NextTok() )
+                for( token = NextTok(); token != T_RIGHT; token = NextTok() )
                 {
                     corners.push_back( parseXY() );
                 }
 
                 NeedRIGHT();
+
+                // Remark: The first polygon is the main outline.
+                // Others are holes inside the main outline.
                 zone->AddPolygon( corners );
             }
             break;
@@ -2959,7 +2959,7 @@ ZONE_CONTAINER* PCB_PARSER::parseZONE_CONTAINER() throw( IO_ERROR, PARSE_ERROR )
         }
 
         // Set hatch here, after outlines corners are read
-        zone->Outline()->SetHatch( hatchStyle, hatchPitch, true );
+        zone->SetHatch( hatchStyle, hatchPitch, true );
     }
 
     if( !pts.IsEmpty() )

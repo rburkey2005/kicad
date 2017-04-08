@@ -6,7 +6,7 @@
  *
  * Copyright (C) 1992-2011 Jean-Pierre Charras.
  * Copyright (C) 2013 Wayne Stambaugh <stambaughw@verizon.net>.
- * Copyright (C) 1992-2011 KiCad Developers, see change_log.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -33,6 +33,7 @@
 
 #include <pcb_netlist.h>
 #include <class_module.h>
+#include <eda_pattern_match.h>
 
 
 int COMPONENT_NET::Format( OUTPUTFORMATTER* aOut, int aNestLevel, int aCtl )
@@ -69,24 +70,6 @@ const COMPONENT_NET& COMPONENT::GetNet( const wxString& aPinName )
     }
 
     return m_emptyNet;
-}
-
-
-bool COMPONENT::MatchesFootprintFilters( const wxString& aFootprintName ) const
-{
-    if( m_footprintFilters.GetCount() == 0 )
-        return true;
-
-    // The matching is case insensitive
-    wxString name = aFootprintName.Upper();
-
-    for( unsigned ii = 0; ii < m_footprintFilters.GetCount(); ii++ )
-    {
-        if( name.Matches( m_footprintFilters[ii].Upper() ) )
-            return true;
-    }
-
-    return false;
 }
 
 

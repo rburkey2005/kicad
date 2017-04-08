@@ -9,8 +9,8 @@
  *
  * Copyright (C) 2015 Jean-Pierre Charras, jp.charras at wanadoo.fr
  * Copyright (C) 2015 Dick Hollenbeck, dick@softplc.com
- * Copyright (C) 2008-2015 Wayne Stambaugh <stambaughw@verizon.net>
- * Copyright (C) 2004-2016 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 2008-2016 Wayne Stambaugh <stambaughw@verizon.net>
+ * Copyright (C) 2004-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -44,6 +44,7 @@
 #include <validators.h>
 #include <kicad_string.h>
 #include <board_commit.h>
+#include <bitmaps.h>
 
 #include <class_module.h>
 #include <class_text_mod.h>
@@ -91,7 +92,6 @@ DIALOG_MODULE_MODULE_EDITOR::DIALOG_MODULE_MODULE_EDITOR( FOOTPRINT_EDIT_FRAME* 
 
     Layout();
 
-    FixOSXCancelButtonIssue();
 }
 
 
@@ -172,7 +172,7 @@ void DIALOG_MODULE_MODULE_EDITOR::initModeditProperties()
     m_valueCopy->SetParent( m_currentModule );
     m_ReferenceCtrl->SetValue( m_referenceCopy->GetText() );
     m_ValueCtrl->SetValue( m_valueCopy->GetText() );
-    m_FootprintNameCtrl->SetValue( m_currentModule->GetFPID().Format() );
+    m_FootprintNameCtrl->SetValue( FROM_UTF8( m_currentModule->GetFPID().Format() ) );
 
     m_AttributsCtrl->SetItemToolTip( 0, _( "Use this attribute for most non SMD components" ) );
     m_AttributsCtrl->SetItemToolTip( 1,
@@ -493,7 +493,7 @@ void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
 
     // Init footprint name in library
     if( ! footprintName.IsEmpty() )
-        m_currentModule->SetFPID( FPID( footprintName ) );
+        m_currentModule->SetFPID( LIB_ID( footprintName ) );
 
     // Init Fields:
     TEXTE_MODULE& reference = m_currentModule->Reference();
@@ -534,7 +534,7 @@ void DIALOG_MODULE_MODULE_EDITOR::OnOkClick( wxCommandEvent& event )
 void DIALOG_MODULE_MODULE_EDITOR::OnEditReference(wxCommandEvent& event)
 {
     wxPoint tmp = m_parent->GetCrossHairPosition();
-    m_parent->SetCrossHairPosition( m_referenceCopy->GetTextPosition() );
+    m_parent->SetCrossHairPosition( m_referenceCopy->GetTextPos() );
     m_parent->InstallTextModOptionsFrame( m_referenceCopy, NULL );
     m_parent->SetCrossHairPosition( tmp );
     m_ReferenceCtrl->SetValue( m_referenceCopy->GetText() );
@@ -544,7 +544,7 @@ void DIALOG_MODULE_MODULE_EDITOR::OnEditReference(wxCommandEvent& event)
 void DIALOG_MODULE_MODULE_EDITOR::OnEditValue(wxCommandEvent& event)
 {
     wxPoint tmp = m_parent->GetCrossHairPosition();
-    m_parent->SetCrossHairPosition( m_valueCopy->GetTextPosition() );
+    m_parent->SetCrossHairPosition( m_valueCopy->GetTextPos() );
     m_parent->InstallTextModOptionsFrame( m_valueCopy, NULL );
     m_parent->SetCrossHairPosition( tmp );
     m_ValueCtrl->SetValue( m_valueCopy->GetText() );

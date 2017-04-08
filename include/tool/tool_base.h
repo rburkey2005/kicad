@@ -36,6 +36,7 @@
 
 class EDA_ITEM;
 class TOOL_MANAGER;
+class wxWindow;
 
 namespace KIGFX
 {
@@ -79,7 +80,7 @@ public:
     enum RESET_REASON
     {
         RUN,                ///< Tool is invoked after being inactive
-        MODEL_RELOAD,       ///< Model changes
+        MODEL_RELOAD,       ///< Model changes (required full reload)
         GAL_SWITCH          ///< Rendering engine changes
     };
 

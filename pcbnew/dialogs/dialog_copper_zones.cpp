@@ -5,9 +5,9 @@
 /*
  * This program source code file is part of KiCad, a free EDA CAD application.
  *
- * Copyright (C) 2012 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
+ * Copyright (C) 2017 Jean-Pierre Charras, jean-pierre.charras@ujf-grenoble.fr
  * Copyright (C) 2012 SoftPLC Corporation, Dick Hollenbeck <dick@softplc.com>
- * Copyright (C) 1992-2015 KiCad Developers, see AUTHORS.txt for contributors.
+ * Copyright (C) 1992-2017 KiCad Developers, see AUTHORS.txt for contributors.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -71,7 +71,7 @@ private:
 
     long            m_NetFiltering;
 
-    std::vector<LAYER_ID> m_LayerId;        ///< Handle the real layer number from layer
+    std::vector<PCB_LAYER_ID> m_LayerId;    ///< Handle the real layer number from layer
                                             ///< name position in m_LayerSelectionCtrl
 
     static wxString m_netNameShowFilter;    ///< the filter to show nets (default * "*").
@@ -115,7 +115,7 @@ private:
      * creates the colored rectangle bitmaps used in the layer selection widget.
      * @param aColor is the color to fill the rectangle with.
      */
-    wxBitmap makeLayerBitmap( EDA_COLOR_T aColor );
+    wxBitmap makeLayerBitmap( COLOR4D aColor );
 };
 
 
@@ -152,7 +152,7 @@ DIALOG_COPPER_ZONE::DIALOG_COPPER_ZONE( PCB_BASE_FRAME* aParent, ZONE_SETTINGS* 
     // Fix static text widget minimum width to a suitable value so that
     // resizing the dialog is not necessary when changing the corner smoothing type.
     // Depends on the default text in the widget.
-    m_cornerSmoothingTitle->SetMinSize( m_cornerSmoothingTitle->GetSize() );
+    m_cornerSmoothingValue->SetMinSize( m_cornerSmoothingValue->GetSize() );
 
     initDialog();
 
@@ -214,15 +214,15 @@ void DIALOG_COPPER_ZONE::initDialog()
 
     switch( m_settings.m_Zone_HatchingStyle )
     {
-    case CPolyLine::NO_HATCH:
+    case ZONE_CONTAINER::NO_HATCH:
         m_OutlineAppearanceCtrl->SetSelection( 0 );
         break;
 
-    case CPolyLine::DIAGONAL_EDGE:
+    case ZONE_CONTAINER::DIAGONAL_EDGE:
         m_OutlineAppearanceCtrl->SetSelection( 1 );
         break;
 
-    case CPolyLine::DIAGONAL_FULL:
+    case ZONE_CONTAINER::DIAGONAL_FULL:
         m_OutlineAppearanceCtrl->SetSelection( 2 );
         break;
     }
@@ -245,7 +245,7 @@ void DIALOG_COPPER_ZONE::initDialog()
 
     for( LSEQ cu_stack = cu_set.UIOrder();  cu_stack;  ++cu_stack, imgIdx++ )
     {
-        LAYER_ID layer = *cu_stack;
+        PCB_LAYER_ID layer = *cu_stack;
 
         m_LayerId.push_back( layer );
 
@@ -253,7 +253,7 @@ void DIALOG_COPPER_ZONE::initDialog()
 
         msg.Trim();
 
-        EDA_COLOR_T layerColor = board->GetLayerColor( layer );
+        COLOR4D layerColor = board->GetLayerColor( layer );
 
         imageList->Add( makeLayerBitmap( layerColor ) );
 
@@ -355,15 +355,15 @@ bool DIALOG_COPPER_ZONE::AcceptOptions( bool aPromptForErrors, bool aUseExportab
     switch( m_OutlineAppearanceCtrl->GetSelection() )
     {
     case 0:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::NO_HATCH;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::NO_HATCH;
         break;
 
     case 1:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_EDGE;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_EDGE;
         break;
 
     case 2:
-        m_settings.m_Zone_HatchingStyle = CPolyLine::DIAGONAL_FULL;
+        m_settings.m_Zone_HatchingStyle = ZONE_CONTAINER::DIAGONAL_FULL;
         break;
     }
 
@@ -503,20 +503,20 @@ void DIALOG_COPPER_ZONE::OnCornerSmoothingModeChoice( wxCommandEvent& event )
     switch( selection )
     {
     case ZONE_SETTINGS::SMOOTHING_NONE:
-        m_cornerSmoothingTitle->Enable( false );
+        m_cornerSmoothingValue->Enable( false );
         m_cornerSmoothingCtrl->Enable( false );
         break;
     case ZONE_SETTINGS::SMOOTHING_CHAMFER:
-        m_cornerSmoothingTitle->Enable( true );
+        m_cornerSmoothingValue->Enable( true );
         m_cornerSmoothingCtrl->Enable( true );
-        m_cornerSmoothingTitle->SetLabel( _( "Chamfer distance" ) );
-        AddUnitSymbol( *m_cornerSmoothingTitle, g_UserUnit );
+        m_cornerSmoothingValue->SetLabel( _( "Chamfer distance" ) );
+        AddUnitSymbol( *m_cornerSmoothingValue, g_UserUnit );
         break;
     case ZONE_SETTINGS::SMOOTHING_FILLET:
-        m_cornerSmoothingTitle->Enable( true );
+        m_cornerSmoothingValue->Enable( true );
         m_cornerSmoothingCtrl->Enable( true );
-        m_cornerSmoothingTitle->SetLabel( _( "Fillet radius" ) );
-        AddUnitSymbol( *m_cornerSmoothingTitle, g_UserUnit );
+        m_cornerSmoothingValue->SetLabel( _( "Fillet radius" ) );
+        AddUnitSymbol( *m_cornerSmoothingValue, g_UserUnit );
         break;
     }
 }
@@ -681,14 +681,14 @@ void DIALOG_COPPER_ZONE::buildAvailableListOfNets()
 }
 
 
-wxBitmap DIALOG_COPPER_ZONE::makeLayerBitmap( EDA_COLOR_T aColor )
+wxBitmap DIALOG_COPPER_ZONE::makeLayerBitmap( COLOR4D aColor )
 {
     wxBitmap    bitmap( LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
     wxBrush     brush;
     wxMemoryDC  iconDC;
 
     iconDC.SelectObject( bitmap );
-    brush.SetColour( MakeColour( aColor ) );
+    brush.SetColour( aColor.ToColour() );
     brush.SetStyle( wxBRUSHSTYLE_SOLID );
     iconDC.SetBrush( brush );
     iconDC.DrawRectangle( 0, 0, LAYER_BITMAP_SIZE_X, LAYER_BITMAP_SIZE_Y );
